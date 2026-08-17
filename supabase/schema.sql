@@ -159,6 +159,12 @@ create table if not exists public.preferences (
   updated_at timestamptz not null default now()
 );
 
+-- dados básicos do usuário — adicionados para o assistente guiado (passo 1) não precisar
+-- perguntar de novo em cada página; ficam null até o usuário passar pelo passo 1 uma vez
+alter table public.preferences add column if not exists sex text;
+alter table public.preferences add column if not exists height_cm numeric;
+alter table public.preferences add column if not exists age int;
+
 alter table public.preferences enable row level security;
 
 drop policy if exists "preferences: all own" on public.preferences;

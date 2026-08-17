@@ -2,8 +2,12 @@ export type DietGoal = "emagrecimento" | "hipertrofia" | "manutencao";
 export type ActivityLevel = "sedentario" | "leve" | "moderado" | "intenso";
 export type CookingTime = "pouco" | "medio" | "gosta";
 export type Restriction = "vegetariano" | "vegano" | "sem_lactose" | "sem_gluten";
+export type Sex = "masculino" | "feminino";
 
 export interface UserPreferences {
+  sex: Sex | null;
+  heightCm: number | null;
+  age: number | null;
   dietGoal: DietGoal;
   activityLevel: ActivityLevel;
   mealsPerDay: number;
@@ -15,6 +19,9 @@ export interface UserPreferences {
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
+  sex: null,
+  heightCm: null,
+  age: null,
   dietGoal: "manutencao",
   activityLevel: "moderado",
   mealsPerDay: 4,
@@ -54,6 +61,9 @@ export const RESTRICTION_LABEL: Record<Restriction, string> = {
 import { createClient } from "./supabase/client";
 
 interface PreferencesRow {
+  sex: Sex | null;
+  height_cm: number | null;
+  age: number | null;
   diet_goal: DietGoal;
   activity_level: ActivityLevel;
   meals_per_day: number;
@@ -66,6 +76,9 @@ interface PreferencesRow {
 
 function rowToPreferences(row: PreferencesRow): UserPreferences {
   return {
+    sex: row.sex ?? null,
+    heightCm: row.height_cm != null ? Number(row.height_cm) : null,
+    age: row.age ?? null,
     dietGoal: row.diet_goal,
     activityLevel: row.activity_level,
     mealsPerDay: row.meals_per_day,
@@ -98,6 +111,9 @@ export async function savePreferences(prefs: UserPreferences): Promise<void> {
 
   const { error } = await supabase.from("preferences").upsert({
     user_id: user.id,
+    sex: prefs.sex,
+    height_cm: prefs.heightCm,
+    age: prefs.age,
     diet_goal: prefs.dietGoal,
     activity_level: prefs.activityLevel,
     meals_per_day: prefs.mealsPerDay,

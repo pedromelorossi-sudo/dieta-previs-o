@@ -44,9 +44,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <a href="/previsao" className="btn-primary">
+          <a href="/previsao-ia" className="btn-primary">
             <IconTrend className="h-4 w-4" />
-            Nova previsão
+            Novo ciclo
           </a>
           <a href="/ciclos/novo" className="btn-secondary">
             <IconClipboard className="h-4 w-4" />
@@ -62,8 +62,8 @@ export default function DashboardPage() {
             altura e %BF, ou registre um ciclo real se já tiver uma prescrição.
           </p>
           <div className="mt-4 flex items-center justify-center gap-3">
-            <a href="/estimar" className="btn-primary">
-              Estimar dieta inicial
+            <a href="/previsao-ia" className="btn-primary">
+              Começar (informações + fotos)
             </a>
             <a href="/ciclos/novo" className="btn-secondary">
               Registrar ciclo

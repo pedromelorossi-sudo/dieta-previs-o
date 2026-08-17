@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { predictNextCycle } from "@/lib/dietEngine";
+import { estimateBodyComposition } from "@/lib/bodyComposition";
 import { Cycle, GainComposition } from "@/lib/types";
+import { ActivityLevel } from "@/lib/questionnaire";
 
 const ANGLE_LABEL: Record<string, string> = {
   frente: "Frente",
@@ -21,6 +23,8 @@ interface RequestBody {
   photos: PhotoInput[];
   sex: "masculino" | "feminino";
   heightCm: number;
+  age: number;
+  activityLevel: ActivityLevel;
   currentWeightKg: number;
   date: string;
   weeksToNextConsult: number;
@@ -54,9 +58,66 @@ function rowToCycle(row: CycleRow, id: string): Cycle {
   };
 }
 
-const TOOL_NAME = "registrar_previsao";
+const BF_TOOL_NAME = "registrar_bf";
+const PLAN_TOOL_NAME = "registrar_previsao";
 
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, Math.min(min, max)), Math.max(min, max));
+
+function buildImageBlocks(photos: PhotoInput[]): Anthropic.ContentBlockParam[] {
+  const blocks: Anthropic.ContentBlockParam[] = [];
+  for (const photo of photos) {
+    blocks.push({ type: "text", text: `Foto: ${ANGLE_LABEL[photo.angle] ?? photo.angle}` });
+    blocks.push({
+      type: "image",
+      source: { type: "base64", media_type: photo.mediaType as "image/jpeg", data: photo.base64 },
+    });
+  }
+  return blocks;
+}
+
+interface BfEstimate {
+  bfPercentVisual: number;
+  bfConfidence: "baixa" | "media" | "alta";
+  bfReasoning: string;
+}
+
+async function estimateBfFromPhotos(client: Anthropic, photos: PhotoInput[], contextText: string): Promise<BfEstimate> {
+  const response = await client.messages.create({
+    model: "claude-opus-5",
+    max_tokens: 800,
+    output_config: { effort: "medium" },
+    system:
+      "Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.",
+    tools: [
+      {
+        name: BF_TOOL_NAME,
+        description: "Registra a estimativa visual de %BF.",
+        input_schema: {
+          type: "object",
+          properties: {
+            bfPercentVisual: { type: "number", description: "Estimativa de %BF a partir das fotos, entre 3 e 60." },
+            bfConfidence: { type: "string", enum: ["baixa", "media", "alta"] },
+            bfReasoning: { type: "string", description: "1-2 frases explicando a leitura visual." },
+          },
+          required: ["bfPercentVisual", "bfConfidence", "bfReasoning"],
+        },
+      },
+    ],
+    tool_choice: { type: "tool", name: BF_TOOL_NAME },
+    messages: [{ role: "user", content: [...buildImageBlocks(photos), { type: "text", text: contextText }] }],
+  });
+
+  const toolBlock = response.content.find((b) => b.type === "tool_use" && b.name === BF_TOOL_NAME);
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("O modelo não retornou uma estimativa de %BF válida.");
+  }
+  const raw = toolBlock.input as BfEstimate;
+  return {
+    bfPercentVisual: clamp(raw.bfPercentVisual, 3, 60),
+    bfConfidence: raw.bfConfidence,
+    bfReasoning: raw.bfReasoning,
+  };
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -81,13 +142,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });
   }
 
-  const { photos, sex, heightCm, currentWeightKg, date, weeksToNextConsult, gainComposition, stabilityMode, applyProteinStep } = body;
+  const { photos, sex, heightCm, age, activityLevel, currentWeightKg, date, weeksToNextConsult, gainComposition, stabilityMode, applyProteinStep } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
     return NextResponse.json({ error: "Envie pelo menos a foto de frente." }, { status: 400 });
   }
-  if (!currentWeightKg || currentWeightKg <= 0 || !heightCm || heightCm <= 0) {
-    return NextResponse.json({ error: "Peso e altura são obrigatórios." }, { status: 400 });
+  if (!currentWeightKg || currentWeightKg <= 0 || !heightCm || heightCm <= 0 || !age || age <= 0) {
+    return NextResponse.json({ error: "Peso, altura e idade são obrigatórios." }, { status: 400 });
   }
 
   const { data: cycleRows, error: cyclesError } = await supabase
@@ -98,13 +159,59 @@ export async function POST(request: Request) {
   if (cyclesError) {
     return NextResponse.json({ error: cyclesError.message }, { status: 500 });
   }
+
+  const client = new Anthropic();
+
+  // ---- primeiro ciclo: sem histórico, usa composição corporal (Mifflin/Katch) em vez do algoritmo de progressão ----
   if (!cycleRows || cycleRows.length === 0) {
-    return NextResponse.json(
-      { error: "Sem histórico de ciclos ainda — use 'Estimar dieta inicial' antes de gerar uma previsão." },
-      { status: 400 }
-    );
+    let bf: BfEstimate;
+    try {
+      bf = await estimateBfFromPhotos(
+        client,
+        photos,
+        `Contexto: sexo ${sex}, altura ${heightCm}cm, peso ${currentWeightKg}kg, idade ${age}. Primeira estimativa deste usuário, sem fotos anteriores para comparar.`
+      );
+    } catch (err) {
+      if (err instanceof Anthropic.APIError) {
+        const errBody = err.error as { error?: { message?: string } } | undefined;
+        return NextResponse.json({ error: `Erro na API da Anthropic: ${errBody?.error?.message ?? err.message}` }, { status: err.status ?? 502 });
+      }
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Erro ao estimar %BF." }, { status: 502 });
+    }
+
+    const comp = estimateBodyComposition({
+      weightKg: currentWeightKg,
+      heightCm,
+      bodyFatPercent: bf.bfPercentVisual,
+      age,
+      sex,
+      activityLevel,
+    });
+
+    const point = (v: number) => ({ min: v, max: v });
+
+    return NextResponse.json({
+      isFirstCycle: true,
+      bfPercentVisual: bf.bfPercentVisual,
+      bfConfidence: bf.bfConfidence,
+      bfReasoning: bf.bfReasoning,
+      recommendedKcal: comp.targetKcal,
+      recommendedProteinG: comp.targetProteinG,
+      recommendedFatG: comp.targetFatG,
+      recommendedCarbG: comp.targetCarbG,
+      note: comp.pathReason,
+      ranges: {
+        kcal: point(comp.targetKcal),
+        protein: point(comp.targetProteinG),
+        fat: point(comp.targetFatG),
+        carb: point(comp.targetCarbG),
+        weight: point(currentWeightKg),
+      },
+      rateKgWeek: 0,
+    });
   }
 
+  // ---- ciclos seguintes: usa o algoritmo determinístico de progressão + Claude escolhe o ponto na faixa ----
   const history = cycleRows.map((row, i) => rowToCycle(row as CycleRow, String(i)));
 
   const result = predictNextCycle({
@@ -147,18 +254,8 @@ Faixas já calculadas pelo algoritmo (seus valores recomendados DEVEM ficar dent
 
 Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplicado: ${applyProteinStep ? "sim" : "não"}.`;
 
-  const imageBlocks: Anthropic.MessageParam["content"] = [];
-  for (const photo of photos) {
-    imageBlocks.push({ type: "text", text: `Foto: ${ANGLE_LABEL[photo.angle] ?? photo.angle}` });
-    imageBlocks.push({
-      type: "image",
-      source: { type: "base64", media_type: photo.mediaType as "image/jpeg", data: photo.base64 },
-    });
-  }
-
   const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para estimar %BF visualmente e, em seguida, monta a prescrição do próximo ciclo de dieta — mas usando exclusivamente os parâmetros e faixas numéricas já calculados pelo algoritmo determinístico do usuário, fornecidos no contexto. Você NÃO deve inventar sua própria metodologia de cálculo de macros nem sair das faixas fornecidas — seu papel é (1) estimar %BF a partir da evidência visual das fotos, cruzando os ângulos disponíveis, e (2) escolher, dentro de cada faixa já calculada, o ponto que melhor se encaixa com o que a foto mostra (ex: se a foto sugere acúmulo de gordura mais rápido que o esperado, incline para o extremo inferior da faixa de kcal; se sugere composição favorável, incline para o extremo superior). Responda só pela ferramenta fornecida. Seja direto e específico, sem jargão excessivo, em português.`;
 
-  const client = new Anthropic();
   let response;
   try {
     response = await client.messages.create({
@@ -168,7 +265,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
       system: SYSTEM_PROMPT,
       tools: [
         {
-          name: TOOL_NAME,
+          name: PLAN_TOOL_NAME,
           description: "Registra a estimativa visual de %BF e a prescrição recomendada para o próximo ciclo.",
           input_schema: {
             type: "object",
@@ -195,8 +292,8 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
           },
         },
       ],
-      tool_choice: { type: "tool", name: TOOL_NAME },
-      messages: [{ role: "user", content: [...imageBlocks, { type: "text", text: contextText }] }],
+      tool_choice: { type: "tool", name: PLAN_TOOL_NAME },
+      messages: [{ role: "user", content: [...buildImageBlocks(photos), { type: "text", text: contextText }] }],
     });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
@@ -207,7 +304,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
     return NextResponse.json({ error: "Erro inesperado ao chamar a análise por imagem." }, { status: 502 });
   }
 
-  const toolBlock = response.content.find((b) => b.type === "tool_use" && b.name === TOOL_NAME);
+  const toolBlock = response.content.find((b) => b.type === "tool_use" && b.name === PLAN_TOOL_NAME);
   if (!toolBlock || toolBlock.type !== "tool_use") {
     return NextResponse.json({ error: "O modelo não retornou uma prescrição válida." }, { status: 422 });
   }
@@ -224,6 +321,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
   };
 
   return NextResponse.json({
+    isFirstCycle: false,
     bfPercentVisual: clamp(raw.bfPercentVisual, 3, 60),
     bfConfidence: raw.bfConfidence,
     bfReasoning: raw.bfReasoning,

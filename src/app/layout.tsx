@@ -44,12 +44,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                   <span className="hidden sm:inline">Previsão de Dieta</span>
                 </a>
                 <nav className="flex items-center gap-5 text-sm overflow-x-auto">
-                  <NavLink href="/">Histórico</NavLink>
-                  <NavLink href="/previsao">Nova previsão</NavLink>
-                  <NavLink href="/previsao-ia">Previsão por foto</NavLink>
+                  <NavLink href="/previsao-ia">Novo ciclo</NavLink>
                   <NavLink href="/dieta/novo">Montar dieta</NavLink>
-                  <NavLink href="/ciclos/novo">Registrar ciclo</NavLink>
-                  <NavLink href="/fotos">Fotos</NavLink>
+                  <NavLink href="/">Histórico</NavLink>
                 </nav>
                 <div className="shrink-0">
                   <UserMenu />

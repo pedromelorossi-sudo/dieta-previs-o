@@ -85,7 +85,7 @@ export default function PrevisaoPage() {
       <div className="mx-auto max-w-3xl px-6 py-16">
         <p className="text-muted">
           Nenhum ciclo no histórico ainda.{" "}
-          <a href="/estimar" className="text-accent hover:underline">
+          <a href="/previsao-ia" className="text-accent hover:underline">
             Estime uma dieta inicial
           </a>{" "}
           pelo peso, altura e %BF, ou{" "}

@@ -40,16 +40,10 @@ export function UserMenu() {
             <div className="px-2 py-1.5 text-xs text-muted truncate">{user.email}</div>
             <div className="border-t border-border mt-1 pt-1 space-y-0.5">
               <a
-                href="/perfil/questionario"
+                href="/fotos"
                 className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
-                Questionário de hábitos
-              </a>
-              <a
-                href="/estimar"
-                className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
-              >
-                Estimar dieta inicial
+                Fotos de progresso
               </a>
               <a
                 href="/analise"
@@ -58,11 +52,26 @@ export function UserMenu() {
                 Análise do Claude
               </a>
               <a
-                href="/previsao-ia"
+                href="/perfil/questionario"
                 className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
-                Previsão por foto (IA)
+                Questionário de hábitos
               </a>
+              <div className="border-t border-border mt-1 pt-1">
+                <span className="block px-2 py-1 text-[10px] uppercase tracking-wide text-muted">Modo manual</span>
+                <a
+                  href="/previsao"
+                  className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+                >
+                  Nova previsão (sem foto)
+                </a>
+                <a
+                  href="/ciclos/novo"
+                  className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+                >
+                  Registrar ciclo manualmente
+                </a>
+              </div>
               {profile?.isAdmin && (
                 <a
                   href="/admin"

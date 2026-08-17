@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Cycle, GainComposition } from "@/lib/types";
-import { loadCycles } from "@/lib/storage";
+import { loadCycles, addCycle } from "@/lib/storage";
 import { E_SCENARIOS, sortByDate } from "@/lib/dietEngine";
-import { Sex } from "@/lib/bodyComposition";
+import { Sex, ActivityLevel, ACTIVITY_LABEL, loadPreferences, savePreferences } from "@/lib/questionnaire";
 import { fmt, fmtDate } from "@/lib/format";
 import { saveLastPrediction } from "@/lib/predictionsLog";
 import { addProgressPhoto } from "@/lib/photos";
@@ -25,6 +25,7 @@ const ANGLES: { key: Angle; label: string; required: boolean }[] = [
 ];
 
 interface PredictionResponse {
+  isFirstCycle: boolean;
   bfPercentVisual: number;
   bfConfidence: "baixa" | "media" | "alta";
   bfReasoning: string;
@@ -47,11 +48,14 @@ export default function PrevisaoIaPage() {
   const router = useRouter();
   const { ready, user } = useAuth();
   const [cycles, setCycles] = useState<Cycle[] | null>(null);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   const [files, setFiles] = useState<Partial<Record<Angle, File>>>({});
   const [previews, setPreviews] = useState<Partial<Record<Angle, string>>>({});
   const [sex, setSex] = useState<Sex>("masculino");
   const [heightCm, setHeightCm] = useState("");
+  const [age, setAge] = useState("");
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderado");
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
   const [weeks, setWeeks] = useState("4");
@@ -65,14 +69,23 @@ export default function PrevisaoIaPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (ready && user) loadCycles().then((c) => setCycles(sortByDate(c)));
+    if (!ready || !user) return;
+    loadCycles().then((c) => setCycles(sortByDate(c)));
+    loadPreferences().then((p) => {
+      if (p.sex) setSex(p.sex);
+      if (p.heightCm) setHeightCm(String(p.heightCm));
+      if (p.age) setAge(String(p.age));
+      setActivityLevel(p.activityLevel);
+      setPrefsLoaded(true);
+    });
   }, [ready, user]);
 
   const last = cycles && cycles.length ? cycles[cycles.length - 1] : null;
+  const isFirstCycle = cycles !== null && cycles.length === 0;
 
   const canSubmit = useMemo(() => {
-    return !!files.frente && !!weight && !!heightCm && parseFloat(weight) > 0 && parseFloat(heightCm) > 0;
-  }, [files, weight, heightCm]);
+    return !!files.frente && !!weight && !!heightCm && !!age && parseFloat(weight) > 0 && parseFloat(heightCm) > 0 && parseFloat(age) > 0;
+  }, [files, weight, heightCm, age]);
 
   function handleFileChange(angle: Angle, f: File | null) {
     setFiles((prev) => ({ ...prev, [angle]: f ?? undefined }));
@@ -85,7 +98,7 @@ export default function PrevisaoIaPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || !cycles) return;
+    if (!canSubmit || cycles === null) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -107,6 +120,8 @@ export default function PrevisaoIaPage() {
           photos,
           sex,
           heightCm: parseFloat(heightCm),
+          age: parseFloat(age),
+          activityLevel,
           currentWeightKg: parseFloat(weight),
           date,
           weeksToNextConsult: parseFloat(weeks),
@@ -118,6 +133,10 @@ export default function PrevisaoIaPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao gerar previsão.");
       setResult(data);
+
+      // salva as informações básicas no perfil, pra não pedir de novo da próxima vez
+      const prefs = await loadPreferences();
+      await savePreferences({ ...prefs, sex, heightCm: parseFloat(heightCm), age: parseFloat(age), activityLevel });
 
       const frenteFile = files.frente!;
       const anglesUsed = Object.keys(files).filter((a) => files[a as Angle]);
@@ -132,6 +151,20 @@ export default function PrevisaoIaPage() {
         notes: `%BF estimado por IA (Claude) a partir de foto(s): ${anglesUsed.join(", ")}.`,
         cycleId: null,
       });
+
+      if (data.isFirstCycle) {
+        await addCycle({
+          id: crypto.randomUUID(),
+          date,
+          weightKg: parseFloat(weight),
+          bodyFatPercent: data.bfPercentVisual,
+          kcal: data.recommendedKcal,
+          proteinG: data.recommendedProteinG,
+          fatG: data.recommendedFatG,
+          carbG: data.recommendedCarbG,
+          isPrediction: true,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao gerar previsão.");
     } finally {
@@ -160,7 +193,7 @@ export default function PrevisaoIaPage() {
     router.push("/dieta/novo");
   }
 
-  if (!cycles) {
+  if (!cycles || !prefsLoaded) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
         <div className="skeleton h-14 w-full" />
@@ -169,33 +202,55 @@ export default function PrevisaoIaPage() {
     );
   }
 
-  if (!last) {
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        <p className="text-muted">
-          Nenhum ciclo no histórico ainda.{" "}
-          <a href="/estimar" className="text-accent hover:underline">
-            Estime uma dieta inicial
-          </a>{" "}
-          antes de gerar uma previsão por foto.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Previsão por foto (IA)</h1>
+        <h1 className="text-3xl font-semibold tracking-tight gradient-text">
+          {isFirstCycle ? "Começar: informações e fotos" : "Novo ciclo: fotos e previsão"}
+        </h1>
         <p className="text-sm text-muted mt-2">
-          O Claude estima seu %BF a partir das fotos e recomenda um ponto dentro das faixas calculadas pelo seu
-          algoritmo — baseado no último ciclo ({fmtDate(last.date)}: {fmt(last.weightKg)} kg).
+          {isFirstCycle
+            ? "Preencha suas informações básicas e envie fotos — o Claude estima seu %BF e calcula sua dieta inicial. Da próxima vez, essas informações já vêm preenchidas."
+            : `O Claude estima seu %BF a partir das fotos e recomenda um ponto dentro das faixas calculadas pelo seu algoritmo — baseado no último ciclo (${fmtDate(last!.date)}: ${fmt(last!.weightKg)} kg).`}
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="card p-6 space-y-6">
         <div>
-          <span className="block text-xs text-muted mb-2">Fotos (frente obrigatória, o resto ajuda a precisão)</span>
+          <span className="block text-xs text-muted mb-2">1. Informações básicas</span>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Sexo biológico">
+              <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} className="input">
+                <option value="masculino">Masculino</option>
+                <option value="feminino">Feminino</option>
+              </select>
+            </Field>
+            <Field label="Altura (cm)">
+              <input type="number" step="0.1" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} className="input" placeholder="ex: 178" />
+            </Field>
+            <Field label="Idade">
+              <input type="number" step="1" value={age} onChange={(e) => setAge(e.target.value)} className="input" placeholder="ex: 28" />
+            </Field>
+            <Field label="Nível de atividade">
+              <select value={activityLevel} onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)} className="input">
+                {(Object.keys(ACTIVITY_LABEL) as ActivityLevel[]).map((a) => (
+                  <option key={a} value={a}>
+                    {ACTIVITY_LABEL[a]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Peso atual (kg)">
+              <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} className="input" placeholder="ex: 85.2" />
+            </Field>
+            <Field label="Data da pesagem">
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
+            </Field>
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-xs text-muted mb-2">2. Fotos (frente obrigatória, o resto ajuda a precisão)</span>
           <div className="grid gap-4 sm:grid-cols-4">
             {ANGLES.map(({ key, label, required }) => (
               <div key={key}>
@@ -227,60 +282,50 @@ export default function PrevisaoIaPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Sexo biológico">
-            <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} className="input">
-              <option value="masculino">Masculino</option>
-              <option value="feminino">Feminino</option>
-            </select>
-          </Field>
-          <Field label="Altura (cm)">
-            <input type="number" step="0.1" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} className="input" placeholder="ex: 178" />
-          </Field>
-          <Field label="Peso atual (kg)">
-            <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} className="input" placeholder="ex: 85.2" />
-          </Field>
-          <Field label="Data da pesagem">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
-          </Field>
-          <Field label="Semanas até a próxima consulta">
-            <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
-          </Field>
-          <Field label="Composição do ganho">
-            <select
-              value={composition}
-              onChange={(e) => setComposition(e.target.value as GainComposition)}
-              disabled={stabilityMode}
-              className="input disabled:opacity-40"
-            >
-              {E_SCENARIOS.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        {!isFirstCycle && (
+          <div>
+            <span className="block text-xs text-muted mb-2">3. Parâmetros da previsão</span>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Semanas até a próxima consulta">
+                <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
+              </Field>
+              <Field label="Composição do ganho">
+                <select
+                  value={composition}
+                  onChange={(e) => setComposition(e.target.value as GainComposition)}
+                  disabled={stabilityMode}
+                  className="input disabled:opacity-40"
+                >
+                  {E_SCENARIOS.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
 
-        <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
-          <input type="checkbox" checked={stabilityMode} onChange={(e) => setStabilityMode(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
-          <span>
-            <span className="font-medium">Modo estabilidade</span>
-            <span className="block text-muted text-xs mt-0.5">Peso ficou parado 2-3 semanas na ingestão atual.</span>
-          </span>
-        </label>
+            <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors mt-3">
+              <input type="checkbox" checked={stabilityMode} onChange={(e) => setStabilityMode(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
+              <span>
+                <span className="font-medium">Modo estabilidade</span>
+                <span className="block text-muted text-xs mt-0.5">Peso ficou parado 2-3 semanas na ingestão atual.</span>
+              </span>
+            </label>
 
-        <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
-          <input type="checkbox" checked={applyProteinStep} onChange={(e) => setApplyProteinStep(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
-          <span>
-            <span className="font-medium">Aplicar degrau de proteína (+0,1 g/kg)</span>
-          </span>
-        </label>
+            <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors mt-3">
+              <input type="checkbox" checked={applyProteinStep} onChange={(e) => setApplyProteinStep(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
+              <span>
+                <span className="font-medium">Aplicar degrau de proteína (+0,1 g/kg)</span>
+              </span>
+            </label>
+          </div>
+        )}
 
         {error && <p className="text-xs text-danger">{error}</p>}
 
         <button type="submit" disabled={!canSubmit || loading} className="btn-primary">
-          {loading ? "Analisando fotos…" : "Gerar previsão com IA"}
+          {loading ? "Analisando fotos…" : isFirstCycle ? "Calcular minha dieta inicial" : "Gerar previsão com IA"}
         </button>
       </form>
 
@@ -302,7 +347,7 @@ export default function PrevisaoIaPage() {
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
               </span>
-              Recomendação da IA (dentro das faixas do seu algoritmo)
+              {result.isFirstCycle ? "Metas iniciais" : "Recomendação da IA (dentro das faixas do seu algoritmo)"}
             </h2>
             <div className="grid gap-5 sm:grid-cols-4">
               <MacroCard icon={<IconFlame className="h-4 w-4" />} label="Kcal" value={result.recommendedKcal} range={result.ranges.kcal} decimals={0} />
@@ -319,12 +364,14 @@ export default function PrevisaoIaPage() {
               {saved ? "Previsão salva" : "Salvar esta previsão"}
             </button>
             <button type="button" onClick={handleGoToDietBuilder} className="btn-secondary">
-              Montar dieta com essas metas →
+              4. Montar dieta com essas metas →
             </button>
           </div>
           <p className="text-xs text-muted leading-relaxed">
-            A faixa vem do seu algoritmo (mesma matemática de sempre); a IA só escolhe o ponto dentro dela usando as
-            fotos como evidência. A foto de frente foi salva em{" "}
+            {result.isFirstCycle
+              ? "Faixa vem da sua composição corporal estimada; a IA só leu o %BF na foto."
+              : "A faixa vem do seu algoritmo (mesma matemática de sempre); a IA só escolhe o ponto dentro dela usando as fotos como evidência."}{" "}
+            A foto de frente foi salva em{" "}
             <a href="/fotos" className="text-accent hover:underline">
               Fotos de progresso
             </a>
@@ -360,6 +407,7 @@ function MacroCard({
   suffix?: string;
   decimals?: number;
 }) {
+  const isRange = Math.abs(range.max - range.min) > 0.01;
   return (
     <div>
       <div className="flex items-center gap-1.5 text-xs text-muted">
@@ -370,9 +418,11 @@ function MacroCard({
         {fmt(value, decimals)}
         <span className="text-muted font-normal text-xs"> {suffix}</span>
       </div>
-      <div className="text-[11px] text-muted mt-0.5">
-        faixa {fmt(range.min, decimals)}–{fmt(range.max, decimals)}
-      </div>
+      {isRange && (
+        <div className="text-[11px] text-muted mt-0.5">
+          faixa {fmt(range.min, decimals)}–{fmt(range.max, decimals)}
+        </div>
+      )}
     </div>
   );
 }
