@@ -57,6 +57,14 @@ export function UserMenu() {
               >
                 Análise do Claude
               </a>
+              {profile?.isAdmin && (
+                <a
+                  href="/admin"
+                  className="block rounded-md px-2 py-1.5 text-sm text-accent hover:bg-surface-raised transition-colors"
+                >
+                  Painel de administrador
+                </a>
+              )}
               <button
                 onClick={handleSignOut}
                 className="w-full text-left rounded-md px-2 py-1.5 text-sm text-danger hover:bg-surface-raised transition-colors"

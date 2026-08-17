@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 export interface UserProfile {
   id: string;
   name: string;
+  isAdmin: boolean;
 }
 
 interface AuthContextValue {
@@ -27,8 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadProfile = useCallback(
     async (userId: string) => {
-      const { data } = await supabase.from("profiles").select("id,name").eq("id", userId).single();
-      setProfile(data ?? null);
+      const { data } = await supabase.from("profiles").select("id,name,is_admin").eq("id", userId).single();
+      setProfile(data ? { id: data.id, name: data.name, isAdmin: data.is_admin } : null);
     },
     [supabase]
   );
