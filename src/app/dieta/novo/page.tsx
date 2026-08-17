@@ -6,7 +6,7 @@ import { Diet, DietItem, DietMeal, MEAL_PRESETS, dietTotals, itemMacros, mealTot
 import { upsertDiet } from "@/lib/dietStorage";
 import { generateDietPdf } from "@/lib/pdf";
 import { loadLastPrediction } from "@/lib/predictionsLog";
-import { RESTRICTION_LABEL, UserPreferences, loadPreferences } from "@/lib/questionnaire";
+import { RESTRICTION_LABEL, Restriction, UserPreferences, loadPreferences } from "@/lib/questionnaire";
 import { fmt } from "@/lib/format";
 import { IconCheck, IconClipboard, IconDroplet, IconFlame, IconWheat } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
@@ -48,6 +48,11 @@ export default function NovaDietaPage() {
   const [saved, setSaved] = useState(false);
   const [openSubs, setOpenSubs] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
+  const [mustHaveIds, setMustHaveIds] = useState<string[]>([]);
+  const [genRestrictions, setGenRestrictions] = useState<Restriction[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genWarnings, setGenWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -61,10 +66,53 @@ export default function NovaDietaPage() {
       }
       const p = await loadPreferences();
       setPrefs(p);
+      setMustHaveIds(p.favoriteFoodIds);
+      setGenRestrictions(p.restrictions);
       const mealCount = Math.min(6, Math.max(2, p.mealsPerDay || 3));
       setMeals(MEAL_PRESETS.slice(0, mealCount).map((n) => newMeal(n)));
     })();
   }, [ready, user]);
+
+  function toggleMustHave(id: string) {
+    setMustHaveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function toggleGenRestriction(r: Restriction) {
+    setGenRestrictions((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
+  }
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setGenError(null);
+    setGenWarnings([]);
+    try {
+      const res = await fetch("/api/gerar-dieta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetKcal: parseFloat(targetKcal) || 0,
+          targetProteinG: parseFloat(targetProtein) || 0,
+          targetFatG: parseFloat(targetFat) || 0,
+          targetCarbG: parseFloat(targetCarb) || 0,
+          mealsCount: meals.length || 4,
+          mustHaveFoodIds: mustHaveIds,
+          restrictions: genRestrictions,
+          excludedFoodIds: prefs?.dislikedFoodIds ?? [],
+          cookingTime: prefs?.cookingTime ?? "medio",
+          notes: prefs?.notes ?? "",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao gerar dieta.");
+      setMeals(data.meals);
+      setGenWarnings(data.warnings ?? []);
+      setSaved(false);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : "Erro ao gerar dieta.");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   const availableFoods = useMemo(() => (prefs ? filterFoodsByPreferences(FOODS, prefs) : FOODS), [prefs]);
 
@@ -171,6 +219,69 @@ export default function NovaDietaPage() {
         <p className="text-xs text-muted">
           Preenchido automaticamente com a última previsão salva. Ajuste livremente se quiser outra meta.
         </p>
+      </div>
+
+      <div className="card p-6 space-y-5">
+        <div>
+          <h2 className="text-sm font-semibold mb-1">Gerar dieta automaticamente</h2>
+          <p className="text-xs text-muted mb-3">
+            A IA distribui os alimentos do catálogo entre as refeições pra bater as metas acima. Você pode editar
+            tudo depois de gerado.
+          </p>
+        </div>
+
+        <div>
+          <span className="block text-xs text-muted mb-2">Alimentos que não podem faltar</span>
+          <div className="flex flex-wrap gap-1.5">
+            {FOODS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => toggleMustHave(f.id)}
+                className={`badge border transition-colors ${
+                  mustHaveIds.includes(f.id)
+                    ? "bg-accent/20 text-accent border-accent/40"
+                    : "bg-surface-raised text-muted border-border hover:border-accent/30"
+                }`}
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-xs text-muted mb-2">Restrições para esta dieta</span>
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(RESTRICTION_LABEL) as Restriction[]).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => toggleGenRestriction(r)}
+                className={`badge border transition-colors ${
+                  genRestrictions.includes(r)
+                    ? "bg-accent/20 text-accent border-accent/40"
+                    : "bg-surface-raised text-muted border-border hover:border-accent/30"
+                }`}
+              >
+                {RESTRICTION_LABEL[r]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {genError && <p className="text-xs text-danger">{genError}</p>}
+        {genWarnings.length > 0 && (
+          <div className="text-xs text-warn space-y-1">
+            {genWarnings.map((w, i) => (
+              <p key={i}>{w}</p>
+            ))}
+          </div>
+        )}
+
+        <button type="button" onClick={handleGenerate} disabled={generating} className="btn-primary">
+          {generating ? "Gerando…" : "Gerar dieta automaticamente"}
+        </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4 sticky top-[73px] z-[5]">
