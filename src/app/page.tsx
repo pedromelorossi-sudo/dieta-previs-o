@@ -1,69 +1,221 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useMemo, useState } from "react";
+import { Cycle } from "@/lib/types";
+import { loadCycles } from "@/lib/storage";
+import { extractRules, sortByDate } from "@/lib/dietEngine";
+import { fmt, fmtDate } from "@/lib/format";
+import { Sparkline } from "@/components/Sparkline";
+import { IconCheck, IconClipboard, IconDrumstick, IconDroplet, IconFlame, IconTrend } from "@/components/icons";
+import { useAuth } from "@/context/AuthContext";
+
+export default function DashboardPage() {
+  const { ready, user } = useAuth();
+  const [cycles, setCycles] = useState<Cycle[] | null>(null);
+
+  useEffect(() => {
+    if (ready && user) loadCycles().then((c) => setCycles(sortByDate(c)));
+  }, [ready, user]);
+
+  const rules = useMemo(() => (cycles ? extractRules(cycles) : null), [cycles]);
+
+  if (!cycles) {
+    return (
+      <div className="mx-auto max-w-5xl px-6 py-10 space-y-6">
+        <div className="skeleton h-16 w-full" />
+        <div className="skeleton h-48 w-full" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="skeleton h-28" />
+          <div className="skeleton h-28" />
+          <div className="skeleton h-28" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="mx-auto max-w-5xl px-6 py-10 space-y-12">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight gradient-text">Histórico de ciclos</h1>
+          <p className="text-sm text-muted mt-2">
+            {cycles.length} ciclo{cycles.length !== 1 ? "s" : ""} registrado{cycles.length !== 1 ? "s" : ""} · método
+            construído a partir dos seus dados reais de consultoria
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
+        <div className="flex gap-3">
+          <a href="/previsao" className="btn-primary">
+            <IconTrend className="h-4 w-4" />
+            Nova previsão
           </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
+          <a href="/ciclos/novo" className="btn-secondary">
+            <IconClipboard className="h-4 w-4" />
+            Registrar ciclo
           </a>
         </div>
-      </main>
+      </section>
+
+      {cycles.length === 0 ? (
+        <section className="card p-8 text-center">
+          <p className="text-sm text-muted">
+            Nenhum ciclo registrado para este perfil ainda. Comece estimando uma dieta inicial a partir do seu peso,
+            altura e %BF, ou registre um ciclo real se já tiver uma prescrição.
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <a href="/estimar" className="btn-primary">
+              Estimar dieta inicial
+            </a>
+            <a href="/ciclos/novo" className="btn-secondary">
+              Registrar ciclo
+            </a>
+          </div>
+        </section>
+      ) : (
+        <section className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted">
+                  <th className="px-4 py-3 font-medium">Data</th>
+                  <th className="px-4 py-3 font-medium">Peso</th>
+                  <th className="px-4 py-3 font-medium">%BF</th>
+                  <th className="px-4 py-3 font-medium">Kcal</th>
+                  <th className="px-4 py-3 font-medium">Kcal/kg</th>
+                  <th className="px-4 py-3 font-medium">Proteína</th>
+                  <th className="px-4 py-3 font-medium">Gordura</th>
+                  <th className="px-4 py-3 font-medium">Carbo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cycles.map((c) => (
+                  <tr key={c.id} className="border-b border-border last:border-0 hover:bg-surface-raised/60 transition-colors">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {fmtDate(c.date)}
+                      {c.isPrediction && (
+                        <span className="ml-2 badge bg-warn/15 text-warn">previsão</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap font-medium">{fmt(c.weightKg)} kg</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted">
+                      {c.bodyFatPercent != null ? `${fmt(c.bodyFatPercent)}%` : "—"}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{fmt(c.kcal, 0)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted">{fmt(c.kcal / c.weightKg)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {fmt(c.proteinG, 1)}g{" "}
+                      <span className="text-muted">({fmt(c.proteinG / c.weightKg, 1)} g/kg)</span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {fmt(c.fatG, 1)}g{" "}
+                      <span className="text-muted">({fmt(c.fatG / c.weightKg, 1)} g/kg)</span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{fmt(c.carbG, 1)}g</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {rules && cycles.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold tracking-tight mb-1">Regras extraídas</h2>
+          <p className="text-sm text-muted mb-5">
+            Padrões observados no histórico — hipóteses de trabalho enquanto seguram, não leis confirmadas.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <RuleCard
+              icon={<IconDroplet className="h-4 w-4" />}
+              label="Gordura"
+              value={`${fmt(rules.fatPerKg, 2)} g/kg`}
+              note="Estável nos ciclos observados — repetir até ver desvio."
+              tone="stable"
+            />
+            <RuleCard
+              icon={<IconDrumstick className="h-4 w-4" />}
+              label="Proteína"
+              value={`${fmt(rules.proteinPerKg, 2)} g/kg`}
+              note={
+                rules.proteinStepSuspected
+                  ? "Último salto detectado: +0,1 g/kg. Gatilho do degrau ainda desconhecido."
+                  : "Repetir o último valor prescrito."
+              }
+              tone={rules.proteinStepSuspected ? "watch" : "stable"}
+            />
+            <RuleCard
+              icon={<IconFlame className="h-4 w-4" />}
+              label="Kcal/kg"
+              value={fmt(rules.kcalPerKgLast, 1)}
+              note={`Progressão média de ${fmt(rules.kcalPerKgAvgStep, 2)}/ciclo. Próximo extrapolado: ${fmt(
+                rules.kcalPerKgExtrapolated,
+                1
+              )}.`}
+              tone="watch"
+              chart={
+                <Sparkline
+                  values={rules.kcalPerKgSeries.map((s) => s.value)}
+                  projectedNext={rules.kcalPerKgExtrapolated}
+                />
+              }
+            />
+          </div>
+        </section>
+      )}
+
+      <section className="card p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-warn/15 text-warn">
+            <IconCheck className="h-3.5 w-3.5" />
+          </span>
+          <h3 className="text-sm font-semibold">Limitações do modelo</h3>
+        </div>
+        <ul className="text-sm text-muted space-y-2 list-disc list-inside marker:text-border">
+          <li>Construído com poucos pontos de dado — cada novo ciclo deve testar se as regras seguram.</li>
+          <li>%BF é estimado, não medido com precisão (bioimpedância/DEXA melhorariam isso).</li>
+          <li>Captura só a parte matemática. Adesão, fotos e exame físico continuam sendo julgamento humano.</li>
+          <li>
+            <span className="font-mono text-foreground">E</span> (energia por kg ganho) é inferido pela estabilidade
+            do %BF, nunca certo sem DEXA seriada.
+          </li>
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function RuleCard({
+  icon,
+  label,
+  value,
+  note,
+  tone,
+  chart,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  note: string;
+  tone: "stable" | "watch";
+  chart?: React.ReactNode;
+}) {
+  return (
+    <div className="card p-5 hover:border-accent/30 transition-colors">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+          <span className={`flex h-6 w-6 items-center justify-center rounded-md ${tone === "stable" ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"}`}>
+            {icon}
+          </span>
+          {label}
+        </span>
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${tone === "stable" ? "bg-accent" : "bg-warn"}`}
+          title={tone === "stable" ? "Regra estável" : "Em observação"}
+        />
+      </div>
+      <div className="mt-3 text-2xl font-semibold tracking-tight">{value}</div>
+      <p className="mt-2 text-xs text-muted leading-relaxed">{note}</p>
+      {chart && <div className="mt-3">{chart}</div>}
     </div>
   );
 }
