@@ -3,8 +3,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { predictNextCycle } from "@/lib/dietEngine";
 import { estimateBodyComposition } from "@/lib/bodyComposition";
+import { generateDietMeals } from "@/lib/dietGenerator";
 import { Cycle, GainComposition } from "@/lib/types";
-import { ActivityLevel } from "@/lib/questionnaire";
+import { ActivityLevel, Restriction } from "@/lib/questionnaire";
 
 const ANGLE_LABEL: Record<string, string> = {
   frente: "Frente",
@@ -12,6 +13,8 @@ const ANGLE_LABEL: Record<string, string> = {
   lado_esquerdo: "Lado esquerdo",
   lado_direito: "Lado direito",
 };
+
+const PHOTOS_BUCKET = "progress-photos";
 
 interface PhotoInput {
   angle: string;
@@ -42,6 +45,15 @@ interface CycleRow {
   fat_g: number;
   carb_g: number;
   is_prediction: boolean;
+}
+
+interface PreferencesRow {
+  meals_per_day: number;
+  cooking_time: string;
+  restrictions: Restriction[];
+  disliked_food_ids: string[];
+  favorite_food_ids: string[];
+  notes: string;
 }
 
 function rowToCycle(row: CycleRow, id: string): Cycle {
@@ -75,48 +87,46 @@ function buildImageBlocks(photos: PhotoInput[]): Anthropic.ContentBlockParam[] {
   return blocks;
 }
 
-interface BfEstimate {
-  bfPercentVisual: number;
-  bfConfidence: "baixa" | "media" | "alta";
-  bfReasoning: string;
+function mediaTypeFromPath(path: string): "image/jpeg" | "image/png" | "image/webp" {
+  const ext = path.split(".").pop()?.toLowerCase();
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  return "image/jpeg";
 }
 
-async function estimateBfFromPhotos(client: Anthropic, photos: PhotoInput[], contextText: string): Promise<BfEstimate> {
-  const response = await client.messages.create({
-    model: "claude-opus-5",
-    max_tokens: 800,
-    output_config: { effort: "medium" },
-    system:
-      "Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.",
-    tools: [
-      {
-        name: BF_TOOL_NAME,
-        description: "Registra a estimativa visual de %BF.",
-        input_schema: {
-          type: "object",
-          properties: {
-            bfPercentVisual: { type: "number", description: "Estimativa de %BF a partir das fotos, entre 3 e 60." },
-            bfConfidence: { type: "string", enum: ["baixa", "media", "alta"] },
-            bfReasoning: { type: "string", description: "1-2 frases explicando a leitura visual." },
-          },
-          required: ["bfPercentVisual", "bfConfidence", "bfReasoning"],
-        },
-      },
-    ],
-    tool_choice: { type: "tool", name: BF_TOOL_NAME },
-    messages: [{ role: "user", content: [...buildImageBlocks(photos), { type: "text", text: contextText }] }],
-  });
+interface PreviousPhoto {
+  date: string;
+  base64: string;
+  mediaType: string;
+}
 
-  const toolBlock = response.content.find((b) => b.type === "tool_use" && b.name === BF_TOOL_NAME);
-  if (!toolBlock || toolBlock.type !== "tool_use") {
-    throw new Error("O modelo não retornou uma estimativa de %BF válida.");
-  }
-  const raw = toolBlock.input as BfEstimate;
-  return {
-    bfPercentVisual: clamp(raw.bfPercentVisual, 3, 60),
-    bfConfidence: raw.bfConfidence,
-    bfReasoning: raw.bfReasoning,
-  };
+async function fetchPreviousPhoto(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<PreviousPhoto | null> {
+  const { data: rows } = await supabase
+    .from("progress_photos")
+    .select("date,photo_path")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .limit(1);
+  const prev = rows?.[0];
+  if (!prev) return null;
+
+  const { data: blob, error } = await supabase.storage.from(PHOTOS_BUCKET).download(prev.photo_path);
+  if (error || !blob) return null;
+
+  const arrayBuffer = await blob.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  return { date: prev.date, base64, mediaType: mediaTypeFromPath(prev.photo_path) };
+}
+
+function evolutionImageBlock(prev: PreviousPhoto | null): Anthropic.ContentBlockParam[] {
+  if (!prev) return [];
+  return [
+    { type: "text", text: `Foto anterior mais recente, de ${prev.date} (para comparar evolução):` },
+    { type: "image", source: { type: "base64", media_type: prev.mediaType as "image/jpeg", data: prev.base64 } },
+  ];
 }
 
 export async function POST(request: Request) {
@@ -151,50 +161,139 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Peso, altura e idade são obrigatórios." }, { status: 400 });
   }
 
-  const { data: cycleRows, error: cyclesError } = await supabase
-    .from("cycles")
-    .select("date,weight_kg,body_fat_percent,kcal,protein_g,fat_g,carb_g,is_prediction")
-    .eq("user_id", user.id)
-    .order("date", { ascending: true });
+  const [{ data: cycleRows, error: cyclesError }, { data: prefsRow }, previousPhoto] = await Promise.all([
+    supabase
+      .from("cycles")
+      .select("date,weight_kg,body_fat_percent,kcal,protein_g,fat_g,carb_g,is_prediction")
+      .eq("user_id", user.id)
+      .order("date", { ascending: true }),
+    supabase
+      .from("preferences")
+      .select("meals_per_day,cooking_time,restrictions,disliked_food_ids,favorite_food_ids,notes")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    fetchPreviousPhoto(supabase, user.id),
+  ]);
   if (cyclesError) {
     return NextResponse.json({ error: cyclesError.message }, { status: 500 });
   }
 
+  const prefs = prefsRow as PreferencesRow | null;
+  const dietParamsBase = {
+    mealsCount: prefs?.meals_per_day ?? 4,
+    mustHaveFoodIds: prefs?.favorite_food_ids ?? [],
+    restrictions: prefs?.restrictions ?? [],
+    excludedFoodIds: prefs?.disliked_food_ids ?? [],
+    cookingTime: prefs?.cooking_time ?? "medio",
+    notes: prefs?.notes ?? "",
+  };
+
   const client = new Anthropic();
+  const evolutionBlocks = evolutionImageBlock(previousPhoto);
+  const evolutionInstruction = previousPhoto
+    ? "Uma foto anterior foi incluída para comparação — descreva em evolutionNote a evolução muscular percebida desde então (definição, volume, simetria), 1-3 frases, tom direto."
+    : "Não há foto anterior para comparar — deixe evolutionNote como string vazia.";
 
   // ---- primeiro ciclo: sem histórico, usa composição corporal (Mifflin/Katch) em vez do algoritmo de progressão ----
   if (!cycleRows || cycleRows.length === 0) {
-    let bf: BfEstimate;
+    let bfResponse;
     try {
-      bf = await estimateBfFromPhotos(
-        client,
-        photos,
-        `Contexto: sexo ${sex}, altura ${heightCm}cm, peso ${currentWeightKg}kg, idade ${age}. Primeira estimativa deste usuário, sem fotos anteriores para comparar.`
-      );
+      bfResponse = await client.messages.create({
+        model: "claude-opus-5",
+        max_tokens: 900,
+        output_config: { effort: "medium" },
+        system:
+          "Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.",
+        tools: [
+          {
+            name: BF_TOOL_NAME,
+            description: "Registra a estimativa visual de %BF.",
+            input_schema: {
+              type: "object",
+              properties: {
+                bfPercentVisual: { type: "number", description: "Estimativa de %BF a partir das fotos, entre 3 e 60." },
+                bfConfidence: { type: "string", enum: ["baixa", "media", "alta"] },
+                bfReasoning: { type: "string", description: "1-2 frases explicando a leitura visual." },
+                evolutionNote: { type: "string" },
+              },
+              required: ["bfPercentVisual", "bfConfidence", "bfReasoning", "evolutionNote"],
+            },
+          },
+        ],
+        tool_choice: { type: "tool", name: BF_TOOL_NAME },
+        messages: [
+          {
+            role: "user",
+            content: [
+              ...buildImageBlocks(photos),
+              ...evolutionBlocks,
+              {
+                type: "text",
+                text: `Contexto: sexo ${sex}, altura ${heightCm}cm, peso ${currentWeightKg}kg, idade ${age}. ${evolutionInstruction}`,
+              },
+            ],
+          },
+        ],
+      });
     } catch (err) {
       if (err instanceof Anthropic.APIError) {
         const errBody = err.error as { error?: { message?: string } } | undefined;
         return NextResponse.json({ error: `Erro na API da Anthropic: ${errBody?.error?.message ?? err.message}` }, { status: err.status ?? 502 });
       }
-      return NextResponse.json({ error: err instanceof Error ? err.message : "Erro ao estimar %BF." }, { status: 502 });
+      return NextResponse.json({ error: "Erro ao estimar %BF." }, { status: 502 });
     }
+
+    const bfBlock = bfResponse.content.find((b) => b.type === "tool_use" && b.name === BF_TOOL_NAME);
+    if (!bfBlock || bfBlock.type !== "tool_use") {
+      return NextResponse.json({ error: "O modelo não retornou uma estimativa de %BF válida." }, { status: 422 });
+    }
+    const bfRaw = bfBlock.input as { bfPercentVisual: number; bfConfidence: "baixa" | "media" | "alta"; bfReasoning: string; evolutionNote: string };
 
     const comp = estimateBodyComposition({
       weightKg: currentWeightKg,
       heightCm,
-      bodyFatPercent: bf.bfPercentVisual,
+      bodyFatPercent: clamp(bfRaw.bfPercentVisual, 3, 60),
       age,
       sex,
       activityLevel,
     });
 
+    let meals, dietWarnings;
+    try {
+      ({ meals, warnings: dietWarnings } = await generateDietMeals(client, {
+        targetKcal: comp.targetKcal,
+        targetProteinG: comp.targetProteinG,
+        targetFatG: comp.targetFatG,
+        targetCarbG: comp.targetCarbG,
+        ...dietParamsBase,
+      }));
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Erro ao montar a dieta." }, { status: 502 });
+    }
+
     const point = (v: number) => ({ min: v, max: v });
+
+    // sem histórico observado ainda — projeta a partir do superávit/déficit teórico vs. TDEE,
+    // usando 7700kcal/kg como proxy de gordura (cutting) e uma mistura mais barata em superávit (bulking)
+    const oneMonthE = comp.path === "cutting" ? 7700 : comp.path === "bulking" ? 5250 : 7700;
+    const oneMonthRateKgWeek = (comp.tdee * comp.surplusPercent * 7) / oneMonthE;
+    const oneMonthMid = currentWeightKg + oneMonthRateKgWeek * 4;
+    const oneMonthDelta = Math.abs(oneMonthRateKgWeek * 4) * 0.25;
+    const oneMonthProjection = {
+      weightRange: { min: oneMonthMid - oneMonthDelta, max: oneMonthMid + oneMonthDelta },
+      note:
+        comp.path === "normocalorico"
+          ? "Meta é manutenção — peso deve ficar estável em 4 semanas, sem histórico ainda pra confirmar."
+          : `Estimativa teórica (sem histórico ainda): mantendo esse padrão, projeção de peso em 4 semanas é ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg. Vai ficar mais precisa a partir do 2º ciclo, com dados reais.`,
+    };
 
     return NextResponse.json({
       isFirstCycle: true,
-      bfPercentVisual: bf.bfPercentVisual,
-      bfConfidence: bf.bfConfidence,
-      bfReasoning: bf.bfReasoning,
+      oneMonthProjection,
+      bfPercentVisual: clamp(bfRaw.bfPercentVisual, 3, 60),
+      bfConfidence: bfRaw.bfConfidence,
+      bfReasoning: bfRaw.bfReasoning,
+      evolutionNote: bfRaw.evolutionNote || null,
       recommendedKcal: comp.targetKcal,
       recommendedProteinG: comp.targetProteinG,
       recommendedFatG: comp.targetFatG,
@@ -208,6 +307,8 @@ export async function POST(request: Request) {
         weight: point(currentWeightKg),
       },
       rateKgWeek: 0,
+      meals,
+      dietWarnings,
     });
   }
 
@@ -252,9 +353,11 @@ Faixas já calculadas pelo algoritmo (seus valores recomendados DEVEM ficar dent
 - gordura: ${result.fatRange.min.toFixed(1)}–${result.fatRange.max.toFixed(1)}g
 - carboidrato: ${result.carbRange.min.toFixed(1)}–${result.carbRange.max.toFixed(1)}g
 
-Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplicado: ${applyProteinStep ? "sim" : "não"}.`;
+Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplicado: ${applyProteinStep ? "sim" : "não"}.
 
-  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para estimar %BF visualmente e, em seguida, monta a prescrição do próximo ciclo de dieta — mas usando exclusivamente os parâmetros e faixas numéricas já calculados pelo algoritmo determinístico do usuário, fornecidos no contexto. Você NÃO deve inventar sua própria metodologia de cálculo de macros nem sair das faixas fornecidas — seu papel é (1) estimar %BF a partir da evidência visual das fotos, cruzando os ângulos disponíveis, e (2) escolher, dentro de cada faixa já calculada, o ponto que melhor se encaixa com o que a foto mostra (ex: se a foto sugere acúmulo de gordura mais rápido que o esperado, incline para o extremo inferior da faixa de kcal; se sugere composição favorável, incline para o extremo superior). Responda só pela ferramenta fornecida. Seja direto e específico, sem jargão excessivo, em português.`;
+${evolutionInstruction}`;
+
+  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para estimar %BF visualmente e, em seguida, monta a prescrição do próximo ciclo de dieta — mas usando exclusivamente os parâmetros e faixas numéricas já calculados pelo algoritmo determinístico do usuário, fornecidos no contexto. Você NÃO deve inventar sua própria metodologia de cálculo de macros nem sair das faixas fornecidas — seu papel é (1) estimar %BF a partir da evidência visual das fotos, cruzando os ângulos disponíveis, (2) escolher, dentro de cada faixa já calculada, o ponto que melhor se encaixa com o que a foto mostra, e (3) se houver foto anterior, comentar a evolução muscular percebida. Responda só pela ferramenta fornecida. Seja direto e específico, sem jargão excessivo, em português.`;
 
   let response;
   try {
@@ -273,6 +376,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
               bfPercentVisual: { type: "number", description: "Estimativa de %BF a partir das fotos, entre 3 e 60." },
               bfConfidence: { type: "string", enum: ["baixa", "media", "alta"] },
               bfReasoning: { type: "string", description: "1-2 frases explicando a leitura visual." },
+              evolutionNote: { type: "string" },
               recommendedKcal: { type: "number" },
               recommendedProteinG: { type: "number" },
               recommendedFatG: { type: "number" },
@@ -283,6 +387,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
               "bfPercentVisual",
               "bfConfidence",
               "bfReasoning",
+              "evolutionNote",
               "recommendedKcal",
               "recommendedProteinG",
               "recommendedFatG",
@@ -293,7 +398,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
         },
       ],
       tool_choice: { type: "tool", name: PLAN_TOOL_NAME },
-      messages: [{ role: "user", content: [...buildImageBlocks(photos), { type: "text", text: contextText }] }],
+      messages: [{ role: "user", content: [...buildImageBlocks(photos), ...evolutionBlocks, { type: "text", text: contextText }] }],
     });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
@@ -313,6 +418,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
     bfPercentVisual: number;
     bfConfidence: "baixa" | "media" | "alta";
     bfReasoning: string;
+    evolutionNote: string;
     recommendedKcal: number;
     recommendedProteinG: number;
     recommendedFatG: number;
@@ -320,15 +426,44 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
     note: string;
   };
 
+  const recommendedKcal = clamp(raw.recommendedKcal, result.kcalRange.min, result.kcalRange.max);
+  const recommendedProteinG = clamp(raw.recommendedProteinG, result.proteinRange.min, result.proteinRange.max);
+  const recommendedFatG = clamp(raw.recommendedFatG, result.fatRange.min, result.fatRange.max);
+  const recommendedCarbG = clamp(raw.recommendedCarbG, result.carbRange.min, result.carbRange.max);
+
+  let meals, dietWarnings;
+  try {
+    ({ meals, warnings: dietWarnings } = await generateDietMeals(client, {
+      targetKcal: recommendedKcal,
+      targetProteinG: recommendedProteinG,
+      targetFatG: recommendedFatG,
+      targetCarbG: recommendedCarbG,
+      ...dietParamsBase,
+    }));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Erro ao montar a dieta." }, { status: 502 });
+  }
+
+  // projeção fixa de 4 semanas, à parte do horizonte escolhido pra próxima consulta — usa a taxa
+  // observada de verdade (rateKgWeek), não uma suposição teórica, já que há histórico real aqui
+  const oneMonthMid = currentWeightKg + result.rateKgWeek * 4;
+  const oneMonthDelta = Math.abs(result.rateKgWeek * 4) * 0.15;
+  const oneMonthProjection = {
+    weightRange: { min: oneMonthMid - oneMonthDelta, max: oneMonthMid + oneMonthDelta },
+    note: `Mantendo o padrão observado (${result.rateKgWeek >= 0 ? "+" : ""}${result.rateKgWeek.toFixed(2)} kg/semana), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
+  };
+
   return NextResponse.json({
     isFirstCycle: false,
+    oneMonthProjection,
     bfPercentVisual: clamp(raw.bfPercentVisual, 3, 60),
     bfConfidence: raw.bfConfidence,
     bfReasoning: raw.bfReasoning,
-    recommendedKcal: clamp(raw.recommendedKcal, result.kcalRange.min, result.kcalRange.max),
-    recommendedProteinG: clamp(raw.recommendedProteinG, result.proteinRange.min, result.proteinRange.max),
-    recommendedFatG: clamp(raw.recommendedFatG, result.fatRange.min, result.fatRange.max),
-    recommendedCarbG: clamp(raw.recommendedCarbG, result.carbRange.min, result.carbRange.max),
+    evolutionNote: raw.evolutionNote || null,
+    recommendedKcal,
+    recommendedProteinG,
+    recommendedFatG,
+    recommendedCarbG,
     note: raw.note,
     ranges: {
       kcal: result.kcalRange,
@@ -338,5 +473,7 @@ Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplica
       weight: result.projectedWeightRange,
     },
     rateKgWeek: result.rateKgWeek,
+    meals,
+    dietWarnings,
   });
 }

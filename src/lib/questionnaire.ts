@@ -45,6 +45,36 @@ export const ACTIVITY_LABEL: Record<ActivityLevel, string> = {
   intenso: "Intenso (5x+/semana)",
 };
 
+export type ExerciseFreq = "0" | "1-2" | "3-4" | "5+";
+export type DailyRoutine = "sedentaria" | "ativa" | "pesada";
+
+export const EXERCISE_FREQ_LABEL: Record<ExerciseFreq, string> = {
+  "0": "Não treino atualmente",
+  "1-2": "1-2x por semana",
+  "3-4": "3-4x por semana",
+  "5+": "5x ou mais por semana",
+};
+
+export const DAILY_ROUTINE_LABEL: Record<DailyRoutine, string> = {
+  sedentaria: "Sentado(a) a maior parte do dia (escritório, home office)",
+  ativa: "Em pé/caminhando bastante (vendas, professor, etc.)",
+  pesada: "Trabalho fisicamente pesado (construção, carga, etc.)",
+};
+
+const EXERCISE_INDEX: Record<ExerciseFreq, number> = { "0": 0, "1-2": 1, "3-4": 2, "5+": 3 };
+const ROUTINE_INDEX: Record<DailyRoutine, number> = { sedentaria: 0, ativa: 1, pesada: 3 };
+const LEVELS: ActivityLevel[] = ["sedentario", "leve", "moderado", "intenso"];
+
+/** Deriva o nível de atividade (usado no multiplicador de TDEE) a partir de frequência de treino
+ * + rotina diária, em vez do usuário escolher um rótulo genérico "moderado" às cegas. */
+export function calculateActivityLevel(exercise: ExerciseFreq, routine: DailyRoutine): ActivityLevel {
+  const exerciseIdx = EXERCISE_INDEX[exercise];
+  const routineIdx = ROUTINE_INDEX[routine];
+  let idx = Math.max(exerciseIdx, routineIdx);
+  if (exerciseIdx >= 2 && routineIdx >= 1) idx = Math.min(3, idx + 1);
+  return LEVELS[idx];
+}
+
 export const COOKING_LABEL: Record<CookingTime, string> = {
   pouco: "Pouco tempo — prático e rápido",
   medio: "Tempo médio",

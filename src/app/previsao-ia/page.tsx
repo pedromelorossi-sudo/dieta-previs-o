@@ -6,11 +6,26 @@ import { useAuth } from "@/context/AuthContext";
 import { Cycle, GainComposition } from "@/lib/types";
 import { loadCycles, addCycle } from "@/lib/storage";
 import { E_SCENARIOS, sortByDate } from "@/lib/dietEngine";
-import { Sex, ActivityLevel, ACTIVITY_LABEL, loadPreferences, savePreferences } from "@/lib/questionnaire";
+import {
+  Sex,
+  ActivityLevel,
+  ACTIVITY_LABEL,
+  ExerciseFreq,
+  DailyRoutine,
+  EXERCISE_FREQ_LABEL,
+  DAILY_ROUTINE_LABEL,
+  calculateActivityLevel,
+  loadPreferences,
+  savePreferences,
+} from "@/lib/questionnaire";
 import { fmt, fmtDate } from "@/lib/format";
 import { saveLastPrediction } from "@/lib/predictionsLog";
 import { addProgressPhoto } from "@/lib/photos";
 import { resizeImageToBase64 } from "@/lib/imageResize";
+import { Diet, DietMeal, dietTotals, mealTotals, itemMacros } from "@/lib/dietBuilder";
+import { getFood } from "@/lib/foods";
+import { upsertDiet } from "@/lib/dietStorage";
+import { generateDietPdf } from "@/lib/pdf";
 import { IconCheck, IconClipboard, IconDrumstick, IconDroplet, IconFlame, IconScale, IconTarget, IconWheat } from "@/components/icons";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -29,6 +44,7 @@ interface PredictionResponse {
   bfPercentVisual: number;
   bfConfidence: "baixa" | "media" | "alta";
   bfReasoning: string;
+  evolutionNote: string | null;
   recommendedKcal: number;
   recommendedProteinG: number;
   recommendedFatG: number;
@@ -42,6 +58,12 @@ interface PredictionResponse {
     weight: { min: number; max: number };
   };
   rateKgWeek: number;
+  meals: DietMeal[];
+  dietWarnings: string[];
+  oneMonthProjection: {
+    weightRange: { min: number; max: number };
+    note: string;
+  };
 }
 
 export default function PrevisaoIaPage() {
@@ -55,7 +77,9 @@ export default function PrevisaoIaPage() {
   const [sex, setSex] = useState<Sex>("masculino");
   const [heightCm, setHeightCm] = useState("");
   const [age, setAge] = useState("");
-  const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderado");
+  const [exerciseFreq, setExerciseFreq] = useState<ExerciseFreq>("3-4");
+  const [dailyRoutine, setDailyRoutine] = useState<DailyRoutine>("sedentaria");
+  const activityLevel: ActivityLevel = useMemo(() => calculateActivityLevel(exerciseFreq, dailyRoutine), [exerciseFreq, dailyRoutine]);
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
   const [weeks, setWeeks] = useState("4");
@@ -67,6 +91,7 @@ export default function PrevisaoIaPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [saved, setSaved] = useState(false);
+  const [dietSaved, setDietSaved] = useState(false);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -75,7 +100,6 @@ export default function PrevisaoIaPage() {
       if (p.sex) setSex(p.sex);
       if (p.heightCm) setHeightCm(String(p.heightCm));
       if (p.age) setAge(String(p.age));
-      setActivityLevel(p.activityLevel);
       setPrefsLoaded(true);
     });
   }, [ready, user]);
@@ -133,6 +157,7 @@ export default function PrevisaoIaPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao gerar previsão.");
       setResult(data);
+      setDietSaved(false);
 
       // salva as informações básicas no perfil, pra não pedir de novo da próxima vez
       const prefs = await loadPreferences();
@@ -193,6 +218,34 @@ export default function PrevisaoIaPage() {
     router.push("/dieta/novo");
   }
 
+  function dietFromResult(): Diet | null {
+    if (!result) return null;
+    return {
+      id: crypto.randomUUID(),
+      name: `Plano ${fmtDate(date)}`,
+      createdAt: new Date().toISOString(),
+      targetKcal: result.recommendedKcal,
+      targetProteinG: result.recommendedProteinG,
+      targetFatG: result.recommendedFatG,
+      targetCarbG: result.recommendedCarbG,
+      meals: result.meals,
+    };
+  }
+
+  async function handleSaveDiet() {
+    const diet = dietFromResult();
+    if (!diet || !user) return;
+    await upsertDiet(diet);
+    setDietSaved(true);
+  }
+
+  async function handleDownloadPdf() {
+    const diet = dietFromResult();
+    if (!diet) return;
+    generateDietPdf(diet);
+    await handleSaveDiet();
+  }
+
   if (!cycles || !prefsLoaded) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
@@ -231,15 +284,6 @@ export default function PrevisaoIaPage() {
             <Field label="Idade">
               <input type="number" step="1" value={age} onChange={(e) => setAge(e.target.value)} className="input" placeholder="ex: 28" />
             </Field>
-            <Field label="Nível de atividade">
-              <select value={activityLevel} onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)} className="input">
-                {(Object.keys(ACTIVITY_LABEL) as ActivityLevel[]).map((a) => (
-                  <option key={a} value={a}>
-                    {ACTIVITY_LABEL[a]}
-                  </option>
-                ))}
-              </select>
-            </Field>
             <Field label="Peso atual (kg)">
               <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} className="input" placeholder="ex: 85.2" />
             </Field>
@@ -247,6 +291,30 @@ export default function PrevisaoIaPage() {
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
             </Field>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            <Field label="Quantos dias por semana você treina?">
+              <select value={exerciseFreq} onChange={(e) => setExerciseFreq(e.target.value as ExerciseFreq)} className="input">
+                {(Object.keys(EXERCISE_FREQ_LABEL) as ExerciseFreq[]).map((f) => (
+                  <option key={f} value={f}>
+                    {EXERCISE_FREQ_LABEL[f]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Como é seu dia fora do treino?">
+              <select value={dailyRoutine} onChange={(e) => setDailyRoutine(e.target.value as DailyRoutine)} className="input">
+                {(Object.keys(DAILY_ROUTINE_LABEL) as DailyRoutine[]).map((r) => (
+                  <option key={r} value={r}>
+                    {DAILY_ROUTINE_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <p className="text-xs text-muted mt-2">
+            Nível de atividade calculado: <span className="text-accent font-medium">{ACTIVITY_LABEL[activityLevel]}</span>
+          </p>
         </div>
 
         <div>
@@ -342,6 +410,25 @@ export default function PrevisaoIaPage() {
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.bfReasoning}</p>
           </div>
 
+          {result.evolutionNote && (
+            <div className="card p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconTarget className="h-4 w-4" /> Evolução muscular
+              </div>
+              <p className="text-sm text-muted mt-2 leading-relaxed">{result.evolutionNote}</p>
+            </div>
+          )}
+
+          <div className="card p-5">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <IconScale className="h-4 w-4" /> Projeção de 1 mês seguindo essa dieta
+            </div>
+            <div className="mt-2 text-xl font-semibold">
+              {fmt(result.oneMonthProjection.weightRange.min, 1)}–{fmt(result.oneMonthProjection.weightRange.max, 1)} kg
+            </div>
+            <p className="text-sm text-muted mt-2 leading-relaxed">{result.oneMonthProjection.note}</p>
+          </div>
+
           <div className="card-glow p-6">
             <h2 className="text-sm font-semibold mb-5 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
@@ -358,13 +445,83 @@ export default function PrevisaoIaPage() {
             <p className="text-sm text-muted leading-relaxed mt-5 pt-5 border-t border-border">{result.note}</p>
           </div>
 
+          {result.meals.length > 0 && (
+            <div className="card p-6">
+              <h2 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
+                  <IconClipboard className="h-3.5 w-3.5" />
+                </span>
+                Dieta montada
+              </h2>
+              <p className="text-xs text-muted mb-4">
+                Já distribuída nas refeições pra bater as metas acima. Ajuste manualmente em{" "}
+                <a href="/dieta/novo" className="text-accent hover:underline">
+                  Montar dieta
+                </a>{" "}
+                se quiser trocar algo.
+              </p>
+
+              {result.dietWarnings.length > 0 && (
+                <div className="mb-4 text-xs text-warn space-y-1">
+                  {result.dietWarnings.map((w, i) => (
+                    <p key={i}>{w}</p>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {result.meals.map((meal) => {
+                  const totals = mealTotals(meal);
+                  return (
+                    <div key={meal.id} className="rounded-lg border border-border bg-surface-raised/40 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold">{meal.name}</span>
+                        <span className="text-xs text-muted">
+                          {fmt(totals.kcal, 0)} kcal · {fmt(totals.proteinG, 0)}p / {fmt(totals.fatG, 0)}g / {fmt(totals.carbG, 0)}c
+                        </span>
+                      </div>
+                      <ul className="space-y-1">
+                        {meal.items.map((item) => {
+                          const food = getFood(item.foodId);
+                          const m = itemMacros(item);
+                          return (
+                            <li key={item.id} className="flex items-center justify-between text-xs text-muted">
+                              <span>
+                                {food?.name ?? item.foodId} — {fmt(item.quantityG, 0)}g
+                              </span>
+                              <span>{fmt(m.kcal, 0)} kcal</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap gap-3 mt-5 pt-5 border-t border-border">
+                <span className="text-xs text-muted self-center">
+                  Total: {fmt(dietTotals({ id: "", name: "", createdAt: "", targetKcal: 0, targetProteinG: 0, targetFatG: 0, targetCarbG: 0, meals: result.meals }).kcal, 0)} kcal
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center flex-wrap">
-            <button type="button" onClick={handleSavePrediction} className="btn-primary">
+            <button type="button" onClick={handleSavePrediction} className="btn-secondary">
               {saved ? <IconCheck className="h-4 w-4" /> : <IconClipboard className="h-4 w-4" />}
-              {saved ? "Previsão salva" : "Salvar esta previsão"}
+              {saved ? "Previsão salva" : "Salvar previsão"}
             </button>
-            <button type="button" onClick={handleGoToDietBuilder} className="btn-secondary">
-              4. Montar dieta com essas metas →
+            <button type="button" onClick={handleDownloadPdf} className="btn-primary">
+              <IconClipboard className="h-4 w-4" />
+              Baixar PDF do plano
+            </button>
+            <button type="button" onClick={handleSaveDiet} className="btn-secondary">
+              {dietSaved ? <IconCheck className="h-4 w-4" /> : null}
+              {dietSaved ? "Dieta salva" : "Salvar dieta"}
+            </button>
+            <button type="button" onClick={handleGoToDietBuilder} className="text-xs text-accent hover:underline">
+              ajustar manualmente →
             </button>
           </div>
           <p className="text-xs text-muted leading-relaxed">
