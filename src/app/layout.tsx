@@ -46,6 +46,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <nav className="flex items-center gap-5 text-sm overflow-x-auto">
                   <NavLink href="/">Histórico</NavLink>
                   <NavLink href="/previsao">Nova previsão</NavLink>
+                  <NavLink href="/previsao-ia">Previsão por foto</NavLink>
                   <NavLink href="/dieta/novo">Montar dieta</NavLink>
                   <NavLink href="/ciclos/novo">Registrar ciclo</NavLink>
                   <NavLink href="/fotos">Fotos</NavLink>

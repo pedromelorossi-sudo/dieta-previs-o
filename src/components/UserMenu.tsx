@@ -57,6 +57,12 @@ export function UserMenu() {
               >
                 Análise do Claude
               </a>
+              <a
+                href="/previsao-ia"
+                className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+              >
+                Previsão por foto (IA)
+              </a>
               {profile?.isAdmin && (
                 <a
                   href="/admin"
