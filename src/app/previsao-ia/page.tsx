@@ -83,9 +83,16 @@ export default function PrevisaoIaPage() {
   const [sex, setSex] = useState<Sex>("masculino");
   const [heightCm, setHeightCm] = useState("");
   const [age, setAge] = useState("");
-  const [exerciseFreq, setExerciseFreq] = useState<ExerciseFreq>("3-4");
-  const [dailyRoutine, setDailyRoutine] = useState<DailyRoutine>("sedentaria");
-  const activityLevel: ActivityLevel = useMemo(() => calculateActivityLevel(exerciseFreq, dailyRoutine), [exerciseFreq, dailyRoutine]);
+  const [exerciseFreq, setExerciseFreq] = useState<ExerciseFreq | "">("");
+  const [dailyRoutine, setDailyRoutine] = useState<DailyRoutine | "">("");
+  const activityLevel: ActivityLevel | null = useMemo(
+    () => (exerciseFreq && dailyRoutine ? calculateActivityLevel(exerciseFreq, dailyRoutine) : null),
+    [exerciseFreq, dailyRoutine]
+  );
+  const [currentIntakeKcal, setCurrentIntakeKcal] = useState("");
+  const [weightTrend, setWeightTrend] = useState<"" | "subindo" | "descendo" | "estavel" | "nao_sei">("");
+  const [adherence, setAdherence] = useState<"" | "seguiu" | "comeu_mais" | "comeu_menos" | "nao_acompanhou">("");
+  const [actualKcal, setActualKcal] = useState("");
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
   const [weeks, setWeeks] = useState("4");
@@ -111,8 +118,17 @@ export default function PrevisaoIaPage() {
   const isFirstCycle = cycles !== null && cycles.length === 0;
 
   const canSubmit = useMemo(() => {
-    return !!files.frente && !!weight && !!heightCm && !!age && parseFloat(weight) > 0 && parseFloat(heightCm) > 0 && parseFloat(age) > 0;
-  }, [files, weight, heightCm, age]);
+    return (
+      !!files.frente &&
+      !!weight &&
+      !!heightCm &&
+      !!age &&
+      !!activityLevel &&
+      parseFloat(weight) > 0 &&
+      parseFloat(heightCm) > 0 &&
+      parseFloat(age) > 0
+    );
+  }, [files, weight, heightCm, age, activityLevel]);
 
   function handleFileChange(angle: Angle, f: File | null) {
     setFiles((prev) => ({ ...prev, [angle]: f ?? undefined }));
@@ -125,7 +141,7 @@ export default function PrevisaoIaPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || cycles === null) return;
+    if (!canSubmit || cycles === null || !activityLevel) return;
 
     // duas entradas na mesma data quebram o cálculo de taxa de variação (fica ~0, TDEE vira uma
     // cópia do ciclo anterior) — em vez de deixar isso passar silenciosamente, confirma com o usuário
@@ -168,6 +184,10 @@ export default function PrevisaoIaPage() {
           currentWeightKg: parseFloat(weight),
           date,
           weeksToNextConsult: parseFloat(weeks),
+          currentIntakeKcal: currentIntakeKcal ? parseFloat(currentIntakeKcal) : undefined,
+          weightTrend: weightTrend || undefined,
+          lastCycleAdherence: adherence || undefined,
+          lastCycleActualKcal: actualKcal ? parseFloat(actualKcal) : undefined,
         }),
       });
       const data = await res.json();
@@ -311,6 +331,9 @@ export default function PrevisaoIaPage() {
           <div className="grid gap-4 sm:grid-cols-2 mt-4">
             <Field label="Quantos dias por semana você treina?">
               <select value={exerciseFreq} onChange={(e) => setExerciseFreq(e.target.value as ExerciseFreq)} className="input">
+                <option value="" disabled>
+                  Selecione…
+                </option>
                 {(Object.keys(EXERCISE_FREQ_LABEL) as ExerciseFreq[]).map((f) => (
                   <option key={f} value={f}>
                     {EXERCISE_FREQ_LABEL[f]}
@@ -320,6 +343,9 @@ export default function PrevisaoIaPage() {
             </Field>
             <Field label="Como é seu dia fora do treino?">
               <select value={dailyRoutine} onChange={(e) => setDailyRoutine(e.target.value as DailyRoutine)} className="input">
+                <option value="" disabled>
+                  Selecione…
+                </option>
                 {(Object.keys(DAILY_ROUTINE_LABEL) as DailyRoutine[]).map((r) => (
                   <option key={r} value={r}>
                     {DAILY_ROUTINE_LABEL[r]}
@@ -328,9 +354,39 @@ export default function PrevisaoIaPage() {
               </select>
             </Field>
           </div>
-          <p className="text-xs text-muted mt-2">
-            Nível de atividade calculado: <span className="text-accent font-medium">{ACTIVITY_LABEL[activityLevel]}</span>
-          </p>
+          {activityLevel && (
+            <p className="text-xs text-muted mt-2">
+              Nível de atividade calculado: <span className="text-accent font-medium">{ACTIVITY_LABEL[activityLevel]}</span>
+            </p>
+          )}
+
+          {isFirstCycle && (
+            <div className="grid gap-4 sm:grid-cols-2 mt-4">
+              <Field label="Quantas kcal você vem comendo, em média? (opcional)">
+                <input
+                  type="number"
+                  step="1"
+                  value={currentIntakeKcal}
+                  onChange={(e) => setCurrentIntakeKcal(e.target.value)}
+                  className="input"
+                  placeholder="ex: 2800"
+                />
+              </Field>
+              <Field label="Nas últimas semanas, comendo isso, seu peso está:">
+                <select value={weightTrend} onChange={(e) => setWeightTrend(e.target.value as typeof weightTrend)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="subindo">Subindo</option>
+                  <option value="descendo">Descendo</option>
+                  <option value="estavel">Estável</option>
+                  <option value="nao_sei">Não sei / não acompanhei</option>
+                </select>
+              </Field>
+              <p className="text-xs text-muted sm:col-span-2">
+                Com isso o TDEE calculado fica um meio-termo entre a fórmula e sua resposta real — não obrigatório,
+                mas deixa a primeira estimativa mais precisa.
+              </p>
+            </div>
+          )}
         </div>
 
         <div>
@@ -366,7 +422,7 @@ export default function PrevisaoIaPage() {
           </div>
         </div>
 
-        {!isFirstCycle && (
+        {!isFirstCycle && last && (
           <div>
             <span className="block text-xs text-muted mb-2">3. Parâmetros da previsão</span>
             <Field label="Semanas até a próxima consulta">
@@ -375,6 +431,34 @@ export default function PrevisaoIaPage() {
             <p className="text-xs text-muted mt-2">
               Composição do ganho (músculo/misto/gordura) é decidida pela IA comparando com sua foto anterior — não
               precisa escolher.
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-2 mt-4">
+              <Field label={`Você seguiu de perto as ${fmt(last.kcal, 0)}kcal prescritas no último ciclo?`}>
+                <select value={adherence} onChange={(e) => setAdherence(e.target.value as typeof adherence)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="seguiu">Sim, de perto</option>
+                  <option value="comeu_mais">Não, comi mais</option>
+                  <option value="comeu_menos">Não, comi menos</option>
+                  <option value="nao_acompanhou">Não acompanhei direito</option>
+                </select>
+              </Field>
+              {(adherence === "comeu_mais" || adherence === "comeu_menos") && (
+                <Field label="Quantas kcal você estima que comeu, em média?">
+                  <input
+                    type="number"
+                    step="1"
+                    value={actualKcal}
+                    onChange={(e) => setActualKcal(e.target.value)}
+                    className="input"
+                    placeholder="ex: 2600"
+                  />
+                </Field>
+              )}
+            </div>
+            <p className="text-xs text-muted mt-2">
+              Isso corrige o cálculo de TDEE pra usar o que você realmente comeu, não o que foi prescrito — importa
+              porque o algoritmo retrocalcula seu gasto real a partir disso.
             </p>
           </div>
         )}

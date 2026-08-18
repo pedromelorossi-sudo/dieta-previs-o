@@ -97,6 +97,11 @@ create table if not exists public.cycles (
   created_at timestamptz not null default now()
 );
 
+-- ingestão real relatada nesse ciclo, quando diferente da prescrita (kcal) — null significa que a
+-- prescrição foi seguida de perto; usado pra não calcular TDEE a partir de calorias que a pessoa não
+-- comeu de verdade
+alter table public.cycles add column if not exists actual_kcal numeric;
+
 alter table public.cycles enable row level security;
 
 drop policy if exists "cycles: all own" on public.cycles;

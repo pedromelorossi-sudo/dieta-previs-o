@@ -11,6 +11,7 @@ interface CycleRow {
   fat_g: number;
   carb_g: number;
   is_prediction: boolean;
+  actual_kcal: number | null;
 }
 
 function rowToCycle(row: CycleRow): Cycle {
@@ -24,6 +25,7 @@ function rowToCycle(row: CycleRow): Cycle {
     fatG: Number(row.fat_g),
     carbG: Number(row.carb_g),
     isPrediction: row.is_prediction,
+    actualKcal: row.actual_kcal != null ? Number(row.actual_kcal) : null,
   };
 }
 
@@ -52,6 +54,7 @@ export async function addCycle(cycle: Cycle): Promise<void> {
     fat_g: cycle.fatG,
     carb_g: cycle.carbG,
     is_prediction: cycle.isPrediction ?? false,
+    actual_kcal: cycle.actualKcal ?? null,
   });
   if (error) throw error;
 }
@@ -59,5 +62,14 @@ export async function addCycle(cycle: Cycle): Promise<void> {
 export async function deleteCycle(id: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("cycles").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Registra quanto foi realmente comido num ciclo já existente, quando difere do prescrito —
+ * usado quando o usuário informa adesão imperfeita ao ciclo anterior, pra não calcular TDEE a
+ * partir de calorias que ele não comeu de verdade. */
+export async function updateCycleActualKcal(id: string, actualKcal: number): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("cycles").update({ actual_kcal: actualKcal }).eq("id", id);
   if (error) throw error;
 }

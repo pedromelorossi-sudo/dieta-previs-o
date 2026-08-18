@@ -22,6 +22,9 @@ interface PhotoInput {
   mediaType: string;
 }
 
+type WeightTrend = "subindo" | "descendo" | "estavel" | "nao_sei";
+type Adherence = "seguiu" | "comeu_mais" | "comeu_menos" | "nao_acompanhou";
+
 interface RequestBody {
   photos: PhotoInput[];
   sex: "masculino" | "feminino";
@@ -31,9 +34,14 @@ interface RequestBody {
   currentWeightKg: number;
   date: string;
   weeksToNextConsult: number;
+  currentIntakeKcal?: number;
+  weightTrend?: WeightTrend;
+  lastCycleAdherence?: Adherence;
+  lastCycleActualKcal?: number;
 }
 
 interface CycleRow {
+  id: string;
   date: string;
   weight_kg: number;
   body_fat_percent: number | null;
@@ -42,6 +50,7 @@ interface CycleRow {
   fat_g: number;
   carb_g: number;
   is_prediction: boolean;
+  actual_kcal: number | null;
 }
 
 interface PreferencesRow {
@@ -53,9 +62,9 @@ interface PreferencesRow {
   notes: string;
 }
 
-function rowToCycle(row: CycleRow, id: string): Cycle {
+function rowToCycle(row: CycleRow): Cycle {
   return {
-    id,
+    id: row.id,
     date: row.date,
     weightKg: Number(row.weight_kg),
     bodyFatPercent: row.body_fat_percent != null ? Number(row.body_fat_percent) : null,
@@ -64,6 +73,7 @@ function rowToCycle(row: CycleRow, id: string): Cycle {
     fatG: Number(row.fat_g),
     carbG: Number(row.carb_g),
     isPrediction: row.is_prediction,
+    actualKcal: row.actual_kcal != null ? Number(row.actual_kcal) : null,
   };
 }
 
@@ -153,7 +163,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });
   }
 
-  const { photos, sex, heightCm, age, activityLevel, currentWeightKg, date, weeksToNextConsult } = body;
+  const {
+    photos,
+    sex,
+    heightCm,
+    age,
+    activityLevel,
+    currentWeightKg,
+    date,
+    weeksToNextConsult,
+    currentIntakeKcal,
+    weightTrend,
+    lastCycleAdherence,
+    lastCycleActualKcal,
+  } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
     return NextResponse.json({ error: "Envie pelo menos a foto de frente." }, { status: 400 });
@@ -165,7 +188,7 @@ export async function POST(request: Request) {
   const [{ data: cycleRows, error: cyclesError }, { data: prefsRow }, previousPhoto] = await Promise.all([
     supabase
       .from("cycles")
-      .select("date,weight_kg,body_fat_percent,kcal,protein_g,fat_g,carb_g,is_prediction")
+      .select("id,date,weight_kg,body_fat_percent,kcal,protein_g,fat_g,carb_g,is_prediction,actual_kcal")
       .eq("user_id", user.id)
       .order("date", { ascending: true }),
     supabase
@@ -259,13 +282,30 @@ export async function POST(request: Request) {
       activityLevel,
     });
 
+    // meio-termo entre a fórmula (Mifflin/Katch, erro documentado de ±10-15%, maior ainda em quem
+    // tem NEAT baixo) e a prática real relatada — quando o usuário informa quanto vem comendo e como
+    // o peso responde a isso, isso vale tanto quanto a fórmula, não só um comentário à parte
+    let empiricalTdee: number | null = null;
+    if (currentIntakeKcal && currentIntakeKcal > 0) {
+      if (weightTrend === "estavel") {
+        empiricalTdee = currentIntakeKcal; // método da estabilidade: manutenção = a própria ingestão
+      } else if (weightTrend === "subindo") {
+        empiricalTdee = currentIntakeKcal * 0.9; // comendo acima da manutenção
+      } else if (weightTrend === "descendo") {
+        empiricalTdee = currentIntakeKcal * 1.1; // comendo abaixo da manutenção
+      }
+    }
+    const blendedTdee = empiricalTdee != null ? (comp.tdee + empiricalTdee) / 2 : comp.tdee;
+    const blendedTargetKcal = blendedTdee * (1 + comp.surplusPercent);
+    const blendedTargetCarbG = Math.max(0, (blendedTargetKcal - comp.targetProteinG * 4 - comp.targetFatG * 9) / 4);
+
     let meals, dietWarnings;
     try {
       ({ meals, warnings: dietWarnings } = await generateDietMeals(client, {
-        targetKcal: comp.targetKcal,
+        targetKcal: blendedTargetKcal,
         targetProteinG: comp.targetProteinG,
         targetFatG: comp.targetFatG,
-        targetCarbG: comp.targetCarbG,
+        targetCarbG: blendedTargetCarbG,
         ...dietParamsBase,
       }));
     } catch (err) {
@@ -274,10 +314,11 @@ export async function POST(request: Request) {
 
     const point = (v: number) => ({ min: v, max: v });
 
-    // sem histórico observado ainda — projeta a partir do superávit/déficit teórico vs. TDEE,
-    // usando 7700kcal/kg como proxy de gordura (cutting) e uma mistura mais barata em superávit (bulking)
+    // sem histórico de CICLOS ainda — projeta a partir do superávit/déficit teórico vs. TDEE (já
+    // ajustado pelo meio-termo acima), usando 7700kcal/kg como proxy de gordura (cutting) e uma
+    // mistura mais barata em superávit (bulking)
     const oneMonthE = comp.path === "cutting" ? 7700 : comp.path === "bulking" ? 5250 : 7700;
-    const oneMonthRateKgWeek = (comp.tdee * comp.surplusPercent * 7) / oneMonthE;
+    const oneMonthRateKgWeek = (blendedTdee * comp.surplusPercent * 7) / oneMonthE;
     const oneMonthMid = currentWeightKg + oneMonthRateKgWeek * 4;
     const oneMonthDelta = Math.abs(oneMonthRateKgWeek * 4) * 0.25;
     const oneMonthProjection = {
@@ -287,6 +328,11 @@ export async function POST(request: Request) {
           ? "Meta é manutenção — peso deve ficar estável em 4 semanas, sem histórico ainda pra confirmar."
           : `Estimativa teórica (sem histórico ainda): mantendo esse padrão, projeção de peso em 4 semanas é ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg. Vai ficar mais precisa a partir do 2º ciclo, com dados reais.`,
     };
+
+    const tdeeNote =
+      empiricalTdee != null
+        ? `TDEE calculado como meio-termo entre a fórmula (${comp.tdee.toFixed(0)}kcal) e sua prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
+        : `TDEE calculado só pela fórmula (${comp.tdee.toFixed(0)}kcal) — informe quanto você vem comendo e como o peso responde pra deixar essa conta mais realista.`;
 
     return NextResponse.json({
       isFirstCycle: true,
@@ -301,16 +347,16 @@ export async function POST(request: Request) {
       gainComposition: null,
       gainCompositionLabel: null,
       gainCompositionReasoning: null,
-      recommendedKcal: comp.targetKcal,
+      recommendedKcal: blendedTargetKcal,
       recommendedProteinG: comp.targetProteinG,
       recommendedFatG: comp.targetFatG,
-      recommendedCarbG: comp.targetCarbG,
-      note: comp.pathReason,
+      recommendedCarbG: blendedTargetCarbG,
+      note: `${comp.pathReason} ${tdeeNote}`,
       ranges: {
-        kcal: point(comp.targetKcal),
+        kcal: point(blendedTargetKcal),
         protein: point(comp.targetProteinG),
         fat: point(comp.targetFatG),
-        carb: point(comp.targetCarbG),
+        carb: point(blendedTargetCarbG),
         weight: point(currentWeightKg),
       },
       rateKgWeek: 0,
@@ -320,12 +366,22 @@ export async function POST(request: Request) {
   }
 
   // ---- ciclos seguintes ----
-  const history = cycleRows.map((row, i) => rowToCycle(row as CycleRow, String(i)));
+  const history = cycleRows.map((row) => rowToCycle(row as CycleRow));
+
+  // se o usuário não seguiu de perto a prescrição do último ciclo, a ingestão real relatada substitui
+  // a prescrita pro cálculo de TDEE — senão o retrocálculo assume uma adesão que pode não ter existido
+  const lastCycle = history[history.length - 1];
+  if (lastCycle && lastCycleAdherence && lastCycleAdherence !== "seguiu" && lastCycleAdherence !== "nao_acompanhou" && lastCycleActualKcal) {
+    lastCycle.actualKcal = lastCycleActualKcal;
+    await supabase.from("cycles").update({ actual_kcal: lastCycleActualKcal }).eq("id", lastCycle.id);
+  }
 
   const historyText = history
     .map(
       (c) =>
-        `- ${c.date}: ${c.weightKg}kg, %BF ${c.bodyFatPercent ?? "?"}, ${c.kcal}kcal, P ${c.proteinG}g, G ${c.fatG}g, C ${c.carbG}g${c.isPrediction ? " (previsão)" : ""}`
+        `- ${c.date}: ${c.weightKg}kg, %BF ${c.bodyFatPercent ?? "?"}, ${c.kcal}kcal prescrito${
+          c.actualKcal != null ? ` (relatado como realmente comido: ${c.actualKcal}kcal)` : ""
+        }, P ${c.proteinG}g, G ${c.fatG}g, C ${c.carbG}g${c.isPrediction ? " (previsão)" : ""}`
     )
     .join("\n");
 

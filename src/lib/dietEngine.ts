@@ -34,6 +34,66 @@ export function surplusPercent(kcal: number, tdee: number): number {
   return kcal / tdee - 1;
 }
 
+/** Passo 2, versão agregada — em vez de retrocalcular o TDEE só do último par de ciclos, usa TODOS
+ * os pares consecutivos do histórico (mais o par final até a pesagem de hoje), com peso maior pros
+ * mais recentes (TDEE sobe com massa magra ganha, então dado antigo deve pesar menos, não igual).
+ * Usa a ingestão REAL relatada (actualKcal) quando difere da prescrita — senão o retrocálculo assume
+ * adesão perfeita que pode não ter existido. Pares com menos de 5 dias são ignorados (ruído demais
+ * pra taxa semanal fazer sentido). */
+export function estimateEmpiricalTdeeSeries(
+  historyInput: Cycle[],
+  currentWeightKg: number,
+  currentDate: string,
+  gainComposition: GainComposition
+): PredictionRange & { pairsUsed: number } {
+  const history = sortByDate(historyInput);
+  const scenario = E_SCENARIOS.find((s) => s.key === gainComposition)!;
+
+  const points: { date: string; weightKg: number; intakeKcal: number }[] = history.map((c) => ({
+    date: c.date,
+    weightKg: c.weightKg,
+    intakeKcal: c.actualKcal ?? c.kcal,
+  }));
+  const lastHistoryCycle = history[history.length - 1];
+  if (lastHistoryCycle) {
+    points.push({
+      date: currentDate,
+      weightKg: currentWeightKg,
+      intakeKcal: lastHistoryCycle.actualKcal ?? lastHistoryCycle.kcal,
+    });
+  }
+
+  let weightedMinSum = 0;
+  let weightedMaxSum = 0;
+  let weightSum = 0;
+  let pairsUsed = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const days = daysBetween(prev.date, curr.date);
+    if (days < 5) continue;
+
+    const rate = (curr.weightKg - prev.weightKg) / (days / 7);
+    const tdeeAtMinE = tdeeFromRate(prev.intakeKcal, rate, scenario.min);
+    const tdeeAtMaxE = tdeeFromRate(prev.intakeKcal, rate, scenario.max);
+
+    const weight = i; // mais recente = índice maior = mais peso
+    weightedMinSum += Math.min(tdeeAtMinE, tdeeAtMaxE) * weight;
+    weightedMaxSum += Math.max(tdeeAtMinE, tdeeAtMaxE) * weight;
+    weightSum += weight;
+    pairsUsed += 1;
+  }
+
+  if (weightSum === 0) {
+    // sem pares utilizáveis (ex: só 1 ciclo e o novo peso é no mesmo dia) — cai pro cálculo do último ciclo isolado
+    const fallbackIntake = lastHistoryCycle ? lastHistoryCycle.actualKcal ?? lastHistoryCycle.kcal : 0;
+    return { min: fallbackIntake, max: fallbackIntake, pairsUsed: 0 };
+  }
+
+  return { min: weightedMinSum / weightSum, max: weightedMaxSum / weightSum, pairsUsed };
+}
+
 export interface ExtractedRules {
   fatPerKg: number;
   proteinPerKg: number;
@@ -127,11 +187,9 @@ export function predictNextCycle(input: PredictionInput): PredictionResult | nul
     tdeeMax = currentIntake;
     usedStabilityMode = true;
   } else {
-    const scenario = E_SCENARIOS.find((s) => s.key === input.gainComposition)!;
-    const tdeeAtMinE = tdeeFromRate(last.kcal, rate, scenario.min);
-    const tdeeAtMaxE = tdeeFromRate(last.kcal, rate, scenario.max);
-    tdeeMin = Math.min(tdeeAtMinE, tdeeAtMaxE);
-    tdeeMax = Math.max(tdeeAtMinE, tdeeAtMaxE);
+    const empirical = estimateEmpiricalTdeeSeries(history, input.currentWeightKg, input.currentDate, input.gainComposition);
+    tdeeMin = empirical.min;
+    tdeeMax = empirical.max;
   }
 
   const surplusMin = surplusPercent(currentIntake, tdeeMax);
