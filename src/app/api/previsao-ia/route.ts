@@ -459,13 +459,18 @@ ${evolutionInstruction}`;
     return NextResponse.json({ error: err instanceof Error ? err.message : "Erro ao montar a dieta." }, { status: 502 });
   }
 
-  // projeção fixa de 4 semanas, à parte do horizonte escolhido pra próxima consulta — usa a taxa
-  // observada de verdade (rateKgWeek), não uma suposição teórica, já que há histórico real aqui
-  const oneMonthMid = currentWeightKg + result.rateKgWeek * 4;
-  const oneMonthDelta = Math.abs(result.rateKgWeek * 4) * 0.15;
+  // projeção fixa de 4 semanas a partir do kcal REALMENTE recomendado (já ajustado pela estratégia),
+  // não da taxa histórica bruta — senão a projeção contradiz a estratégia decidida (ex: mostrar ganho
+  // de peso com a etiqueta "cutting" só porque o histórico vinha subindo antes do ajuste)
+  const tdeeMid = (result.tdeeRange.min + result.tdeeRange.max) / 2;
+  const projectedSurplusPercent = tdeeMid > 0 ? recommendedKcal / tdeeMid - 1 : 0;
+  const oneMonthE = strategy === "cutting" ? 7700 : strategy === "bulking" ? 5250 : 7700;
+  const projectedRateKgWeek = (tdeeMid * projectedSurplusPercent * 7) / oneMonthE;
+  const oneMonthMid = currentWeightKg + projectedRateKgWeek * 4;
+  const oneMonthDelta = Math.abs(projectedRateKgWeek * 4) * 0.2;
   const oneMonthProjection = {
     weightRange: { min: oneMonthMid - oneMonthDelta, max: oneMonthMid + oneMonthDelta },
-    note: `Mantendo o padrão observado (${result.rateKgWeek >= 0 ? "+" : ""}${result.rateKgWeek.toFixed(2)} kg/semana), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
+    note: `Com o kcal recomendado (${recommendedKcal.toFixed(0)}kcal, ${PATH_LABEL[strategy]}) frente à manutenção estimada (~${tdeeMid.toFixed(0)}kcal), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
   };
 
   return NextResponse.json({
