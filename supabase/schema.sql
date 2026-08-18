@@ -282,6 +282,65 @@ create policy "progress_photos: delete own" on public.progress_photos
 
 create index if not exists progress_photos_user_date_idx on public.progress_photos (user_id, date);
 
+-- ============ TRAINING PROGRAMS ============
+-- sessions é jsonb (array de {label, items: [{exerciseId, blocks: [{reserveType, sets, repRange, loadKg}]}]}) —
+-- mesmo espírito de diets.meals ser jsonb em vez de tabelas normalizadas, consistente com o resto do app
+create table if not exists public.training_programs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  sessions jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.training_programs enable row level security;
+
+drop policy if exists "training_programs: select own or admin" on public.training_programs;
+create policy "training_programs: select own or admin" on public.training_programs
+  for select using (auth.uid() = user_id or public.is_admin());
+drop policy if exists "training_programs: insert own" on public.training_programs;
+create policy "training_programs: insert own" on public.training_programs
+  for insert with check (auth.uid() = user_id);
+drop policy if exists "training_programs: update own or admin" on public.training_programs;
+create policy "training_programs: update own or admin" on public.training_programs
+  for update using (auth.uid() = user_id or public.is_admin()) with check (auth.uid() = user_id or public.is_admin());
+drop policy if exists "training_programs: delete own or admin" on public.training_programs;
+create policy "training_programs: delete own or admin" on public.training_programs
+  for delete using (auth.uid() = user_id or public.is_admin());
+
+-- ============ TRAINING LOGS ============
+-- registro de sessões efetivamente realizadas — sets_logged é jsonb no formato LoggedSet[] de
+-- trainingVolume.ts (+ carga real por bloco); injury_note marca quando um grupo foi reduzido por lesão
+-- nesse log específico, alimentando adjustLandmarkForInjury
+create table if not exists public.training_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  program_id uuid references public.training_programs(id) on delete set null,
+  date date not null,
+  session_label text not null,
+  sets_logged jsonb not null default '[]'::jsonb,
+  injury_note text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.training_logs enable row level security;
+
+drop policy if exists "training_logs: select own or admin" on public.training_logs;
+create policy "training_logs: select own or admin" on public.training_logs
+  for select using (auth.uid() = user_id or public.is_admin());
+drop policy if exists "training_logs: insert own" on public.training_logs;
+create policy "training_logs: insert own" on public.training_logs
+  for insert with check (auth.uid() = user_id);
+drop policy if exists "training_logs: update own" on public.training_logs;
+create policy "training_logs: update own" on public.training_logs
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "training_logs: delete own" on public.training_logs;
+create policy "training_logs: delete own" on public.training_logs
+  for delete using (auth.uid() = user_id);
+
+create index if not exists training_logs_user_date_idx on public.training_logs (user_id, date);
+
 -- ============ STORAGE (bucket de fotos) ============
 insert into storage.buckets (id, name, public)
 values ('progress-photos', 'progress-photos', false)

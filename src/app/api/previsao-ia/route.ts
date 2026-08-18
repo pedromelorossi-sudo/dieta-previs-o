@@ -5,6 +5,8 @@ import { predictNextCycle, E_SCENARIOS } from "@/lib/dietEngine";
 import { estimateBodyComposition, classifyPathFromBf, scoreRecoverySignals, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { planMonths } from "@/lib/periodization";
+import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
+import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, VolumeStatus } from "@/lib/trainingVolume";
 import { Cycle, GainComposition } from "@/lib/types";
 import {
   ActivityLevel,
@@ -137,6 +139,24 @@ MULHERES — essencial ~10-13%: mesma lógica de progressão, mas leia a partir 
 5) PISO FISIOLÓGICO: não estime abaixo de ~4% (homem) ou ~10% (mulher) a menos que a foto mostre condição de palco inequívoca (striations generalizadas, veias em glúteo/lombar). A maioria dos usuários recreativos, mesmo "sarados", está entre 8-18% (homem) ou 18-26% (mulher).
 
 6) DIVERGÊNCIA ENTRE ÂNGULOS: se um ângulo sugere uma faixa e outro sugere outra (comum quando pose/luz mascaram gordura de um lado), priorize o ângulo lateral (mais confiável pra profundidade abdominal e curvatura lombar) e explique a divergência em bfReasoning.`;
+
+// AVISO IMPORTANTE: ao contrário do protocolo de %BF acima (que se apoia em Majmudar et al. 2022, um
+// estudo de validação real), NÃO existe literatura revisada por pares validando "ler desenvolvimento
+// muscular por grupo a partir de foto 2D" — isso é critério de julgamento de fisiculturismo (padrão
+// IFBB/NPC), não ciência publicada. Trate esta leitura com o mesmo tom de "estimativa com incerteza, não
+// medição clínica" — nunca apresente como mais certa do que é, e use confidence "baixa" sempre que o
+// ângulo disponível não mostrar bem o grupo.
+const VISUAL_MUSCLE_PROTOCOL = `PROTOCOLO DE LEITURA VISUAL POR GRUPO MUSCULAR (julgamento visual, sem validação científica direta — trate como estimativa, não medição):
+
+1) SÓ AVALIE O QUE O ÂNGULO REALMENTE MOSTRA. Frente mostra bem peito/ombro/bíceps/abdômen/quadríceps; costas mostra bem costas/trapézio/posterior de ombro/glúteo/posterior de coxa; laterais mostram bem deltoide lateral/tríceps/oblíquos/panturrilha. Se um grupo não aparece claramente em nenhum ângulo enviado (ex: só frente, sem panturrilha visível), não invente uma leitura — omita esse grupo do array ou marque confidence "baixa" com developmentNote dizendo que o ângulo não mostra o suficiente.
+
+2) DESENVOLVIMENTO RELATIVO, NÃO ABSOLUTO. O que importa aqui é o equilíbrio ENTRE os grupos da mesma pessoa (esse grupo está proporcional aos outros, atrás, ou é um destaque?), não comparar com um padrão externo de fisiculturista. Sinais objetivos de grupo "atrás" dos outros: menos separação/volume aparente comparado a grupos vizinhos de tamanho similar, assimetria visível entre lado esquerdo/direito, contorno menos preenchido mesmo contraído.
+
+3) NÃO CONFUNDA %BF BAIXO COM DESENVOLVIMENTO ALTO. Um grupo pode aparecer "definido" só por estar com pouca gordura em cima (efeito do %BF geral da pessoa), não porque tem mais massa. Julgue volume/plenitude do músculo, não só a presença de separação/vascularização — essa distinção já é usada no protocolo de %BF acima pra não confundir leanness com muscularidade.
+
+4) SIMETRIA: compare o mesmo grupo dos dois lados quando o ângulo permite (frente e costas mostram isso bem; lateral não, já que só um lado aparece). Assimetria pequena é normal (dominância de lado); registre em symmetryNote só quando for visualmente perceptível, não force uma diferença que não dá pra ver direito na foto.
+
+5) CONFIANÇA: "alta" só quando o grupo aparece claramente em pelo menos um ângulo, sem sobra de roupa/sombra/pose cobrindo; "media" quando dá pra estimar mas com ressalvas (ângulo parcial, iluminação ruim); "baixa" quando é mais palpite que leitura — nesses casos ainda registre developmentNote explicando a limitação, não pule o campo.`;
 
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, Math.min(min, max)), Math.max(min, max));
 
@@ -498,11 +518,13 @@ Além do %BF, decida a composição do ganho/perda desde o último ciclo — ist
 - "gordura": ganho majoritariamente gordura (perda de definição, sem separação muscular nova)
 Isso decide o E (energia por kg) usado no cálculo de TDEE do algoritmo — não é cosmético, afeta o número final.`;
 
-  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para (1) estimar %BF visualmente, cruzando os ângulos disponíveis, (2) comentar a evolução muscular percebida desde a foto anterior, se houver, e (3) decidir a composição do ganho/perda recente (músculo/misto/gordura) a partir da comparação visual com a foto anterior. Você NÃO calcula kcal, proteína, gordura ou carboidrato — isso é feito por um algoritmo determinístico a partir do que você decidir aqui. Responda só pela ferramenta fornecida, em português, direto e específico.
+  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para (1) estimar %BF visualmente, cruzando os ângulos disponíveis, (2) comentar a evolução muscular percebida desde a foto anterior, se houver, (3) decidir a composição do ganho/perda recente (músculo/misto/gordura) a partir da comparação visual com a foto anterior, e (4) avaliar o desenvolvimento e simetria por grupo muscular nos ângulos disponíveis. Você NÃO calcula kcal, proteína, gordura ou carboidrato — isso é feito por um algoritmo determinístico a partir do que você decidir aqui. Responda só pela ferramenta fornecida, em português, direto e específico.
 
 ${VISUAL_BF_PROTOCOL}
 
-Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do item 4 do protocolo: um ganho "musculo" puro e rápido é raro mesmo em treino natural bem executado — se a foto atual parece muito mais seca E muito mais volumosa que a anterior ao mesmo tempo, desconfie de inchaço/retenção/luz antes de cravar "musculo".`;
+Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do item 4 do protocolo: um ganho "musculo" puro e rápido é raro mesmo em treino natural bem executado — se a foto atual parece muito mais seca E muito mais volumosa que a anterior ao mesmo tempo, desconfie de inchaço/retenção/luz antes de cravar "musculo".
+
+${VISUAL_MUSCLE_PROTOCOL}`;
 
   let visionResponse;
   try {
@@ -524,8 +546,36 @@ Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do
               evolutionNote: { type: "string" },
               gainComposition: { type: "string", enum: ["musculo", "misto", "gordura"] },
               gainCompositionReasoning: { type: "string", description: "1-2 frases explicando a escolha, com base na comparação visual." },
+              muscleGroupAssessment: {
+                type: "array",
+                description:
+                  "Um item por grupo muscular visível nos ângulos enviados — não force os 12 grupos se a foto não mostra bem algum deles (ver protocolo).",
+                items: {
+                  type: "object",
+                  properties: {
+                    muscle: { type: "string", enum: Object.keys(MUSCLE_GROUP_LABEL) },
+                    relativeDevelopment: {
+                      type: "string",
+                      enum: ["atras_dos_outros", "proporcional", "destaque"],
+                      description: "Comparado aos outros grupos da MESMA pessoa, não a um padrão externo.",
+                    },
+                    developmentNote: { type: "string", description: "1 frase justificando a leitura, ou a limitação do ângulo se confidence for baixa." },
+                    symmetryNote: { type: "string", description: "Assimetria entre os dois lados, quando o ângulo permite ver; string vazia se não avaliável." },
+                    confidence: { type: "string", enum: ["baixa", "media", "alta"] },
+                  },
+                  required: ["muscle", "relativeDevelopment", "developmentNote", "symmetryNote", "confidence"],
+                },
+              },
             },
-            required: ["bfPercentVisual", "bfConfidence", "bfReasoning", "evolutionNote", "gainComposition", "gainCompositionReasoning"],
+            required: [
+              "bfPercentVisual",
+              "bfConfidence",
+              "bfReasoning",
+              "evolutionNote",
+              "gainComposition",
+              "gainCompositionReasoning",
+              "muscleGroupAssessment",
+            ],
           },
         },
       ],
@@ -553,7 +603,111 @@ Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do
     evolutionNote: string;
     gainComposition: GainComposition;
     gainCompositionReasoning: string;
+    muscleGroupAssessment?: {
+      muscle: MuscleGroup;
+      relativeDevelopment: "atras_dos_outros" | "proporcional" | "destaque";
+      developmentNote: string;
+      symmetryNote: string;
+      confidence: "baixa" | "media" | "alta";
+    }[];
   };
+
+  // cruza a leitura visual por grupo com o volume de treino realmente logado (melhor esforço — sem
+  // tabela de treino migrada ainda, ou sem log recente, isso fica vazio e não quebra a previsão de dieta,
+  // que é o fluxo principal). Grupo com volume adequado mas leitura visual "atrás dos outros" é sinal de
+  // resposta individual mais lenta nesse grupo (considerar subir o MAV específico dele), a menos que o
+  // grupo tenha nota de lesão recente — aí é fase de reentrada, não estagnação real.
+  let muscleCrossCheck: {
+    muscle: MuscleGroup;
+    muscleLabel: string;
+    relativeDevelopment: string;
+    weeklySets: number | null;
+    volumeStatus: VolumeStatus | null;
+    flag: "resposta_lenta" | "reentrada_lesao" | "sem_dado_volume";
+    note: string;
+  }[] = [];
+
+  if (vision.muscleGroupAssessment && vision.muscleGroupAssessment.length > 0) {
+    try {
+      const since = new Date();
+      since.setDate(since.getDate() - 56); // ~8 semanas
+      const { data: trainingLogRows } = await supabase
+        .from("training_logs")
+        .select("date,sets_logged,injury_note")
+        .eq("user_id", user.id)
+        .gte("date", since.toISOString().slice(0, 10));
+
+      if (trainingLogRows && trainingLogRows.length > 0) {
+        const allSets = trainingLogRows.flatMap((r) => (r.sets_logged as LoggedSet[]) ?? []);
+        const volume = weeklyVolumeByMuscle(allSets, (id) => exerciseById(id)?.primaryMuscle);
+        const readings = readVolumeStatus(volume);
+        const readingByMuscle = new Map(readings.map((r) => [r.muscle, r]));
+
+        // heurística simples de texto — injury_note é campo livre, não estruturado por grupo; procura o
+        // nome do grupo (em português) mencionado em alguma nota das últimas 4 semanas
+        const recentInjuryNotes = trainingLogRows
+          .filter((r) => {
+            const days = (Date.now() - new Date(r.date).getTime()) / (1000 * 60 * 60 * 24);
+            return days <= 28 && r.injury_note;
+          })
+          .map((r) => (r.injury_note as string).toLowerCase());
+
+        muscleCrossCheck = vision.muscleGroupAssessment
+          .filter((a) => a.confidence !== "baixa" && a.relativeDevelopment === "atras_dos_outros")
+          .map((a) => {
+            const reading = readingByMuscle.get(a.muscle);
+            const muscleLabel = MUSCLE_GROUP_LABEL[a.muscle];
+            const recentInjury = recentInjuryNotes.some((n) => n.includes(muscleLabel.toLowerCase()));
+
+            if (recentInjury) {
+              return {
+                muscle: a.muscle,
+                muscleLabel,
+                relativeDevelopment: a.relativeDevelopment,
+                weeklySets: reading?.effectiveSets ?? null,
+                volumeStatus: reading?.status ?? null,
+                flag: "reentrada_lesao" as const,
+                note: `${muscleLabel} teve nota de lesão/dor recente — a leitura visual mais atrás dos outros grupos provavelmente é fase de reentrada, não sinal de precisar mais volume.`,
+              };
+            }
+            if (!reading) {
+              return {
+                muscle: a.muscle,
+                muscleLabel,
+                relativeDevelopment: a.relativeDevelopment,
+                weeklySets: null,
+                volumeStatus: null,
+                flag: "sem_dado_volume" as const,
+                note: `${muscleLabel} apareceu atrás dos outros na leitura visual, mas não há log de treino desse grupo nas últimas 8 semanas pra cruzar — sem dado suficiente pra saber se é volume baixo ou resposta individual mais lenta.`,
+              };
+            }
+            if (reading.status !== "abaixo_mev") {
+              return {
+                muscle: a.muscle,
+                muscleLabel,
+                relativeDevelopment: a.relativeDevelopment,
+                weeklySets: reading.effectiveSets,
+                volumeStatus: reading.status,
+                flag: "resposta_lenta" as const,
+                note: `${muscleLabel} está com volume adequado (${reading.effectiveSets} séries/semana) mas apareceu atrás dos outros grupos na leitura visual — sinal de resposta individual mais lenta nesse grupo, considerar subir o MAV específico dele em vez de manter o volume padrão.`,
+              };
+            }
+            return {
+              muscle: a.muscle,
+              muscleLabel,
+              relativeDevelopment: a.relativeDevelopment,
+              weeklySets: reading.effectiveSets,
+              volumeStatus: reading.status,
+              flag: "sem_dado_volume" as const,
+              note: `${muscleLabel} apareceu atrás dos outros e o volume logado (${reading.effectiveSets} séries/semana) já está abaixo do mínimo — o volume baixo já explica o atraso, não é preciso um ajuste especial além de subir o volume desse grupo.`,
+            };
+          });
+      }
+    } catch {
+      // tabela de treino ainda não migrada, ou qualquer outro erro nessa etapa opcional — não deixa a
+      // previsão de dieta (fluxo principal) quebrar por causa de uma leitura cruzada acessória
+    }
+  }
 
   const bfPercentVisual = clamp(vision.bfPercentVisual, 3, 60);
   const gainComposition: GainComposition = ["musculo", "misto", "gordura"].includes(vision.gainComposition)
@@ -678,6 +832,8 @@ Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do
     rateKgWeek: result.rateKgWeek,
     recoveryScore,
     monthlyPlan,
+    muscleGroupAssessment: vision.muscleGroupAssessment ?? [],
+    muscleCrossCheck,
     meals,
     dietWarnings,
   });
