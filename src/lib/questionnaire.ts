@@ -1,3 +1,5 @@
+import { MuscleGroup } from "./exerciseLibrary";
+
 export type DietGoal = "emagrecimento" | "hipertrofia" | "manutencao";
 export type ActivityLevel = "sedentario" | "leve" | "moderado" | "intenso";
 export type CookingTime = "pouco" | "medio" | "gosta";
@@ -16,6 +18,9 @@ export interface UserPreferences {
   dislikedFoodIds: string[];
   favoriteFoodIds: string[];
   notes: string;
+  /** grupos musculares em prioridade agora (ex: definido pela consultoria) — entram primeiro na sessão
+   * (mais fresco) e recebem meta de volume no MRV em vez do MAV padrão na divisão de treino sugerida */
+  priorityMuscles: MuscleGroup[];
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -30,6 +35,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   dislikedFoodIds: [],
   favoriteFoodIds: [],
   notes: "",
+  priorityMuscles: [],
 };
 
 export const GOAL_LABEL: Record<DietGoal, string> = {
@@ -148,6 +154,7 @@ interface PreferencesRow {
   disliked_food_ids: string[];
   favorite_food_ids: string[];
   notes: string;
+  priority_muscles: MuscleGroup[] | null;
 }
 
 function rowToPreferences(row: PreferencesRow): UserPreferences {
@@ -163,6 +170,7 @@ function rowToPreferences(row: PreferencesRow): UserPreferences {
     dislikedFoodIds: row.disliked_food_ids ?? [],
     favoriteFoodIds: row.favorite_food_ids ?? [],
     notes: row.notes ?? "",
+    priorityMuscles: row.priority_muscles ?? [],
   };
 }
 
@@ -198,6 +206,7 @@ export async function savePreferences(prefs: UserPreferences): Promise<void> {
     disliked_food_ids: prefs.dislikedFoodIds,
     favorite_food_ids: prefs.favoriteFoodIds,
     notes: prefs.notes,
+    priority_muscles: prefs.priorityMuscles,
     updated_at: new Date().toISOString(),
   });
   if (error) throw error;

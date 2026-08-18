@@ -91,6 +91,7 @@ interface PreferencesRow {
   disliked_food_ids: string[];
   favorite_food_ids: string[];
   notes: string;
+  priority_muscles: MuscleGroup[] | null;
 }
 
 function rowToCycle(row: CycleRow): Cycle {
@@ -289,7 +290,7 @@ export async function POST(request: Request) {
       .order("date", { ascending: true }),
     supabase
       .from("preferences")
-      .select("meals_per_day,cooking_time,restrictions,disliked_food_ids,favorite_food_ids,notes")
+      .select("meals_per_day,cooking_time,restrictions,disliked_food_ids,favorite_food_ids,notes,priority_muscles")
       .eq("user_id", user.id)
       .maybeSingle(),
     fetchPreviousPhoto(supabase, user.id),
@@ -710,15 +711,17 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     }
   }
 
-  // divisão de treino + periodização de volume automáticas, geradas a partir da leitura visual por
-  // grupo (muscleGroupAssessment) — não é um passo manual separado, sai direto da mesma análise de foto
+  // divisão de treino + periodização de volume automáticas — geradas a partir da leitura visual por
+  // grupo (muscleGroupAssessment) quando disponível, sempre considerando prioridades declaradas nas
+  // preferências (ex: "consultoria pediu foco em costas e braço"), que valem mais que a leitura da foto.
+  // Não depende da foto ter dado uma leitura de grupo — sem ela, cai no MAV padrão + prioridades.
   const DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
   const daysPerWeek = exerciseFreq ? DAYS_PER_WEEK_BY_FREQ[exerciseFreq] : 0;
   let suggestedTrainingProgram: ReturnType<typeof buildSplit> | null = null;
   let trainingPeriodizationPlan: ReturnType<typeof planTrainingPeriodization> | null = null;
   let muscleTargetsOut: ReturnType<typeof computeMuscleTargets> | null = null;
-  if (daysPerWeek > 0 && vision.muscleGroupAssessment && vision.muscleGroupAssessment.length > 0) {
-    muscleTargetsOut = computeMuscleTargets(vision.muscleGroupAssessment);
+  if (daysPerWeek > 0) {
+    muscleTargetsOut = computeMuscleTargets(vision.muscleGroupAssessment ?? [], prefs?.priority_muscles ?? []);
     suggestedTrainingProgram = buildSplit(daysPerWeek, muscleTargetsOut);
     trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, 10);
   }

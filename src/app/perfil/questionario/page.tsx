@@ -17,7 +17,10 @@ import {
   savePreferences,
 } from "@/lib/questionnaire";
 import { CATEGORY_LABEL, FOODS, FoodCategory } from "@/lib/foods";
+import { MuscleGroup, MUSCLE_GROUP_LABEL } from "@/lib/exerciseLibrary";
 import { IconCheck } from "@/components/icons";
+
+const MUSCLE_GROUPS: MuscleGroup[] = Object.keys(MUSCLE_GROUP_LABEL) as MuscleGroup[];
 
 const CATEGORIES: FoodCategory[] = ["proteina", "carboidrato", "gordura", "fruta", "vegetal"];
 
@@ -26,6 +29,7 @@ export default function QuestionarioPage() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -52,10 +56,22 @@ export default function QuestionarioPage() {
     update(list, current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
   }
 
+  function togglePriorityMuscle(m: MuscleGroup) {
+    update(
+      "priorityMuscles",
+      prefs.priorityMuscles.includes(m) ? prefs.priorityMuscles.filter((x) => x !== m) : [...prefs.priorityMuscles, m]
+    );
+  }
+
   async function handleSave() {
     if (!user) return;
-    await savePreferences(prefs);
-    setSaved(true);
+    setSaveError(null);
+    try {
+      await savePreferences(prefs);
+      setSaved(true);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Erro ao salvar preferências.");
+    }
   }
 
   if (!loaded) {
@@ -166,6 +182,36 @@ export default function QuestionarioPage() {
           />
         </Field>
       </div>
+
+      <div className="card p-6 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold mb-1">Prioridade de treino</h2>
+          <p className="text-xs text-muted">
+            Grupos musculares em foco agora (ex: definido pela sua consultoria). Entram primeiro na sessão, ganham
+            meta de volume no teto recuperável (MRV) em vez do padrão, e frequência semanal extra quando possível —
+            vale mais que a leitura visual das fotos, porque é orientação de um coach de verdade.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {MUSCLE_GROUPS.map((m) => {
+            const active = prefs.priorityMuscles.includes(m);
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => togglePriorityMuscle(m)}
+                className={`badge border px-3 py-1.5 text-xs transition-colors ${
+                  active ? "bg-accent/15 text-accent border-accent/30" : "bg-surface-raised text-muted border-border"
+                }`}
+              >
+                {MUSCLE_GROUP_LABEL[m]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {saveError && <p className="text-xs text-danger">{saveError}</p>}
 
       <button type="button" onClick={handleSave} className="btn-primary">
         {saved ? <IconCheck className="h-4 w-4" /> : null}

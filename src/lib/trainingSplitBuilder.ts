@@ -16,6 +16,9 @@ export interface MuscleTarget {
   muscleLabel: string;
   weeklySets: number;
   reason: string;
+  /** prioridade declarada (ex: consultoria real) — pesa mais que a leitura visual da foto, porque um
+   * coach humano enxerga sinais que uma foto não capta (força estagnada, medidas, etc.) */
+  isPriority?: boolean;
 }
 
 // grupo lido como "atrás dos outros" na foto puxa a meta pra cima do MAV padrão (mais estímulo pra
@@ -29,11 +32,29 @@ const DEVELOPMENT_ADJUSTMENT: Record<RelativeDevelopment, number> = {
   destaque: 0.85,
 };
 
-/** Meta de séries/semana por grupo pro mesociclo atual — MAV como padrão, ajustado pela leitura visual
- * da foto quando disponível e com confiança suficiente (confidence "baixa" é ignorada, é chute demais
- * pra virar meta de volume). */
-export function computeMuscleTargets(assessment: MuscleAssessmentInput[] = []): MuscleTarget[] {
+/** Meta de séries/semana por grupo pro mesociclo atual. Prioridade declarada (`priorityMuscles`, ex:
+ * "consultoria real disse pra focar costas e braço") vence qualquer leitura de foto e vai direto pro
+ * teto recuperável (MRV) — é informação mais confiável que um algoritmo lendo ângulo de câmera. Sem
+ * prioridade declarada, cai na leitura visual: MAV como padrão, puxado pra cima quando a foto marca o
+ * grupo "atrás dos outros", relaxado quando "destaque" (confidence "baixa" é ignorada, chute demais pra
+ * virar meta de volume). */
+export function computeMuscleTargets(
+  assessment: MuscleAssessmentInput[] = [],
+  priorityMuscles: MuscleGroup[] = []
+): MuscleTarget[] {
   return VOLUME_LANDMARKS.map((landmark) => {
+    const muscleLabel = MUSCLE_GROUP_LABEL[landmark.muscle];
+
+    if (priorityMuscles.includes(landmark.muscle)) {
+      return {
+        muscle: landmark.muscle,
+        muscleLabel,
+        weeklySets: landmark.mrv,
+        reason: `Prioridade declarada (consultoria) — meta no teto recuperável (MRV: ${landmark.mrv} séries/semana) em vez do MAV padrão, exercícios desse grupo entram primeiro na sessão e a frequência semanal sobe quando possível.`,
+        isPriority: true,
+      };
+    }
+
     const a = assessment.find((x) => x.muscle === landmark.muscle && x.confidence !== "baixa");
     const adjustment = a ? DEVELOPMENT_ADJUSTMENT[a.relativeDevelopment] : 1.0;
     const weeklySets = Math.round(Math.min(landmark.mrv, Math.max(landmark.mev, landmark.mav * adjustment)));
@@ -41,7 +62,7 @@ export function computeMuscleTargets(assessment: MuscleAssessmentInput[] = []): 
       a && a.relativeDevelopment !== "proporcional"
         ? `Leitura visual marcou esse grupo como "${a.relativeDevelopment === "atras_dos_outros" ? "atrás dos outros" : "destaque"}" — meta ajustada do MAV padrão (${landmark.mav}) pra ${weeklySets} séries/semana.`
         : `Meta padrão: MAV (${landmark.mav} séries/semana) — melhor custo-benefício da dose-resposta volume→hipertrofia.`;
-    return { muscle: landmark.muscle, muscleLabel: MUSCLE_GROUP_LABEL[landmark.muscle], weeklySets, reason };
+    return { muscle: landmark.muscle, muscleLabel, weeklySets, reason };
   });
 }
 
@@ -101,22 +122,25 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
 // tetos pra manter a sessão gerada dentro do que uma pessoa consegue treinar de verdade num dia — sem
 // isso, um grupo com poucos exercícios no catálogo (ex: glúteo, só 1 opção) acabava recebendo todas as
 // séries da meta semanal empilhadas num exercício só (10+ séries seguidas), e um dia com vários grupos
-// virava uma sessão de 15+ exercícios. Nenhum dos dois é um treino real.
+// virava uma sessão de 15+ exercícios. Nenhum dos dois é um treino real. Grupo prioritário ganha 1
+// exercício a mais de teto — meta maior (MRV) precisa de mais variedade pra caber sem virar 1 exercício
+// gigante.
 const MAX_SETS_PER_EXERCISE = 5;
 const MAX_EXERCISES_PER_MUSCLE_PER_DAY = 2;
+const MAX_EXERCISES_PER_PRIORITY_MUSCLE_PER_DAY = 3;
 
 /** Escolhe exercícios do catálogo pra cobrir `setsNeeded` séries desse grupo num dia — compostos
  * primeiro (mais retorno por série, faz sentido fazer com a pessoa fresca), isolados completam o
- * resto, sem passar de `MAX_SETS_PER_EXERCISE` por exercício nem `MAX_EXERCISES_PER_MUSCLE_PER_DAY`
- * exercícios pro mesmo grupo no mesmo dia (quando o catálogo não sustenta a meta inteira nesses limites,
- * a sessão fica com menos volume do que a meta semanal — é a frequência que precisa subir, não a sessão
- * virar interminável). `rotation` desloca o ponto de partida da lista pra variar o exercício entre a
- * variante A e B do mesmo grupo na semana (mesmo raciocínio do suggestExerciseSwap em
- * trainingPeriodization.ts). */
-function pickExercisesForMuscle(muscle: MuscleGroup, setsNeeded: number, rotation: number): TrainingItem[] {
+ * resto, sem passar de `MAX_SETS_PER_EXERCISE` por exercício nem do teto de exercícios/dia pro mesmo
+ * grupo (quando o catálogo não sustenta a meta inteira nesses limites, a sessão fica com menos volume
+ * do que a meta semanal — é a frequência que precisa subir, não a sessão virar interminável).
+ * `rotation` desloca o ponto de partida da lista pra variar o exercício entre a variante A e B do mesmo
+ * grupo na semana (mesmo raciocínio do suggestExerciseSwap em trainingPeriodization.ts). */
+function pickExercisesForMuscle(muscle: MuscleGroup, setsNeeded: number, rotation: number, isPriority: boolean): TrainingItem[] {
   const candidates = exercisesByMuscle(muscle);
   if (candidates.length === 0 || setsNeeded <= 0) return [];
 
+  const maxExercises = isPriority ? MAX_EXERCISES_PER_PRIORITY_MUSCLE_PER_DAY : MAX_EXERCISES_PER_MUSCLE_PER_DAY;
   const ordered = [...candidates].sort((a, b) => {
     if (a.pattern === b.pattern) return 0;
     return a.pattern === "composto" ? -1 : 1;
@@ -124,10 +148,7 @@ function pickExercisesForMuscle(muscle: MuscleGroup, setsNeeded: number, rotatio
   const offset = rotation % ordered.length;
   const rotated = [...ordered.slice(offset), ...ordered.slice(0, offset)];
 
-  const numExercises = Math.max(
-    1,
-    Math.min(rotated.length, MAX_EXERCISES_PER_MUSCLE_PER_DAY, Math.ceil(setsNeeded / MAX_SETS_PER_EXERCISE))
-  );
+  const numExercises = Math.max(1, Math.min(rotated.length, maxExercises, Math.ceil(setsNeeded / MAX_SETS_PER_EXERCISE)));
   const chosen = rotated.slice(0, numExercises);
   const base = Math.min(MAX_SETS_PER_EXERCISE, Math.floor(setsNeeded / numExercises));
   const remainder = Math.min(numExercises, setsNeeded - base * numExercises);
@@ -145,13 +166,37 @@ function pickExercisesForMuscle(muscle: MuscleGroup, setsNeeded: number, rotatio
   }));
 }
 
+/** Garante 2ª exposição semanal pra grupo prioritário que só aparece 1x no template — treinar um grupo
+ * prioritário 2x/semana em vez de empilhar tudo numa sessão só é o que torna a meta em MRV recuperável
+ * (mesma lógica de "recuperação virando fator limitante" de trainingVolume.ts). Adiciona o grupo ao dia
+ * que ainda não o tem e tem menos grupos (o "mais vago"), como uma sessão complementar mais curta. */
+function ensurePriorityFrequency(template: SplitDayTemplate[], priorityMuscles: MuscleGroup[]): SplitDayTemplate[] {
+  if (priorityMuscles.length === 0) return template;
+  const days = template.map((d) => ({ label: d.label, muscles: [...d.muscles] }));
+
+  for (const muscle of priorityMuscles) {
+    const appearances = days.filter((d) => d.muscles.includes(muscle)).length;
+    if (appearances >= 2 || days.length < 2) continue;
+    const candidate = days
+      .filter((d) => !d.muscles.includes(muscle))
+      .sort((a, b) => a.muscles.length - b.muscles.length)[0];
+    candidate?.muscles.push(muscle);
+  }
+
+  return days;
+}
+
 /** Monta a divisão de treino automaticamente a partir dos dias/semana disponíveis e da meta de volume
  * por grupo — distribui o volume semanal de cada músculo entre as sessões em que ele aparece no template
- * e escolhe os exercícios do catálogo. `daysPerWeek` fora de 1-6 é limitado a esse intervalo. */
+ * e escolhe os exercícios do catálogo. `daysPerWeek` fora de 1-6 é limitado a esse intervalo. Grupos
+ * prioritários entram primeiro em cada sessão (treinados com a pessoa fresca) e ganham uma 2ª exposição
+ * semanal quando o template só previa 1x. */
 export function buildSplit(daysPerWeek: number, muscleTargets: MuscleTarget[]): TrainingSession[] {
   const days = Math.max(1, Math.min(6, Math.round(daysPerWeek)));
-  const template = SPLIT_TEMPLATES[days];
+  const priorityMuscles = muscleTargets.filter((t) => t.isPriority).map((t) => t.muscle);
+  const template = ensurePriorityFrequency(SPLIT_TEMPLATES[days], priorityMuscles);
   const targetByMuscle = new Map(muscleTargets.map((t) => [t.muscle, t.weeklySets]));
+  const priorityByMuscle = new Set(priorityMuscles);
 
   const frequencyByMuscle = new Map<MuscleGroup, number>();
   for (const day of template) {
@@ -161,14 +206,21 @@ export function buildSplit(daysPerWeek: number, muscleTargets: MuscleTarget[]): 
   const rotationByMuscle = new Map<MuscleGroup, number>();
 
   return template.map((day) => {
+    // grupos prioritários primeiro na lista — treinados enquanto a pessoa ainda está fresca na sessão
+    const orderedMuscles = [...day.muscles].sort((a, b) => {
+      const pa = priorityByMuscle.has(a) ? 0 : 1;
+      const pb = priorityByMuscle.has(b) ? 0 : 1;
+      return pa - pb;
+    });
+
     const items: TrainingItem[] = [];
-    for (const muscle of day.muscles) {
+    for (const muscle of orderedMuscles) {
       const weeklySets = targetByMuscle.get(muscle) ?? landmarkFor(muscle).mav;
       const freq = frequencyByMuscle.get(muscle) ?? 1;
       const setsThisDay = Math.round(weeklySets / freq);
       const rotation = rotationByMuscle.get(muscle) ?? 0;
       rotationByMuscle.set(muscle, rotation + 1);
-      items.push(...pickExercisesForMuscle(muscle, setsThisDay, rotation));
+      items.push(...pickExercisesForMuscle(muscle, setsThisDay, rotation, priorityByMuscle.has(muscle)));
     }
     return { label: day.label, items };
   });

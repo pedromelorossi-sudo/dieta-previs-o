@@ -199,6 +199,10 @@ alter table public.preferences add column if not exists sex text;
 alter table public.preferences add column if not exists height_cm numeric;
 alter table public.preferences add column if not exists age int;
 
+-- grupos musculares em prioridade agora (ex: definido pela consultoria) — usado pela divisão de treino
+-- sugerida em trainingSplitBuilder.ts pra dar mais volume e ordem de prioridade na sessão
+alter table public.preferences add column if not exists priority_muscles jsonb not null default '[]'::jsonb;
+
 alter table public.preferences enable row level security;
 
 drop policy if exists "preferences: all own" on public.preferences;
