@@ -8,6 +8,7 @@ import { generateDietPdf } from "@/lib/pdf";
 import { loadLastPrediction } from "@/lib/predictionsLog";
 import { RESTRICTION_LABEL, Restriction, UserPreferences, loadPreferences } from "@/lib/questionnaire";
 import { fmt } from "@/lib/format";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { IconCheck, IconClipboard, IconDroplet, IconFlame, IconWheat } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
 
@@ -164,7 +165,7 @@ export default function NovaDietaPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10 space-y-8">
-      <div>
+      <div className="animate-fade-in-up">
         <h1 className="text-3xl font-semibold tracking-tight gradient-text">Montar dieta</h1>
         <p className="text-sm text-muted mt-2">
           Escolha os alimentos por refeição, veja as substituições equivalentes e gere o PDF do plano.
@@ -357,14 +358,14 @@ function TotalCard({
         {label}
       </div>
       <div className="mt-1 text-base font-semibold">
-        {fmt(value, decimals)}
+        <AnimatedNumber value={value} decimals={decimals} durationMs={400} />
         {suffix}
         {hasTarget && <span className="text-muted font-normal text-xs"> / {fmt(target, decimals)}{suffix}</span>}
       </div>
       {hasTarget && (
         <div className="mt-1.5 h-1 rounded-full bg-surface-raised overflow-hidden">
           <div
-            className={`h-full rounded-full ${close ? "bg-accent" : "bg-warn"}`}
+            className={`h-full rounded-full transition-[width] duration-500 ease-out ${close ? "bg-accent animate-glow-pulse" : "bg-warn"}`}
             style={{ width: `${Math.min(100, pct * 100)}%` }}
           />
         </div>

@@ -6,6 +6,7 @@ import { loadCycles } from "@/lib/storage";
 import { extractRules, sortByDate } from "@/lib/dietEngine";
 import { fmt, fmtDate } from "@/lib/format";
 import { Sparkline } from "@/components/Sparkline";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { IconCheck, IconClipboard, IconDrumstick, IconDroplet, IconFlame, IconTrend } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
 
@@ -35,7 +36,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10 space-y-12">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between animate-fade-in-up">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight gradient-text">Histórico de ciclos</h1>
           <p className="text-sm text-muted mt-2">
@@ -56,7 +57,7 @@ export default function DashboardPage() {
       </section>
 
       {cycles.length === 0 ? (
-        <section className="card p-8 text-center">
+        <section className="card p-8 text-center animate-fade-in-up stagger-1">
           <p className="text-sm text-muted">
             Nenhum ciclo registrado para este perfil ainda. Comece estimando uma dieta inicial a partir do seu peso,
             altura e %BF, ou registre um ciclo real se já tiver uma prescrição.
@@ -71,7 +72,7 @@ export default function DashboardPage() {
           </div>
         </section>
       ) : (
-        <section className="card overflow-hidden">
+        <section className="card overflow-hidden animate-fade-in-up stagger-1">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -87,8 +88,12 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {cycles.map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-0 hover:bg-surface-raised/60 transition-colors">
+                {cycles.map((c, i) => (
+                  <tr
+                    key={c.id}
+                    className="border-b border-border last:border-0 hover:bg-surface-raised/60 transition-colors animate-fade-in-up"
+                    style={{ animationDelay: `${Math.min(i, 10) * 45}ms` }}
+                  >
                     <td className="px-4 py-3 whitespace-nowrap">
                       {fmtDate(c.date)}
                       {c.isPrediction && (
@@ -119,7 +124,7 @@ export default function DashboardPage() {
       )}
 
       {rules && cycles.length > 0 && (
-        <section>
+        <section className="animate-fade-in-up stagger-2">
           <h2 className="text-lg font-semibold tracking-tight mb-1">Regras extraídas</h2>
           <p className="text-sm text-muted mb-5">
             Padrões observados no histórico — hipóteses de trabalho enquanto seguram, não leis confirmadas.
@@ -128,30 +133,38 @@ export default function DashboardPage() {
             <RuleCard
               icon={<IconDroplet className="h-4 w-4" />}
               label="Gordura"
-              value={`${fmt(rules.fatPerKg, 2)} g/kg`}
+              numericValue={rules.fatPerKg}
+              decimals={2}
+              suffix=" g/kg"
               note="Estável nos ciclos observados — repetir até ver desvio."
               tone="stable"
+              delayClass="stagger-3"
             />
             <RuleCard
               icon={<IconDrumstick className="h-4 w-4" />}
               label="Proteína"
-              value={`${fmt(rules.proteinPerKg, 2)} g/kg`}
+              numericValue={rules.proteinPerKg}
+              decimals={2}
+              suffix=" g/kg"
               note={
                 rules.proteinStepSuspected
                   ? "Último salto detectado: +0,1 g/kg. Gatilho do degrau ainda desconhecido."
                   : "Repetir o último valor prescrito."
               }
               tone={rules.proteinStepSuspected ? "watch" : "stable"}
+              delayClass="stagger-4"
             />
             <RuleCard
               icon={<IconFlame className="h-4 w-4" />}
               label="Kcal/kg"
-              value={fmt(rules.kcalPerKgLast, 1)}
+              numericValue={rules.kcalPerKgLast}
+              decimals={1}
               note={`Progressão média de ${fmt(rules.kcalPerKgAvgStep, 2)}/ciclo. Próximo extrapolado: ${fmt(
                 rules.kcalPerKgExtrapolated,
                 1
               )}.`}
               tone="watch"
+              delayClass="stagger-5"
               chart={
                 <Sparkline
                   values={rules.kcalPerKgSeries.map((s) => s.value)}
@@ -163,7 +176,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <section className="card p-6">
+      <section className="card p-6 animate-fade-in-up stagger-6">
         <div className="flex items-center gap-2 mb-3">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-warn/15 text-warn">
             <IconCheck className="h-3.5 w-3.5" />
@@ -187,20 +200,26 @@ export default function DashboardPage() {
 function RuleCard({
   icon,
   label,
-  value,
+  numericValue,
+  decimals = 1,
+  suffix = "",
   note,
   tone,
   chart,
+  delayClass = "",
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  numericValue: number;
+  decimals?: number;
+  suffix?: string;
   note: string;
   tone: "stable" | "watch";
   chart?: React.ReactNode;
+  delayClass?: string;
 }) {
   return (
-    <div className="card p-5 hover:border-accent/30 transition-colors">
+    <div className={`card p-5 animate-fade-in-up ${delayClass}`}>
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
           <span className={`flex h-6 w-6 items-center justify-center rounded-md ${tone === "stable" ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"}`}>
@@ -209,11 +228,14 @@ function RuleCard({
           {label}
         </span>
         <span
-          className={`h-1.5 w-1.5 rounded-full ${tone === "stable" ? "bg-accent" : "bg-warn"}`}
+          className={`h-1.5 w-1.5 rounded-full ${tone === "stable" ? "bg-accent animate-glow-pulse" : "bg-warn"}`}
           title={tone === "stable" ? "Regra estável" : "Em observação"}
         />
       </div>
-      <div className="mt-3 text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-3 text-2xl font-semibold tracking-tight">
+        <AnimatedNumber value={numericValue} decimals={decimals} />
+        {suffix}
+      </div>
       <p className="mt-2 text-xs text-muted leading-relaxed">{note}</p>
       {chart && <div className="mt-3">{chart}</div>}
     </div>

@@ -155,7 +155,7 @@ export function generateDietPdf(diet: Diet): void {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(...MUTED);
-    doc.text("Gerado por Previsão de Dieta — não substitui acompanhamento profissional.", marginX, 820);
+    doc.text("Gerado por Degrau — não substitui acompanhamento profissional.", marginX, 820);
   }
 
   const filename = `${(diet.name || "dieta").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`;

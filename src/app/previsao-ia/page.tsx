@@ -28,6 +28,7 @@ import { Diet, DietMeal, dietTotals, mealTotals, itemMacros } from "@/lib/dietBu
 import { getFood } from "@/lib/foods";
 import { upsertDiet } from "@/lib/dietStorage";
 import { generateDietPdf } from "@/lib/pdf";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { IconCheck, IconClipboard, IconDrumstick, IconDroplet, IconFlame, IconScale, IconTarget, IconWheat } from "@/components/icons";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -300,7 +301,7 @@ export default function PrevisaoIaPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
-      <div>
+      <div className="animate-fade-in-up">
         <h1 className="text-3xl font-semibold tracking-tight gradient-text">
           {isFirstCycle ? "Começar: informações e fotos" : "Novo ciclo: fotos e previsão"}
         </h1>
@@ -311,7 +312,7 @@ export default function PrevisaoIaPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="card p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="card p-6 space-y-6 animate-fade-in-up stagger-1">
         <div>
           <span className="block text-xs text-muted mb-2">1. Informações básicas</span>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -416,7 +417,7 @@ export default function PrevisaoIaPage() {
             {ANGLES.map(({ key, label, required }) => (
               <div key={key}>
                 <label className="block cursor-pointer">
-                  <div className="h-28 w-full rounded-lg border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden hover:border-accent/40 transition-colors">
+                  <div className="h-28 w-full rounded-lg border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden hover:border-accent/40 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200">
                     {previews[key] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={previews[key]} alt={label} className="h-full w-full object-cover" />
@@ -487,24 +488,27 @@ export default function PrevisaoIaPage() {
         {error && <p className="text-xs text-danger">{error}</p>}
 
         <button type="submit" disabled={!canSubmit || loading} className="btn-primary">
+          {loading && (
+            <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin-slow" style={{ animationDuration: "0.7s" }} />
+          )}
           {loading ? "Analisando fotos…" : isFirstCycle ? "Calcular minha dieta inicial" : "Gerar previsão com IA"}
         </button>
       </form>
 
       {result && (
         <section className="space-y-6">
-          <div className="card p-5">
+          <div className="card p-5 animate-fade-in-up">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
               <IconScale className="h-4 w-4" /> %BF estimado por IA
             </div>
             <div className="mt-2 text-2xl font-semibold">
-              {fmt(result.bfPercentVisual, 1)}%
+              <AnimatedNumber value={result.bfPercentVisual} decimals={1} />%
               <span className="ml-2 text-xs font-normal text-muted">confiança {result.bfConfidence}</span>
             </div>
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.bfReasoning}</p>
           </div>
 
-          <div className="card p-5 border-accent/30">
+          <div className="card p-5 border-accent/30 animate-fade-in-up stagger-1">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
               <IconTarget className="h-4 w-4" /> Estratégia decidida
             </div>
@@ -513,7 +517,7 @@ export default function PrevisaoIaPage() {
           </div>
 
           {result.evolutionNote && (
-            <div className="card p-5">
+            <div className="card p-5 animate-fade-in-up stagger-2">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconTarget className="h-4 w-4" /> Evolução muscular
               </div>
@@ -522,7 +526,7 @@ export default function PrevisaoIaPage() {
           )}
 
           {result.gainCompositionLabel && (
-            <div className="card p-5">
+            <div className="card p-5 animate-fade-in-up stagger-3">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconDrumstick className="h-4 w-4" /> Composição do ganho (decidida pela IA)
               </div>
@@ -531,17 +535,18 @@ export default function PrevisaoIaPage() {
             </div>
           )}
 
-          <div className="card p-5">
+          <div className="card p-5 animate-fade-in-up stagger-4">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
               <IconScale className="h-4 w-4" /> Projeção de 1 mês seguindo essa dieta
             </div>
             <div className="mt-2 text-xl font-semibold">
-              {fmt(result.oneMonthProjection.weightRange.min, 1)}–{fmt(result.oneMonthProjection.weightRange.max, 1)} kg
+              <AnimatedNumber value={result.oneMonthProjection.weightRange.min} decimals={1} />–
+              <AnimatedNumber value={result.oneMonthProjection.weightRange.max} decimals={1} /> kg
             </div>
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.oneMonthProjection.note}</p>
           </div>
 
-          <div className="card-glow p-6">
+          <div className="card-glow p-6 animate-fade-in-up stagger-5">
             <h2 className="text-sm font-semibold mb-5 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
@@ -558,7 +563,7 @@ export default function PrevisaoIaPage() {
           </div>
 
           {result.meals.length > 0 && (
-            <div className="card p-6">
+            <div className="card p-6 animate-fade-in-up stagger-6">
               <h2 className="text-sm font-semibold mb-1 flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
                   <IconClipboard className="h-3.5 w-3.5" />
@@ -684,7 +689,7 @@ function MacroCard({
         {label}
       </div>
       <div className="mt-1.5 font-semibold text-lg">
-        {fmt(value, decimals)}
+        <AnimatedNumber value={value} decimals={decimals} />
         <span className="text-muted font-normal text-xs"> {suffix}</span>
       </div>
       {isRange && (

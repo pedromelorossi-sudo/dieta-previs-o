@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0e0d;
-  --surface: #12181a;
-  --surface-raised: #171f21;
-  --border: #223032;
-  --foreground: #e9f1ee;
-  --muted: #8fa39d;
-  --accent: #34d399;
-  --accent-strong: #10b981;
-  --warn: #f5a524;
+  --background: #0b0c0d;
+  --surface: #141618;
+  --surface-raised: #191c1f;
+  --border: #2a2d31;
+  --foreground: #eef0f2;
+  --muted: #93989f;
+  --accent: #eab308;
+  --accent-strong: #ca8a04;
+  --accent-contrast: #221a00;
+  --warn: #fb923c;
   --danger: #f87171;
 }
 
@@ -34,8 +35,8 @@ html {
 
 body {
   background:
-    radial-gradient(1100px 500px at 15% -10%, color-mix(in oklab, var(--accent) 13%, transparent), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, color-mix(in oklab, #38bdf8 8%, transparent), transparent 55%),
+    radial-gradient(1100px 500px at 15% -10%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, color-mix(in oklab, #f59e0b 8%, transparent), transparent 55%),
     var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
@@ -61,6 +62,12 @@ input[type="text"] {
   border: 1px solid var(--border);
   background: color-mix(in oklab, var(--surface) 92%, transparent);
   backdrop-filter: blur(6px);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px -22px color-mix(in oklab, var(--accent) 45%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 25%, var(--border));
 }
 
 .card-glow {
@@ -68,6 +75,11 @@ input[type="text"] {
   border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--border));
   background: linear-gradient(160deg, color-mix(in oklab, var(--accent) 10%, var(--surface)), var(--surface) 60%);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 8%, transparent), 0 12px 32px -16px color-mix(in oklab, var(--accent) 45%, transparent);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+.card-glow:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 14%, transparent), 0 20px 48px -18px color-mix(in oklab, var(--accent) 55%, transparent);
 }
 
 .btn-primary {
@@ -76,7 +88,7 @@ input[type="text"] {
   gap: 0.5rem;
   border-radius: 0.65rem;
   background: linear-gradient(180deg, var(--accent), var(--accent-strong));
-  color: #06231a;
+  color: var(--accent-contrast);
   font-weight: 600;
   font-size: 0.875rem;
   padding: 0.6rem 1.1rem;
@@ -84,12 +96,13 @@ input[type="text"] {
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 .btn-primary:hover {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px -8px color-mix(in oklab, var(--accent) 80%, transparent);
+  filter: brightness(1.08);
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 0 14px 30px -10px color-mix(in oklab, var(--accent) 85%, transparent);
 }
 .btn-primary:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.98);
+  transition-duration: 0.05s;
 }
 .btn-primary:disabled {
   opacity: 0.5;
@@ -109,12 +122,16 @@ input[type="text"] {
   font-weight: 500;
   font-size: 0.875rem;
   padding: 0.6rem 1.1rem;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 .btn-secondary:hover {
   background: var(--surface-raised);
-  border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
-  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px -14px color-mix(in oklab, var(--accent) 50%, transparent);
+}
+.btn-secondary:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .badge {
@@ -126,6 +143,7 @@ input[type="text"] {
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  transition: transform 0.15s ease;
 }
 
 .input {
@@ -168,4 +186,65 @@ input[type="text"] {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  background-size: 200% 100%;
+  animation: shine 5s ease-in-out infinite;
+}
+@keyframes shine {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ===== animações de entrada, reutilizáveis nas páginas ===== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(0.85); }
+  70% { opacity: 1; transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 8px 20px -8px color-mix(in oklab, var(--accent) 70%, transparent); }
+  50% { box-shadow: 0 10px 30px -6px color-mix(in oklab, var(--accent) 95%, transparent); }
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes spinSlow {
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in-up { animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in { animation: fadeIn 0.45s ease-out both; }
+.animate-scale-in { animation: scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-pop-in { animation: popIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-float { animation: floatY 3.5s ease-in-out infinite; }
+.animate-glow-pulse { animation: glowPulse 2.2s ease-in-out infinite; }
+.animate-spin-slow { animation: spinSlow 3s linear infinite; }
+
+.stagger-1 { animation-delay: 0.04s; }
+.stagger-2 { animation-delay: 0.09s; }
+.stagger-3 { animation-delay: 0.14s; }
+.stagger-4 { animation-delay: 0.19s; }
+.stagger-5 { animation-delay: 0.24s; }
+.stagger-6 { animation-delay: 0.29s; }
+.stagger-7 { animation-delay: 0.34s; }
+.stagger-8 { animation-delay: 0.39s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

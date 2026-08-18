@@ -79,6 +79,15 @@ export function IconCheck({ className = base }: IconProps) {
   );
 }
 
+export function IconPhysique({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="4.4" r="2.1" fill="currentColor" stroke="none" />
+      <path d="M6.2 20c.3-3.6 1-6.1 2.1-7.7-1.4-.8-2.1-2.3-1.7-3.9.6-2.1 2.6-3.2 4.2-2.4.6-.6 1.3-1 2.2-1s1.6.4 2.2 1c1.6-.8 3.6.3 4.2 2.4.4 1.6-.3 3.1-1.7 3.9 1.1 1.6 1.8 4.1 2.1 7.7" />
+    </svg>
+  );
+}
+
 export function IconClipboard({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
