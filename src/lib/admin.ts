@@ -1,6 +1,7 @@
 import { createClient } from "./supabase/client";
 import { Cycle } from "./types";
 import { ProgressPhoto } from "./photos";
+import { Diet } from "./dietBuilder";
 
 const PHOTOS_BUCKET = "progress-photos";
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
@@ -71,6 +72,26 @@ export async function loadCyclesForUser(userId: string): Promise<Cycle[]> {
     fatG: Number(row.fat_g),
     carbG: Number(row.carb_g),
     isPrediction: row.is_prediction,
+  }));
+}
+
+export async function loadDietsForUser(userId: string): Promise<Diet[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("diets")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+    targetKcal: Number(row.target_kcal),
+    targetProteinG: Number(row.target_protein_g),
+    targetFatG: Number(row.target_fat_g),
+    targetCarbG: Number(row.target_carb_g),
+    meals: row.meals,
   }));
 }
 

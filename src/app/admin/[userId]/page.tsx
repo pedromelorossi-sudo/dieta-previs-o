@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { loadCyclesForUser, loadPhotosForUser } from "@/lib/admin";
+import { loadCyclesForUser, loadPhotosForUser, loadDietsForUser } from "@/lib/admin";
+import { loadCommentsForUser, addComment, deleteComment, AdminComment } from "@/lib/comments";
+import { deleteDiet } from "@/lib/dietStorage";
 import { createClient } from "@/lib/supabase/client";
 import { Cycle } from "@/lib/types";
 import { ProgressPhoto } from "@/lib/photos";
+import { Diet } from "@/lib/dietBuilder";
 import { extractRules, sortByDate } from "@/lib/dietEngine";
 import { fmt, fmtDate } from "@/lib/format";
 import { Sparkline } from "@/components/Sparkline";
-import { IconDrumstick, IconDroplet, IconFlame } from "@/components/icons";
+import { IconDrumstick, IconDroplet, IconFlame, IconClipboard } from "@/components/icons";
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ userId: string }>();
@@ -20,6 +23,10 @@ export default function AdminUserDetailPage() {
   const [name, setName] = useState<string | null>(null);
   const [cycles, setCycles] = useState<Cycle[] | null>(null);
   const [photos, setPhotos] = useState<ProgressPhoto[] | null>(null);
+  const [diets, setDiets] = useState<Diet[] | null>(null);
+  const [comments, setComments] = useState<AdminComment[] | null>(null);
+  const [newComment, setNewComment] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,14 +37,43 @@ export default function AdminUserDetailPage() {
       supabase.from("profiles").select("name").eq("id", userId).single(),
       loadCyclesForUser(userId).then((c) => sortByDate(c)),
       loadPhotosForUser(userId),
+      loadDietsForUser(userId),
+      loadCommentsForUser(userId),
     ])
-      .then(([profileRes, cyclesRes, photosRes]) => {
+      .then(([profileRes, cyclesRes, photosRes, dietsRes, commentsRes]) => {
         setName(profileRes.data?.name ?? "Usuário");
         setCycles(cyclesRes);
         setPhotos(photosRes);
+        setDiets(dietsRes);
+        setComments(commentsRes);
       })
       .catch((e) => setError(e.message));
   }, [ready, profile, userId]);
+
+  async function handleDeleteDiet(id: string) {
+    if (!window.confirm("Excluir esta dieta do usuário?")) return;
+    await deleteDiet(id);
+    setDiets((prev) => (prev ? prev.filter((d) => d.id !== id) : prev));
+  }
+
+  async function handlePostComment() {
+    if (!newComment.trim()) return;
+    setPostingComment(true);
+    try {
+      await addComment(userId, newComment.trim());
+      setComments(await loadCommentsForUser(userId));
+      setNewComment("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao adicionar comentário.");
+    } finally {
+      setPostingComment(false);
+    }
+  }
+
+  async function handleDeleteComment(id: string) {
+    await deleteComment(id);
+    setComments((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
+  }
 
   if (!ready) {
     return <div className="mx-auto max-w-4xl px-6 py-16 text-muted">Carregando…</div>;
@@ -60,10 +96,86 @@ export default function AdminUserDetailPage() {
           ← Todos os usuários
         </a>
         <h1 className="text-3xl font-semibold tracking-tight gradient-text mt-2">{name ?? "…"}</h1>
-        <p className="text-sm text-muted mt-1">Somente leitura — dados do usuário, não editáveis por aqui.</p>
+        <p className="text-sm text-muted mt-1">
+          Histórico e fotos são somente leitura. Dietas e comentários você pode editar como admin.
+        </p>
       </div>
 
       {error && <div className="card border-warn/30 bg-warn/5 p-4 text-sm text-warn">{error}</div>}
+
+      <section>
+        <h2 className="text-lg font-semibold tracking-tight mb-4">Comentários</h2>
+        <div className="card p-5 space-y-4">
+          <div className="flex gap-2">
+            <input
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Escreva um recado para este usuário…"
+              className="input flex-1"
+              onKeyDown={(e) => e.key === "Enter" && handlePostComment()}
+            />
+            <button type="button" onClick={handlePostComment} disabled={postingComment || !newComment.trim()} className="btn-primary">
+              {postingComment ? "Enviando…" : "Enviar"}
+            </button>
+          </div>
+          {!comments ? (
+            <div className="skeleton h-16 w-full" />
+          ) : comments.length === 0 ? (
+            <p className="text-sm text-muted">Nenhum comentário ainda.</p>
+          ) : (
+            <div className="space-y-3">
+              {comments.map((c) => (
+                <div key={c.id} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+                  <div className="flex items-center justify-between text-xs text-muted mb-1">
+                    <span>
+                      {c.authorName ?? "Administrador"} · {fmtDate(c.createdAt.slice(0, 10))}
+                    </span>
+                    <button type="button" onClick={() => handleDeleteComment(c.id)} className="hover:text-danger transition-colors">
+                      excluir
+                    </button>
+                  </div>
+                  <p className="text-sm">{c.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold tracking-tight mb-4">Dietas</h2>
+        {!diets ? (
+          <div className="skeleton h-24 w-full" />
+        ) : diets.length === 0 ? (
+          <p className="text-sm text-muted">Nenhuma dieta salva ainda.</p>
+        ) : (
+          <div className="space-y-3">
+            {diets.map((d) => (
+              <div key={d.id} className="card p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent/15 text-accent shrink-0">
+                    <IconClipboard className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <div className="text-sm font-medium">{d.name}</div>
+                    <div className="text-xs text-muted">
+                      {fmt(d.targetKcal, 0)}kcal · {d.meals.length} refeições
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <a href={`/admin/${userId}/dieta/${d.id}`} className="text-xs text-accent hover:underline">
+                    editar
+                  </a>
+                  <button type="button" onClick={() => handleDeleteDiet(d.id)} className="text-xs text-muted hover:text-danger transition-colors">
+                    excluir
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section>
         <h2 className="text-lg font-semibold tracking-tight mb-4">Histórico de ciclos</h2>

@@ -2,23 +2,34 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Cycle } from "@/lib/types";
-import { loadCycles } from "@/lib/storage";
+import { loadCycles, deleteCycle } from "@/lib/storage";
 import { extractRules, sortByDate } from "@/lib/dietEngine";
 import { fmt, fmtDate } from "@/lib/format";
 import { Sparkline } from "@/components/Sparkline";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { loadMyComments, AdminComment } from "@/lib/comments";
 import { IconCheck, IconClipboard, IconDrumstick, IconDroplet, IconFlame, IconTrend } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
 
 export default function DashboardPage() {
   const { ready, user } = useAuth();
   const [cycles, setCycles] = useState<Cycle[] | null>(null);
+  const [comments, setComments] = useState<AdminComment[]>([]);
 
   useEffect(() => {
-    if (ready && user) loadCycles().then((c) => setCycles(sortByDate(c)));
+    if (ready && user) {
+      loadCycles().then((c) => setCycles(sortByDate(c)));
+      loadMyComments().then(setComments);
+    }
   }, [ready, user]);
 
   const rules = useMemo(() => (cycles ? extractRules(cycles) : null), [cycles]);
+
+  async function handleDeleteCycle(id: string) {
+    if (!window.confirm("Excluir esse ciclo do histórico? Isso afeta os cálculos de taxa/TDEE dos próximos ciclos.")) return;
+    await deleteCycle(id);
+    setCycles((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
+  }
 
   if (!cycles) {
     return (
@@ -56,6 +67,20 @@ export default function DashboardPage() {
         </div>
       </section>
 
+      {comments.length > 0 && (
+        <section className="space-y-3 animate-fade-in-up stagger-1">
+          <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Recados do administrador</h2>
+          {comments.map((c) => (
+            <div key={c.id} className="card-glow p-4">
+              <div className="text-xs text-muted mb-1">
+                {c.authorName ?? "Administrador"} · {fmtDate(c.createdAt.slice(0, 10))}
+              </div>
+              <p className="text-sm">{c.body}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
       {cycles.length === 0 ? (
         <section className="card p-8 text-center animate-fade-in-up stagger-1">
           <p className="text-sm text-muted">
@@ -85,6 +110,7 @@ export default function DashboardPage() {
                   <th className="px-4 py-3 font-medium">Proteína</th>
                   <th className="px-4 py-3 font-medium">Gordura</th>
                   <th className="px-4 py-3 font-medium">Carbo</th>
+                  <th className="px-4 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
@@ -115,6 +141,16 @@ export default function DashboardPage() {
                       <span className="text-muted">({fmt(c.fatG / c.weightKg, 1)} g/kg)</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">{fmt(c.carbG, 1)}g</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCycle(c.id)}
+                        className="text-xs text-muted hover:text-danger transition-colors"
+                        title="Excluir ciclo"
+                      >
+                        excluir
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

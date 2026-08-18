@@ -58,3 +58,29 @@ export async function deleteDiet(id: string): Promise<void> {
   const { error } = await supabase.from("diets").delete().eq("id", id);
   if (error) throw error;
 }
+
+export async function loadDietById(id: string): Promise<Diet | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("diets").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? rowToDiet(data) : null;
+}
+
+/** Atualiza uma dieta pelo id sem tocar em user_id — usada pelo admin editando a dieta de outro
+ * usuário (upsertDiet reatribuiria a dieta ao admin, já que sempre grava user_id = usuário logado). */
+export async function adminUpdateDiet(diet: Diet): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("diets")
+    .update({
+      name: diet.name,
+      target_kcal: diet.targetKcal,
+      target_protein_g: diet.targetProteinG,
+      target_fat_g: diet.targetFatG,
+      target_carb_g: diet.targetCarbG,
+      meals: diet.meals,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", diet.id);
+  if (error) throw error;
+}

@@ -144,11 +144,40 @@ drop policy if exists "diets: insert own" on public.diets;
 create policy "diets: insert own" on public.diets
   for insert with check (auth.uid() = user_id);
 drop policy if exists "diets: update own" on public.diets;
-create policy "diets: update own" on public.diets
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "diets: update own or admin" on public.diets;
+create policy "diets: update own or admin" on public.diets
+  for update using (auth.uid() = user_id or public.is_admin()) with check (auth.uid() = user_id or public.is_admin());
 drop policy if exists "diets: delete own" on public.diets;
-create policy "diets: delete own" on public.diets
-  for delete using (auth.uid() = user_id);
+drop policy if exists "diets: delete own or admin" on public.diets;
+create policy "diets: delete own or admin" on public.diets
+  for delete using (auth.uid() = user_id or public.is_admin());
+
+-- ============ ADMIN COMMENTS ============
+-- recados que o admin deixa pro usuário — só admin escreve/apaga, o próprio usuário só lê
+create table if not exists public.admin_comments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  author_id uuid not null references auth.users(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.admin_comments enable row level security;
+
+drop policy if exists "admin_comments: select own or admin" on public.admin_comments;
+create policy "admin_comments: select own or admin" on public.admin_comments
+  for select using (auth.uid() = user_id or public.is_admin());
+drop policy if exists "admin_comments: admin insert" on public.admin_comments;
+create policy "admin_comments: admin insert" on public.admin_comments
+  for insert with check (public.is_admin());
+drop policy if exists "admin_comments: admin update" on public.admin_comments;
+create policy "admin_comments: admin update" on public.admin_comments
+  for update using (public.is_admin());
+drop policy if exists "admin_comments: admin delete" on public.admin_comments;
+create policy "admin_comments: admin delete" on public.admin_comments
+  for delete using (public.is_admin());
+
+create index if not exists admin_comments_user_idx on public.admin_comments (user_id, created_at);
 
 -- ============ PREFERENCES ============
 create table if not exists public.preferences (
