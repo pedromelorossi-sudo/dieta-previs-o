@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { predictNextCycle } from "@/lib/dietEngine";
-import { estimateBodyComposition, PATH_LABEL, DietPath } from "@/lib/bodyComposition";
+import { estimateBodyComposition, classifyPathFromBf, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { Cycle, GainComposition } from "@/lib/types";
 import { ActivityLevel, Restriction } from "@/lib/questionnaire";
@@ -456,16 +456,9 @@ ${evolutionInstruction}`;
     note: `Mantendo o padrão observado (${result.rateKgWeek >= 0 ? "+" : ""}${result.rateKgWeek.toFixed(2)} kg/semana), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
   };
 
-  // estratégia derivada do superávit médio já calculado pelo algoritmo (não é o Claude que decide isto)
-  const avgSurplus = (result.surplusPercentRange.min + result.surplusPercentRange.max) / 2;
-  const strategy: DietPath = avgSurplus > 0.03 ? "bulking" : avgSurplus < -0.03 ? "cutting" : "normocalorico";
-  const strategyReason = `Superávit médio de ${(avgSurplus * 100).toFixed(1)}% sobre a manutenção estimada (TDEE ${result.tdeeRange.min.toFixed(0)}–${result.tdeeRange.max.toFixed(0)}kcal), extraído da progressão do seu histórico — ${
-    strategy === "cutting"
-      ? "por isso o ciclo está em déficit, priorizando perda de gordura."
-      : strategy === "bulking"
-        ? "por isso o ciclo está em superávit, priorizando ganho de massa."
-        : "por isso o ciclo está perto da manutenção, sem grande variação de peso esperada."
-  }`;
+  // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo) — a tendência histórica de
+  // peso só define os macros específicos dentro da faixa, não decide se é cutting/bulking/normo
+  const { path: strategy, pathReason: strategyReason } = classifyPathFromBf(clamp(raw.bfPercentVisual, 3, 60), sex);
 
   return NextResponse.json({
     isFirstCycle: false,

@@ -77,6 +77,39 @@ export function estimateBfPercentNavy(input: NavyMethodInput): number | null {
   return bf > 0 && bf < 60 ? bf : null;
 }
 
+export interface PathClassification {
+  path: DietPath;
+  pathReason: string;
+  surplusPercent: number;
+}
+
+/** Decide a estratégia (cutting/normocalórico/bulking) a partir do %BF atual — usada tanto no primeiro
+ * ciclo quanto nos seguintes, já que a estratégia deve refletir a composição corporal de agora, não
+ * só a tendência histórica de peso (essa tendência já define os macros específicos separadamente). */
+export function classifyPathFromBf(bodyFatPercent: number, sex: Sex): PathClassification {
+  const { bulkBelow, cutAbove } = BF_THRESHOLDS[sex];
+
+  if (bodyFatPercent >= cutAbove) {
+    return {
+      path: "cutting",
+      pathReason: `%BF (${bodyFatPercent}%) está acima de ${cutAbove}% — priorizar déficit calórico para reduzir gordura antes de buscar mais superávit.`,
+      surplusPercent: -0.2,
+    };
+  }
+  if (bodyFatPercent < bulkBelow) {
+    return {
+      path: "bulking",
+      pathReason: `%BF (${bodyFatPercent}%) está abaixo de ${bulkBelow}% — há margem para superávit calórico com foco em ganho de massa magra.`,
+      surplusPercent: 0.12,
+    };
+  }
+  return {
+    path: "normocalorico",
+    pathReason: `%BF (${bodyFatPercent}%) está na faixa intermediária (${bulkBelow}–${cutAbove}%) — manutenção é o ponto de partida mais seguro até definir prioridade.`,
+    surplusPercent: 0,
+  };
+}
+
 export function estimateBodyComposition(input: BodyCompositionInput): BodyCompositionResult {
   const { weightKg, heightCm, bodyFatPercent, age, sex, activityLevel } = input;
   const heightM = heightCm / 100;
@@ -92,24 +125,7 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
   const bmr = (bmrKatch + bmrMifflin) / 2;
   const tdee = bmr * ACTIVITY_MULTIPLIER[activityLevel];
 
-  const { bulkBelow, cutAbove } = BF_THRESHOLDS[sex];
-  let path: DietPath;
-  let pathReason: string;
-  let surplusPercent: number;
-
-  if (bodyFatPercent >= cutAbove) {
-    path = "cutting";
-    pathReason = `%BF (${bodyFatPercent}%) está acima de ${cutAbove}% — priorizar déficit calórico para reduzir gordura antes de buscar mais superávit.`;
-    surplusPercent = -0.2;
-  } else if (bodyFatPercent < bulkBelow) {
-    path = "bulking";
-    pathReason = `%BF (${bodyFatPercent}%) está abaixo de ${bulkBelow}% — há margem para superávit calórico com foco em ganho de massa magra.`;
-    surplusPercent = 0.12;
-  } else {
-    path = "normocalorico";
-    pathReason = `%BF (${bodyFatPercent}%) está na faixa intermediária (${bulkBelow}–${cutAbove}%) — manutenção é o ponto de partida mais seguro até definir prioridade.`;
-    surplusPercent = 0;
-  }
+  const { path, pathReason, surplusPercent } = classifyPathFromBf(bodyFatPercent, sex);
 
   const targetKcal = tdee * (1 + surplusPercent);
   const proteinPerKg = path === "cutting" ? 2.2 : path === "bulking" ? 1.9 : 2.0;
