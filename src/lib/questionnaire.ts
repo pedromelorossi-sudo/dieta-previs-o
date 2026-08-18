@@ -47,6 +47,7 @@ export const ACTIVITY_LABEL: Record<ActivityLevel, string> = {
 
 export type ExerciseFreq = "0" | "1-2" | "3-4" | "5+";
 export type DailyRoutine = "sedentaria" | "ativa" | "pesada";
+export type SessionDuration = "<30" | "30-60" | "60-90" | "90+";
 
 export const EXERCISE_FREQ_LABEL: Record<ExerciseFreq, string> = {
   "0": "Não treino atualmente",
@@ -59,6 +60,13 @@ export const DAILY_ROUTINE_LABEL: Record<DailyRoutine, string> = {
   sedentaria: "Sentado(a) a maior parte do dia (escritório, home office)",
   ativa: "Em pé/caminhando bastante (vendas, professor, etc.)",
   pesada: "Trabalho fisicamente pesado (construção, carga, etc.)",
+};
+
+export const SESSION_DURATION_LABEL: Record<SessionDuration, string> = {
+  "<30": "Menos de 30 minutos",
+  "30-60": "30 a 60 minutos",
+  "60-90": "60 a 90 minutos",
+  "90+": "Mais de 90 minutos",
 };
 
 const EXERCISE_INDEX: Record<ExerciseFreq, number> = { "0": 0, "1-2": 1, "3-4": 2, "5+": 3 };

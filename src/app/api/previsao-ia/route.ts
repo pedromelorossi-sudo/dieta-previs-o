@@ -5,7 +5,7 @@ import { predictNextCycle, E_SCENARIOS } from "@/lib/dietEngine";
 import { estimateBodyComposition, classifyPathFromBf, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { Cycle, GainComposition } from "@/lib/types";
-import { ActivityLevel, Restriction } from "@/lib/questionnaire";
+import { ActivityLevel, Restriction, ExerciseFreq, DailyRoutine, SessionDuration } from "@/lib/questionnaire";
 
 const ANGLE_LABEL: Record<string, string> = {
   frente: "Frente",
@@ -31,6 +31,9 @@ interface RequestBody {
   heightCm: number;
   age: number;
   activityLevel: ActivityLevel;
+  exerciseFreq?: ExerciseFreq;
+  dailyRoutine?: DailyRoutine;
+  sessionDuration?: SessionDuration;
   currentWeightKg: number;
   date: string;
   weeksToNextConsult: number;
@@ -169,6 +172,9 @@ export async function POST(request: Request) {
     heightCm,
     age,
     activityLevel,
+    exerciseFreq,
+    dailyRoutine,
+    sessionDuration,
     currentWeightKg,
     date,
     weeksToNextConsult,
@@ -280,6 +286,9 @@ export async function POST(request: Request) {
       age,
       sex,
       activityLevel,
+      exerciseFreq,
+      dailyRoutine,
+      sessionDuration,
     });
 
     // meio-termo entre a fórmula (Mifflin/Katch, erro documentado de ±10-15%, maior ainda em quem
@@ -295,7 +304,9 @@ export async function POST(request: Request) {
         empiricalTdee = currentIntakeKcal * 1.1; // comendo abaixo da manutenção
       }
     }
-    const blendedTdee = empiricalTdee != null ? (comp.tdee + empiricalTdee) / 2 : comp.tdee;
+    // peso 30% fórmula / 70% prática real — a fórmula é só uma média populacional (erro documentado
+    // de ±10-15%), a prática relatada pelo próprio usuário é dado direto, então pesa mais
+    const blendedTdee = empiricalTdee != null ? comp.tdee * 0.3 + empiricalTdee * 0.7 : comp.tdee;
     const blendedTargetKcal = blendedTdee * (1 + comp.surplusPercent);
     const blendedTargetCarbG = Math.max(0, (blendedTargetKcal - comp.targetProteinG * 4 - comp.targetFatG * 9) / 4);
 
@@ -331,7 +342,7 @@ export async function POST(request: Request) {
 
     const tdeeNote =
       empiricalTdee != null
-        ? `TDEE calculado como meio-termo entre a fórmula (${comp.tdee.toFixed(0)}kcal) e sua prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
+        ? `TDEE calculado com peso 30% fórmula (${comp.tdee.toFixed(0)}kcal) / 70% prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
         : `TDEE calculado só pela fórmula (${comp.tdee.toFixed(0)}kcal) — informe quanto você vem comendo e como o peso responde pra deixar essa conta mais realista.`;
 
     return NextResponse.json({

@@ -12,8 +12,10 @@ import {
   ACTIVITY_LABEL,
   ExerciseFreq,
   DailyRoutine,
+  SessionDuration,
   EXERCISE_FREQ_LABEL,
   DAILY_ROUTINE_LABEL,
+  SESSION_DURATION_LABEL,
   calculateActivityLevel,
   loadPreferences,
   savePreferences,
@@ -85,6 +87,7 @@ export default function PrevisaoIaPage() {
   const [age, setAge] = useState("");
   const [exerciseFreq, setExerciseFreq] = useState<ExerciseFreq | "">("");
   const [dailyRoutine, setDailyRoutine] = useState<DailyRoutine | "">("");
+  const [sessionDuration, setSessionDuration] = useState<SessionDuration | "">("");
   const activityLevel: ActivityLevel | null = useMemo(
     () => (exerciseFreq && dailyRoutine ? calculateActivityLevel(exerciseFreq, dailyRoutine) : null),
     [exerciseFreq, dailyRoutine]
@@ -124,11 +127,12 @@ export default function PrevisaoIaPage() {
       !!heightCm &&
       !!age &&
       !!activityLevel &&
+      (exerciseFreq === "0" || !!sessionDuration) &&
       parseFloat(weight) > 0 &&
       parseFloat(heightCm) > 0 &&
       parseFloat(age) > 0
     );
-  }, [files, weight, heightCm, age, activityLevel]);
+  }, [files, weight, heightCm, age, activityLevel, exerciseFreq, sessionDuration]);
 
   function handleFileChange(angle: Angle, f: File | null) {
     setFiles((prev) => ({ ...prev, [angle]: f ?? undefined }));
@@ -181,6 +185,9 @@ export default function PrevisaoIaPage() {
           heightCm: parseFloat(heightCm),
           age: parseFloat(age),
           activityLevel,
+          exerciseFreq: exerciseFreq || undefined,
+          dailyRoutine: dailyRoutine || undefined,
+          sessionDuration: sessionDuration || undefined,
           currentWeightKg: parseFloat(weight),
           date,
           weeksToNextConsult: parseFloat(weeks),
@@ -353,6 +360,20 @@ export default function PrevisaoIaPage() {
                 ))}
               </select>
             </Field>
+            {exerciseFreq && exerciseFreq !== "0" && (
+              <Field label="Quanto tempo dura cada sessão de treino, em média?">
+                <select value={sessionDuration} onChange={(e) => setSessionDuration(e.target.value as SessionDuration)} className="input">
+                  <option value="" disabled>
+                    Selecione…
+                  </option>
+                  {(Object.keys(SESSION_DURATION_LABEL) as SessionDuration[]).map((d) => (
+                    <option key={d} value={d}>
+                      {SESSION_DURATION_LABEL[d]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
           </div>
           {activityLevel && (
             <p className="text-xs text-muted mt-2">
