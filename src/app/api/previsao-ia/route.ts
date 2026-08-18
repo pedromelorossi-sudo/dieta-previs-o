@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { predictNextCycle } from "@/lib/dietEngine";
-import { estimateBodyComposition } from "@/lib/bodyComposition";
+import { estimateBodyComposition, PATH_LABEL, DietPath } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { Cycle, GainComposition } from "@/lib/types";
 import { ActivityLevel, Restriction } from "@/lib/questionnaire";
@@ -294,6 +294,9 @@ export async function POST(request: Request) {
       bfConfidence: bfRaw.bfConfidence,
       bfReasoning: bfRaw.bfReasoning,
       evolutionNote: bfRaw.evolutionNote || null,
+      strategy: comp.path,
+      strategyLabel: PATH_LABEL[comp.path],
+      strategyReason: comp.pathReason,
       recommendedKcal: comp.targetKcal,
       recommendedProteinG: comp.targetProteinG,
       recommendedFatG: comp.targetFatG,
@@ -453,9 +456,23 @@ ${evolutionInstruction}`;
     note: `Mantendo o padrão observado (${result.rateKgWeek >= 0 ? "+" : ""}${result.rateKgWeek.toFixed(2)} kg/semana), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
   };
 
+  // estratégia derivada do superávit médio já calculado pelo algoritmo (não é o Claude que decide isto)
+  const avgSurplus = (result.surplusPercentRange.min + result.surplusPercentRange.max) / 2;
+  const strategy: DietPath = avgSurplus > 0.03 ? "bulking" : avgSurplus < -0.03 ? "cutting" : "normocalorico";
+  const strategyReason = `Superávit médio de ${(avgSurplus * 100).toFixed(1)}% sobre a manutenção estimada (TDEE ${result.tdeeRange.min.toFixed(0)}–${result.tdeeRange.max.toFixed(0)}kcal), extraído da progressão do seu histórico — ${
+    strategy === "cutting"
+      ? "por isso o ciclo está em déficit, priorizando perda de gordura."
+      : strategy === "bulking"
+        ? "por isso o ciclo está em superávit, priorizando ganho de massa."
+        : "por isso o ciclo está perto da manutenção, sem grande variação de peso esperada."
+  }`;
+
   return NextResponse.json({
     isFirstCycle: false,
     oneMonthProjection,
+    strategy,
+    strategyLabel: PATH_LABEL[strategy],
+    strategyReason,
     bfPercentVisual: clamp(raw.bfPercentVisual, 3, 60),
     bfConfidence: raw.bfConfidence,
     bfReasoning: raw.bfReasoning,

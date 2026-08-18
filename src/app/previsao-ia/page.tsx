@@ -45,6 +45,9 @@ interface PredictionResponse {
   bfConfidence: "baixa" | "media" | "alta";
   bfReasoning: string;
   evolutionNote: string | null;
+  strategy: "cutting" | "normocalorico" | "bulking";
+  strategyLabel: string;
+  strategyReason: string;
   recommendedKcal: number;
   recommendedProteinG: number;
   recommendedFatG: number;
@@ -408,6 +411,14 @@ export default function PrevisaoIaPage() {
               <span className="ml-2 text-xs font-normal text-muted">confiança {result.bfConfidence}</span>
             </div>
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.bfReasoning}</p>
+          </div>
+
+          <div className="card p-5 border-accent/30">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <IconTarget className="h-4 w-4" /> Estratégia decidida
+            </div>
+            <div className="mt-2 text-xl font-semibold text-accent">{result.strategyLabel}</div>
+            <p className="text-sm text-muted mt-2 leading-relaxed">{result.strategyReason}</p>
           </div>
 
           {result.evolutionNote && (
