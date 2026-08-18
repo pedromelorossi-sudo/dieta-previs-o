@@ -46,6 +46,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <nav className="flex items-center gap-5 text-sm overflow-x-auto">
                   <NavLink href="/previsao-ia">Novo ciclo</NavLink>
                   <NavLink href="/dieta/novo">Montar dieta</NavLink>
+                  <NavLink href="/treino">Treino</NavLink>
                   <NavLink href="/">Histórico</NavLink>
                 </nav>
                 <div className="shrink-0">

@@ -97,3 +97,13 @@ export function IconClipboard({ className = base }: IconProps) {
     </svg>
   );
 }
+
+export function IconDumbbell({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M6.5 8.5v7M4 10v4" />
+      <path d="M17.5 8.5v7M20 10v4" />
+      <path d="M8.5 12h7" />
+    </svg>
+  );
+}
