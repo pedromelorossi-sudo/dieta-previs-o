@@ -83,6 +83,36 @@ function rowToCycle(row: CycleRow): Cycle {
 const BF_TOOL_NAME = "registrar_bf";
 const VISION_TOOL_NAME = "registrar_analise_visual";
 
+// Protocolo baseado em literatura de composição corporal (não em charts comerciais/não revisados).
+// Fontes: Majmudar et al. 2022, NPJ Digital Medicine (DOI 10.1038/s41746-022-00628-3) — validação de
+// %BF por foto via visão computacional (CNN) contra DXA em 134 adultos, erro médio 2,16%, mais preciso
+// que bioimpedância; sinal vem do contorno corporal, não de marcadores isolados. Ofenheimer et al. 2020,
+// Eur J Clin Nutr (DOI 10.1038/s41430-020-0596-5) — referência DXA de distribuição de gordura por sexo
+// (padrão andróide em homens vs. ginóide em mulheres). Kouri et al. 1995, Clin J Sport Med
+// (DOI 10.1097/00042752-199510000-00003) — teto de FFMI natural (~25) em atletas sem esteroides.
+const VISUAL_BF_PROTOCOL = `PROTOCOLO DE LEITURA VISUAL DE %BF (baseado em literatura científica de composição corporal, não em charts comerciais):
+
+1) BASE NO CONTORNO GERAL, NÃO EM UM MARCADOR ISOLADO. O estudo de validação mais robusto de %BF por foto (Majmudar et al. 2022, NPJ Digital Medicine) comparou fotos 2D contra DXA em 134 adultos e chegou a erro médio de 2,16% — mais preciso que bioimpedância — usando o contorno/silhueta corporal como sinal principal, não marcadores isolados como "aparece veia" ou "aparece abdômen". Leia a silhueta completa nos ângulos disponíveis (afunilamento cintura-ombro, circunferência de cintura relativa a tórax/quadril, espessura de tecido visível sobre costelas/flancos/lombar) antes de fixar um número.
+
+2) PADRÃO DE DISTRIBUIÇÃO DE GORDURA POR SEXO (referência DXA, Ofenheimer et al. 2020): homens acumulam gordura primeiro em padrão andróide — abdômen, flancos, lombar, só depois peito/braço — então a região mais diagnóstica no homem é abdômen/cintura/flanco, não braço ou perna. Mulheres acumulam em padrão ginóide — quadril, coxa, tríceps — então a região mais diagnóstica na mulher é quadril/coxa/tríceps; abdômen de mulher tende a "esconder" %BF mais alto do que o mesmo abdômen apresentaria num homem.
+
+3) ÂNCORAS VISUAIS POR FAIXA (ajuste pelo que as fotos realmente mostram — são âncoras de calibração, não categorias rígidas):
+HOMENS — essencial ~3-5%:
+- 3-5%: só em pico de palco por poucos dias; veias muito proeminentes em quase todo o corpo, estrias/striations até em glúteo e lombar, rosto visivelmente magro.
+- 6-9%: abdômen e serrátil muito definidos em qualquer luz, vascularidade visível em braço/abdômen mesmo em repouso, separação nítida entre grupos musculares.
+- 10-14%: abdômen definido mas sem striations profundas, vascularidade só quando contrai, cintura ainda "quadrada" (sem gordura acumulada em flanco).
+- 15-19%: contorno abdominal visível mas sem separação nítida, sem vascularidade em repouso, leve suavização em flanco/lombar.
+- 20-24%: abdômen liso ou com marcação só sob contração forte, acúmulo já visível em flanco/lombar/parte inferior do peito.
+- 25-29%: acúmulo claro em abdômen/flanco/lombar mesmo em repouso, sem separação muscular visível no tronco.
+- 30%+: acúmulo distribuído, contorno de cintura mais largo que o tórax em várias vistas.
+MULHERES — essencial ~10-13%: mesma lógica de progressão, mas leia a partir de quadril/coxa/tríceps, não do abdômen; some ~4-6 pontos percentuais à leitura que você faria "no olho masculino" do mesmo abdômen, porque a distribuição andróide/ginóide não é comparável 1:1.
+
+4) TETO DE PLAUSIBILIDADE MUSCULAR (Kouri et al. 1995): atletas naturais (sem esteroides) nesse estudo tiveram FFMI (índice de massa magra ajustado por altura) com teto bem definido em ~25 — mesmo o campeão Mr. America da era pré-esteroide (1939-1959) teve FFMI médio 25,4. Se o volume muscular na foto parecer muito acima do que a altura/estrutura do usuário sustentaria naturalmente, considere que pode ser inchaço/retenção/bomba pós-treino/ângulo de câmera em vez de massa magra real — isso enviesa %BF e composição do ganho para "mais seco" do que realmente é.
+
+5) PISO FISIOLÓGICO: não estime abaixo de ~4% (homem) ou ~10% (mulher) a menos que a foto mostre condição de palco inequívoca (striations generalizadas, veias em glúteo/lombar). A maioria dos usuários recreativos, mesmo "sarados", está entre 8-18% (homem) ou 18-26% (mulher).
+
+6) DIVERGÊNCIA ENTRE ÂNGULOS: se um ângulo sugere uma faixa e outro sugere outra (comum quando pose/luz mascaram gordura de um lado), priorize o ângulo lateral (mais confiável pra profundidade abdominal e curvatura lombar) e explique a divergência em bfReasoning.`;
+
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, Math.min(min, max)), Math.max(min, max));
 
 const GAIN_COMPOSITION_LABEL: Record<GainComposition, string> = Object.fromEntries(
@@ -232,8 +262,9 @@ export async function POST(request: Request) {
         model: "claude-opus-5",
         max_tokens: 900,
         output_config: { effort: "medium" },
-        system:
-          "Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.",
+        system: `Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.
+
+${VISUAL_BF_PROTOCOL}`,
         tools: [
           {
             name: BF_TOOL_NAME,
@@ -409,7 +440,11 @@ Além do %BF, decida a composição do ganho/perda desde o último ciclo — ist
 - "gordura": ganho majoritariamente gordura (perda de definição, sem separação muscular nova)
 Isso decide o E (energia por kg) usado no cálculo de TDEE do algoritmo — não é cosmético, afeta o número final.`;
 
-  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para (1) estimar %BF visualmente, cruzando os ângulos disponíveis, (2) comentar a evolução muscular percebida desde a foto anterior, se houver, e (3) decidir a composição do ganho/perda recente (músculo/misto/gordura) a partir da comparação visual com a foto anterior. Você NÃO calcula kcal, proteína, gordura ou carboidrato — isso é feito por um algoritmo determinístico a partir do que você decidir aqui. Responda só pela ferramenta fornecida, em português, direto e específico.`;
+  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para (1) estimar %BF visualmente, cruzando os ângulos disponíveis, (2) comentar a evolução muscular percebida desde a foto anterior, se houver, e (3) decidir a composição do ganho/perda recente (músculo/misto/gordura) a partir da comparação visual com a foto anterior. Você NÃO calcula kcal, proteína, gordura ou carboidrato — isso é feito por um algoritmo determinístico a partir do que você decidir aqui. Responda só pela ferramenta fornecida, em português, direto e específico.
+
+${VISUAL_BF_PROTOCOL}
+
+Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do item 4 do protocolo: um ganho "musculo" puro e rápido é raro mesmo em treino natural bem executado — se a foto atual parece muito mais seca E muito mais volumosa que a anterior ao mesmo tempo, desconfie de inchaço/retenção/luz antes de cravar "musculo".`;
 
   let visionResponse;
   try {

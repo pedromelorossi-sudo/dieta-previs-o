@@ -19,7 +19,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (ready && user) {
       loadCycles().then((c) => setCycles(sortByDate(c)));
-      loadMyComments().then(setComments);
+      loadMyComments()
+        .then(setComments)
+        .catch((e) => console.error("Erro ao carregar comentários do admin:", e));
     }
   }, [ready, user]);
 
