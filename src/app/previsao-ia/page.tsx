@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Cycle, GainComposition } from "@/lib/types";
-import { loadCycles, addCycle } from "@/lib/storage";
-import { E_SCENARIOS, sortByDate } from "@/lib/dietEngine";
+import { Cycle } from "@/lib/types";
+import { loadCycles, addCycle, deleteCycle } from "@/lib/storage";
+import { sortByDate } from "@/lib/dietEngine";
 import {
   Sex,
   ActivityLevel,
@@ -48,6 +48,9 @@ interface PredictionResponse {
   strategy: "cutting" | "normocalorico" | "bulking";
   strategyLabel: string;
   strategyReason: string;
+  gainComposition: "musculo" | "misto" | "gordura" | null;
+  gainCompositionLabel: string | null;
+  gainCompositionReasoning: string | null;
   recommendedKcal: number;
   recommendedProteinG: number;
   recommendedFatG: number;
@@ -86,9 +89,6 @@ export default function PrevisaoIaPage() {
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
   const [weeks, setWeeks] = useState("4");
-  const [composition, setComposition] = useState<GainComposition>("misto");
-  const [stabilityMode, setStabilityMode] = useState(false);
-  const [applyProteinStep, setApplyProteinStep] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +126,22 @@ export default function PrevisaoIaPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit || cycles === null) return;
+
+    // duas entradas na mesma data quebram o cálculo de taxa de variação (fica ~0, TDEE vira uma
+    // cópia do ciclo anterior) — em vez de deixar isso passar silenciosamente, confirma com o usuário
+    let effectiveCycles = cycles;
+    if (last && last.date === date) {
+      const overwrite = window.confirm(
+        `Já existe um ciclo registrado em ${fmtDate(date)} (${fmt(last.weightKg)}kg, ${fmt(last.kcal, 0)}kcal).\n\n` +
+          `Duas entradas na mesma data impedem calcular a taxa de variação corretamente.\n\n` +
+          `OK = substituir esse ciclo pelos dados de agora.\nCancelar = escolher outra data antes de gerar.`
+      );
+      if (!overwrite) return;
+      await deleteCycle(last.id);
+      effectiveCycles = cycles.filter((c) => c.id !== last.id);
+      setCycles(effectiveCycles);
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
@@ -152,9 +168,6 @@ export default function PrevisaoIaPage() {
           currentWeightKg: parseFloat(weight),
           date,
           weeksToNextConsult: parseFloat(weeks),
-          gainComposition: composition,
-          stabilityMode,
-          applyProteinStep,
         }),
       });
       const data = await res.json();
@@ -356,40 +369,13 @@ export default function PrevisaoIaPage() {
         {!isFirstCycle && (
           <div>
             <span className="block text-xs text-muted mb-2">3. Parâmetros da previsão</span>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Semanas até a próxima consulta">
-                <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
-              </Field>
-              <Field label="Composição do ganho">
-                <select
-                  value={composition}
-                  onChange={(e) => setComposition(e.target.value as GainComposition)}
-                  disabled={stabilityMode}
-                  className="input disabled:opacity-40"
-                >
-                  {E_SCENARIOS.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors mt-3">
-              <input type="checkbox" checked={stabilityMode} onChange={(e) => setStabilityMode(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
-              <span>
-                <span className="font-medium">Modo estabilidade</span>
-                <span className="block text-muted text-xs mt-0.5">Peso ficou parado 2-3 semanas na ingestão atual.</span>
-              </span>
-            </label>
-
-            <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors mt-3">
-              <input type="checkbox" checked={applyProteinStep} onChange={(e) => setApplyProteinStep(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
-              <span>
-                <span className="font-medium">Aplicar degrau de proteína (+0,1 g/kg)</span>
-              </span>
-            </label>
+            <Field label="Semanas até a próxima consulta">
+              <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
+            </Field>
+            <p className="text-xs text-muted mt-2">
+              Composição do ganho (músculo/misto/gordura) é decidida pela IA comparando com sua foto anterior — não
+              precisa escolher.
+            </p>
           </div>
         )}
 
@@ -427,6 +413,16 @@ export default function PrevisaoIaPage() {
                 <IconTarget className="h-4 w-4" /> Evolução muscular
               </div>
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.evolutionNote}</p>
+            </div>
+          )}
+
+          {result.gainCompositionLabel && (
+            <div className="card p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconDrumstick className="h-4 w-4" /> Composição do ganho (decidida pela IA)
+              </div>
+              <div className="mt-2 text-lg font-semibold">{result.gainCompositionLabel}</div>
+              <p className="text-sm text-muted mt-2 leading-relaxed">{result.gainCompositionReasoning}</p>
             </div>
           )}
 

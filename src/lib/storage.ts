@@ -55,3 +55,9 @@ export async function addCycle(cycle: Cycle): Promise<void> {
   });
   if (error) throw error;
 }
+
+export async function deleteCycle(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("cycles").delete().eq("id", id);
+  if (error) throw error;
+}

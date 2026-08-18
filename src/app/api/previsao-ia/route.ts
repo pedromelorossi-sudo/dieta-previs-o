@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { predictNextCycle } from "@/lib/dietEngine";
+import { predictNextCycle, E_SCENARIOS } from "@/lib/dietEngine";
 import { estimateBodyComposition, classifyPathFromBf, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { Cycle, GainComposition } from "@/lib/types";
@@ -31,9 +31,6 @@ interface RequestBody {
   currentWeightKg: number;
   date: string;
   weeksToNextConsult: number;
-  gainComposition: GainComposition;
-  stabilityMode: boolean;
-  applyProteinStep: boolean;
 }
 
 interface CycleRow {
@@ -71,9 +68,13 @@ function rowToCycle(row: CycleRow, id: string): Cycle {
 }
 
 const BF_TOOL_NAME = "registrar_bf";
-const PLAN_TOOL_NAME = "registrar_previsao";
+const VISION_TOOL_NAME = "registrar_analise_visual";
 
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, Math.min(min, max)), Math.max(min, max));
+
+const GAIN_COMPOSITION_LABEL: Record<GainComposition, string> = Object.fromEntries(
+  E_SCENARIOS.map((s) => [s.key, s.label])
+) as Record<GainComposition, string>;
 
 function buildImageBlocks(photos: PhotoInput[]): Anthropic.ContentBlockParam[] {
   const blocks: Anthropic.ContentBlockParam[] = [];
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });
   }
 
-  const { photos, sex, heightCm, age, activityLevel, currentWeightKg, date, weeksToNextConsult, gainComposition, stabilityMode, applyProteinStep } = body;
+  const { photos, sex, heightCm, age, activityLevel, currentWeightKg, date, weeksToNextConsult } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
     return NextResponse.json({ error: "Envie pelo menos a foto de frente." }, { status: 400 });
@@ -297,6 +298,9 @@ export async function POST(request: Request) {
       strategy: comp.path,
       strategyLabel: PATH_LABEL[comp.path],
       strategyReason: comp.pathReason,
+      gainComposition: null,
+      gainCompositionLabel: null,
+      gainCompositionReasoning: null,
       recommendedKcal: comp.targetKcal,
       recommendedProteinG: comp.targetProteinG,
       recommendedFatG: comp.targetFatG,
@@ -315,21 +319,8 @@ export async function POST(request: Request) {
     });
   }
 
-  // ---- ciclos seguintes: usa o algoritmo determinístico de progressão + Claude escolhe o ponto na faixa ----
+  // ---- ciclos seguintes ----
   const history = cycleRows.map((row, i) => rowToCycle(row as CycleRow, String(i)));
-
-  const result = predictNextCycle({
-    history,
-    currentWeightKg,
-    currentDate: date,
-    weeksToNextConsult,
-    gainComposition,
-    stabilityMode,
-    applyProteinStep,
-  });
-  if (!result) {
-    return NextResponse.json({ error: "Não foi possível calcular a previsão a partir do histórico." }, { status: 400 });
-  }
 
   const historyText = history
     .map(
@@ -338,42 +329,32 @@ export async function POST(request: Request) {
     )
     .join("\n");
 
-  const contextText = `Histórico de ciclos:
+  const visionContextText = `Histórico de ciclos:
 ${historyText}
 
 Contexto do usuário: sexo ${sex}, altura ${heightCm}cm, peso atual informado ${currentWeightKg}kg em ${date}.
 
-Regras extraídas do histórico pelo algoritmo determinístico (NÃO recalcule, use como estão):
-- kcal/kg projetado pela tendência histórica: ${result.rules.kcalPerKgExtrapolated.toFixed(2)} (cuidado: isso só continua a direção que o histórico já vinha seguindo — se o %BF pedir uma estratégia diferente da tendência, esse número deixa de valer)
-- proteína/kg: ${result.proteinPerKgUsed.toFixed(2)}
-- gordura/kg: ${result.fatPerKgUsed.toFixed(2)}
-- taxa de variação observada: ${result.rateKgWeek.toFixed(3)} kg/semana
-- TDEE estimado (manutenção real, calculado a partir da resposta do próprio usuário): ${result.tdeeRange.min.toFixed(0)}–${result.tdeeRange.max.toFixed(0)}kcal
-- peso projetado em ${weeksToNextConsult} semana(s): ${result.projectedWeightRange.min.toFixed(1)}–${result.projectedWeightRange.max.toFixed(1)}kg
+${evolutionInstruction}
 
-Faixas de proteína/gordura já calculadas pelo algoritmo (seus valores recomendados DEVEM ficar dentro destas faixas):
-- proteína: ${result.proteinRange.min.toFixed(1)}–${result.proteinRange.max.toFixed(1)}g
-- gordura: ${result.fatRange.min.toFixed(1)}–${result.fatRange.max.toFixed(1)}g
+Além do %BF, decida a composição do ganho/perda desde o último ciclo — isto é, o quanto da mudança de peso parece ser músculo vs. gordura, cruzando a foto atual com a anterior (se houver) e a variação de peso registrada:
+- "musculo": ganho quase todo massa magra (físico mais definido/cheio sem acúmulo de gordura visível)
+- "misto": mistura de músculo e gordura (padrão mais comum em bulk)
+- "gordura": ganho majoritariamente gordura (perda de definição, sem separação muscular nova)
+Isso decide o E (energia por kg) usado no cálculo de TDEE do algoritmo — não é cosmético, afeta o número final.`;
 
-Kcal: sua estimativa de %BF vai decidir a estratégia (cutting/normocalórico/bulking), e o kcal final será recalculado a partir do TDEE acima + o superávit/déficit dessa estratégia — não da extrapolação da tendência histórica. Dê seu melhor palpite de kcal mesmo assim, mas não se preocupe em bater exatamente na faixa histórica.
+  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para (1) estimar %BF visualmente, cruzando os ângulos disponíveis, (2) comentar a evolução muscular percebida desde a foto anterior, se houver, e (3) decidir a composição do ganho/perda recente (músculo/misto/gordura) a partir da comparação visual com a foto anterior. Você NÃO calcula kcal, proteína, gordura ou carboidrato — isso é feito por um algoritmo determinístico a partir do que você decidir aqui. Responda só pela ferramenta fornecida, em português, direto e específico.`;
 
-Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplicado: ${applyProteinStep ? "sim" : "não"}.
-
-${evolutionInstruction}`;
-
-  const SYSTEM_PROMPT = `Você é um assistente que lê fotos de físico (frente, costas, laterais) para estimar %BF visualmente e, em seguida, monta a prescrição do próximo ciclo de dieta — mas usando exclusivamente os parâmetros e faixas numéricas já calculados pelo algoritmo determinístico do usuário, fornecidos no contexto. Você NÃO deve inventar sua própria metodologia de cálculo de macros nem sair das faixas fornecidas — seu papel é (1) estimar %BF a partir da evidência visual das fotos, cruzando os ângulos disponíveis, (2) escolher, dentro de cada faixa já calculada, o ponto que melhor se encaixa com o que a foto mostra, e (3) se houver foto anterior, comentar a evolução muscular percebida. Responda só pela ferramenta fornecida. Seja direto e específico, sem jargão excessivo, em português.`;
-
-  let response;
+  let visionResponse;
   try {
-    response = await client.messages.create({
+    visionResponse = await client.messages.create({
       model: "claude-opus-5",
-      max_tokens: 1500,
+      max_tokens: 1000,
       output_config: { effort: "medium" },
       system: SYSTEM_PROMPT,
       tools: [
         {
-          name: PLAN_TOOL_NAME,
-          description: "Registra a estimativa visual de %BF e a prescrição recomendada para o próximo ciclo.",
+          name: VISION_TOOL_NAME,
+          description: "Registra a leitura visual das fotos: %BF, evolução e composição do ganho/perda.",
           input_schema: {
             type: "object",
             properties: {
@@ -381,28 +362,15 @@ ${evolutionInstruction}`;
               bfConfidence: { type: "string", enum: ["baixa", "media", "alta"] },
               bfReasoning: { type: "string", description: "1-2 frases explicando a leitura visual." },
               evolutionNote: { type: "string" },
-              recommendedKcal: { type: "number" },
-              recommendedProteinG: { type: "number" },
-              recommendedFatG: { type: "number" },
-              recommendedCarbG: { type: "number" },
-              note: { type: "string", description: "Nota curta em português, tom de coach, até 120 palavras." },
+              gainComposition: { type: "string", enum: ["musculo", "misto", "gordura"] },
+              gainCompositionReasoning: { type: "string", description: "1-2 frases explicando a escolha, com base na comparação visual." },
             },
-            required: [
-              "bfPercentVisual",
-              "bfConfidence",
-              "bfReasoning",
-              "evolutionNote",
-              "recommendedKcal",
-              "recommendedProteinG",
-              "recommendedFatG",
-              "recommendedCarbG",
-              "note",
-            ],
+            required: ["bfPercentVisual", "bfConfidence", "bfReasoning", "evolutionNote", "gainComposition", "gainCompositionReasoning"],
           },
         },
       ],
-      tool_choice: { type: "tool", name: PLAN_TOOL_NAME },
-      messages: [{ role: "user", content: [...buildImageBlocks(photos), ...evolutionBlocks, { type: "text", text: contextText }] }],
+      tool_choice: { type: "tool", name: VISION_TOOL_NAME },
+      messages: [{ role: "user", content: [...buildImageBlocks(photos), ...evolutionBlocks, { type: "text", text: visionContextText }] }],
     });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
@@ -413,50 +381,62 @@ ${evolutionInstruction}`;
     return NextResponse.json({ error: "Erro inesperado ao chamar a análise por imagem." }, { status: 502 });
   }
 
-  const toolBlock = response.content.find((b) => b.type === "tool_use" && b.name === PLAN_TOOL_NAME);
-  if (!toolBlock || toolBlock.type !== "tool_use") {
-    return NextResponse.json({ error: "O modelo não retornou uma prescrição válida." }, { status: 422 });
+  const visionBlock = visionResponse.content.find((b) => b.type === "tool_use" && b.name === VISION_TOOL_NAME);
+  if (!visionBlock || visionBlock.type !== "tool_use") {
+    return NextResponse.json({ error: "O modelo não retornou uma análise visual válida." }, { status: 422 });
   }
 
-  const raw = toolBlock.input as {
+  const vision = visionBlock.input as {
     bfPercentVisual: number;
     bfConfidence: "baixa" | "media" | "alta";
     bfReasoning: string;
     evolutionNote: string;
-    recommendedKcal: number;
-    recommendedProteinG: number;
-    recommendedFatG: number;
-    recommendedCarbG: number;
-    note: string;
+    gainComposition: GainComposition;
+    gainCompositionReasoning: string;
   };
 
-  // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo). O kcal NÃO vem mais da
-  // extrapolação pura do histórico (rules.kcalPerKgExtrapolated) — essa extrapolação só continua a
-  // direção que o histórico já vinha seguindo (ex: bulking), e não tem como "desligar" sozinha quando
-  // o %BF pede uma troca de estratégia. Em vez disso, usa o TDEE real do algoritmo (calculado a partir
-  // da resposta observada do próprio usuário, não uma fórmula genérica) + o superávit/déficit da
-  // estratégia decidida — assim o número sempre acompanha a estratégia, não só a etiqueta.
-  const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(
-    clamp(raw.bfPercentVisual, 3, 60),
-    sex
-  );
+  const bfPercentVisual = clamp(vision.bfPercentVisual, 3, 60);
+  const gainComposition: GainComposition = ["musculo", "misto", "gordura"].includes(vision.gainComposition)
+    ? vision.gainComposition
+    : "misto";
+
+  // daqui pra baixo é tudo determinístico — o Claude só decidiu %BF e composição do ganho acima.
+  // stabilityMode e applyProteinStep não são mais escolhas manuais — o algoritmo roda no modo padrão
+  // (taxa observada + E da composição decidida), sem ajustes subjetivos do usuário por cima.
+  const result = predictNextCycle({
+    history,
+    currentWeightKg,
+    currentDate: date,
+    weeksToNextConsult,
+    gainComposition,
+    stabilityMode: false,
+    applyProteinStep: false,
+  });
+  if (!result) {
+    return NextResponse.json({ error: "Não foi possível calcular a previsão a partir do histórico." }, { status: 400 });
+  }
+
+  // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo). O kcal vem do TDEE real do
+  // algoritmo (calculado a partir da resposta observada do próprio usuário, usando o E da composição
+  // decidida acima) + o superávit/déficit da estratégia — não da extrapolação pura da tendência histórica,
+  // que só continuaria a direção que o histórico já vinha seguindo e não "desligaria" sozinha.
+  const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(bfPercentVisual, sex);
 
   const kcalStrategyRange = {
     min: result.tdeeRange.min * (1 + strategySurplusPercent),
     max: result.tdeeRange.max * (1 + strategySurplusPercent),
   };
+  const recommendedKcal = (kcalStrategyRange.min + kcalStrategyRange.max) / 2;
+  const recommendedProteinG = (result.proteinRange.min + result.proteinRange.max) / 2;
+  const recommendedFatG = (result.fatRange.min + result.fatRange.max) / 2;
 
-  const recommendedKcal = clamp(raw.recommendedKcal, kcalStrategyRange.min, kcalStrategyRange.max);
-  const recommendedProteinG = clamp(raw.recommendedProteinG, result.proteinRange.min, result.proteinRange.max);
-  const recommendedFatG = clamp(raw.recommendedFatG, result.fatRange.min, result.fatRange.max);
-
-  // carboidrato é resíduo de kcal - proteína - gordura — recalcula a partir do novo kcal (não do
-  // kcalRange antigo baseado em extrapolação), senão fica inconsistente com o kcal recomendado de fato
+  // carboidrato é resíduo de kcal - proteína - gordura, a partir do novo kcal (não do kcalRange antigo
+  // baseado em extrapolação), senão fica inconsistente com o kcal recomendado de fato
   const carbStrategyRange = {
     min: Math.max(0, (kcalStrategyRange.min - result.proteinRange.max * 4 - result.fatRange.max * 9) / 4),
     max: Math.max(0, (kcalStrategyRange.max - result.proteinRange.min * 4 - result.fatRange.min * 9) / 4),
   };
-  const recommendedCarbG = clamp(raw.recommendedCarbG, carbStrategyRange.min, carbStrategyRange.max);
+  const recommendedCarbG = (carbStrategyRange.min + carbStrategyRange.max) / 2;
 
   let meals, dietWarnings;
   try {
@@ -491,15 +471,18 @@ ${evolutionInstruction}`;
     strategy,
     strategyLabel: PATH_LABEL[strategy],
     strategyReason,
-    bfPercentVisual: clamp(raw.bfPercentVisual, 3, 60),
-    bfConfidence: raw.bfConfidence,
-    bfReasoning: raw.bfReasoning,
-    evolutionNote: raw.evolutionNote || null,
+    gainComposition,
+    gainCompositionLabel: GAIN_COMPOSITION_LABEL[gainComposition],
+    gainCompositionReasoning: vision.gainCompositionReasoning,
+    bfPercentVisual,
+    bfConfidence: vision.bfConfidence,
+    bfReasoning: vision.bfReasoning,
+    evolutionNote: vision.evolutionNote || null,
     recommendedKcal,
     recommendedProteinG,
     recommendedFatG,
     recommendedCarbG,
-    note: raw.note,
+    note: `${strategyReason} ${vision.gainCompositionReasoning}`,
     ranges: {
       kcal: kcalStrategyRange,
       protein: result.proteinRange,
