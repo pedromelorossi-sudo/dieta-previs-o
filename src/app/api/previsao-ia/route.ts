@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { predictNextCycle, E_SCENARIOS } from "@/lib/dietEngine";
-import { estimateBodyComposition, classifyPathFromBf, PATH_LABEL } from "@/lib/bodyComposition";
+import { estimateBodyComposition, classifyPathFromBf, scoreRecoverySignals, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { Cycle, GainComposition } from "@/lib/types";
 import {
@@ -31,6 +31,7 @@ interface PhotoInput {
 
 type WeightTrend = "subindo" | "descendo" | "estavel" | "nao_sei";
 type Adherence = "seguiu" | "comeu_mais" | "comeu_menos" | "nao_acompanhou";
+type StrengthTrend = "subiu" | "manteve" | "caiu";
 
 interface RequestBody {
   photos: PhotoInput[];
@@ -57,6 +58,13 @@ interface RequestBody {
   weightTrend?: WeightTrend;
   lastCycleAdherence?: Adherence;
   lastCycleActualKcal?: number;
+  /** sinais de recuperação do ciclo que terminou — usados pra suavizar/zerar o déficit do próximo ciclo
+   * se o anterior foi agressivo demais (ver scoreRecoverySignals em bodyComposition.ts) */
+  lastCycleStrengthTrend?: StrengthTrend;
+  lastCycleMissedSessionsFatigue?: number;
+  lastCycleSleepHoursAvg?: number;
+  lastCycleSleepDisturbance?: boolean;
+  lastCycleDaytimeFatigue?: boolean;
 }
 
 interface CycleRow {
@@ -237,6 +245,11 @@ export async function POST(request: Request) {
     weightTrend,
     lastCycleAdherence,
     lastCycleActualKcal,
+    lastCycleStrengthTrend,
+    lastCycleMissedSessionsFatigue,
+    lastCycleSleepHoursAvg,
+    lastCycleSleepDisturbance,
+    lastCycleDaytimeFatigue,
   } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
@@ -553,11 +566,27 @@ Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do
     return NextResponse.json({ error: "Não foi possível calcular a previsão a partir do histórico." }, { status: 400 });
   }
 
+  // sinais objetivos de que o déficit do ciclo anterior foi agressivo demais (carga caindo na academia,
+  // treinos pulados por cansaço, sono ruim) — não é o usuário se autoavaliando, são fatos observáveis
+  // (Garthe et al. 2011; Mountjoy et al. 2023 REDs; Kenttä & Hassmén 1998 — ver scoreRecoverySignals)
+  const recoveryScore = scoreRecoverySignals({
+    strengthTrend: lastCycleStrengthTrend,
+    missedSessionsFatigue: lastCycleMissedSessionsFatigue,
+    sleepHoursAvgLastCycle: lastCycleSleepHoursAvg,
+    sleepDisturbanceLastCycle: lastCycleSleepDisturbance,
+    daytimeFatigueLastCycle: lastCycleDaytimeFatigue,
+  });
+
   // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo). O kcal vem do TDEE real do
   // algoritmo (calculado a partir da resposta observada do próprio usuário, usando o E da composição
   // decidida acima) + o superávit/déficit da estratégia — não da extrapolação pura da tendência histórica,
-  // que só continuaria a direção que o histórico já vinha seguindo e não "desligaria" sozinha.
-  const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(bfPercentVisual, sex);
+  // que só continuaria a direção que o histórico já vinha seguindo e não "desligaria" sozinha. O déficit
+  // em si é suavizado/zerado automaticamente se recoveryScore indicar que o ciclo anterior foi pesado demais.
+  const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(
+    bfPercentVisual,
+    sex,
+    recoveryScore
+  );
 
   const kcalStrategyRange = {
     min: result.tdeeRange.min * (1 + strategySurplusPercent),
@@ -628,6 +657,7 @@ Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do
       weight: result.projectedWeightRange,
     },
     rateKgWeek: result.rateKgWeek,
+    recoveryScore,
     meals,
     dietWarnings,
   });

@@ -266,13 +266,61 @@ export interface PathClassification {
   surplusPercent: number;
 }
 
+export interface RecoverySignals {
+  /** carga/repetições nos exercícios principais comparado ao início do ciclo anterior — o marcador
+   * validado de que o déficit está grande demais (Garthe et al. 2011), não uma sensação subjetiva */
+  strengthTrend?: "subiu" | "manteve" | "caiu";
+  /** quantos treinos foram pulados ou encurtados por cansaço/indisposição no ciclo anterior (não por
+   * falta de tempo) — fato contável, não autoavaliação */
+  missedSessionsFatigue?: number;
+  sleepHoursAvgLastCycle?: number;
+  sleepDisturbanceLastCycle?: boolean;
+  daytimeFatigueLastCycle?: boolean;
+}
+
+/** Pontua sinais objetivos de déficit calórico agressivo demais no ciclo que terminou — nunca pede pro
+ * usuário se autoavaliar como "muito cansado", só fatos observáveis (carga na barra, treinos pulados,
+ * sono). Base científica:
+ * - Garthe et al. 2011 (Int J Sport Nutr Exerc Metab, DOI 10.1123/ijsnem.21.2.97): atletas perdendo peso
+ *   a ~0,7%/semana ganharam massa magra e força; a ~1,4%/semana a massa magra estagnou e a força não
+ *   evoluiu do mesmo jeito, apesar de perda de gordura parecida — carga na barra caindo é sinal forte.
+ * - Mountjoy et al. 2023, consenso do COI sobre REDs (Br J Sports Med, DOI 10.1136/bjsports-2023-106994):
+ *   framework de referência pra sinais de baixa disponibilidade energética (sono, recuperação, fadiga).
+ * - Kenttä & Hassmén 1998 (Sports Med, DOI 10.2165/00007256-199826010-00001): recuperação insuficiente
+ *   documentada via sono e capacidade de completar sessões de treino, não por opinião sobre a intensidade. */
+export function scoreRecoverySignals(signals: RecoverySignals): number {
+  let score = 0;
+  if (signals.strengthTrend === "caiu") score += 2;
+  if ((signals.missedSessionsFatigue ?? 0) >= 2) score += 1;
+  if (signals.sleepHoursAvgLastCycle != null && signals.sleepHoursAvgLastCycle < 6.5) score += 1;
+  if (signals.sleepDisturbanceLastCycle) score += 1;
+  if (signals.daytimeFatigueLastCycle) score += 1;
+  return score;
+}
+
 /** Decide a estratégia (cutting/normocalórico/bulking) a partir do %BF atual — usada tanto no primeiro
  * ciclo quanto nos seguintes, já que a estratégia deve refletir a composição corporal de agora, não
- * só a tendência histórica de peso (essa tendência já define os macros específicos separadamente). */
-export function classifyPathFromBf(bodyFatPercent: number, sex: Sex): PathClassification {
+ * só a tendência histórica de peso (essa tendência já define os macros específicos separadamente).
+ * `recoveryScore` (0 no primeiro ciclo, sem ciclo anterior pra avaliar) suaviza ou zera o déficit quando
+ * o ciclo anterior mostrou sinais concorrentes de deficit agressivo demais — ver scoreRecoverySignals. */
+export function classifyPathFromBf(bodyFatPercent: number, sex: Sex, recoveryScore = 0): PathClassification {
   const { bulkBelow, cutAbove } = BF_THRESHOLDS[sex];
 
   if (bodyFatPercent >= cutAbove) {
+    if (recoveryScore >= 4) {
+      return {
+        path: "normocalorico",
+        pathReason: `%BF (${bodyFatPercent}%) indicaria déficit, mas o ciclo anterior teve vários sinais concorrentes de déficit agressivo demais (carga caindo na academia, treinos pulados por cansaço, sono ruim) — ciclo de manutenção pra recuperar antes de retomar o cutting.`,
+        surplusPercent: 0,
+      };
+    }
+    if (recoveryScore >= 2) {
+      return {
+        path: "cutting",
+        pathReason: `%BF (${bodyFatPercent}%) está acima de ${cutAbove}% — segue em déficit, mas reduzido (de -20% para -10%) porque o ciclo anterior mostrou sinais de déficit grande demais (carga/sono/cansaço).`,
+        surplusPercent: -0.1,
+      };
+    }
     return {
       path: "cutting",
       pathReason: `%BF (${bodyFatPercent}%) está acima de ${cutAbove}% — priorizar déficit calórico para reduzir gordura antes de buscar mais superávit.`,

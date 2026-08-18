@@ -72,6 +72,7 @@ interface PredictionResponse {
     weight: { min: number; max: number };
   };
   rateKgWeek: number;
+  recoveryScore?: number;
   meals: DietMeal[];
   dietWarnings: string[];
   oneMonthProjection: {
@@ -140,6 +141,16 @@ export default function PrevisaoIaPage() {
   const [weightTrend, setWeightTrend] = useState<"" | "subindo" | "descendo" | "estavel" | "nao_sei">("");
   const [adherence, setAdherence] = useState<"" | "seguiu" | "comeu_mais" | "comeu_menos" | "nao_acompanhou">("");
   const [actualKcal, setActualKcal] = useState("");
+
+  // sinais objetivos de recuperação do ciclo que terminou — fatos observáveis (carga na barra, treinos
+  // pulados por cansaço, sono), não autoavaliação de "quão cansado". Usado pra suavizar automaticamente
+  // o déficit do próximo ciclo se o anterior foi agressivo demais (ver scoreRecoverySignals).
+  const [strengthTrend, setStrengthTrend] = useState<"" | "subiu" | "manteve" | "caiu">("");
+  const [missedSessionsFatigue, setMissedSessionsFatigue] = useState("");
+  const [sleepHoursAvg, setSleepHoursAvg] = useState("");
+  const [sleepDisturbance, setSleepDisturbance] = useState<"" | "sim" | "nao">("");
+  const [daytimeFatigue, setDaytimeFatigue] = useState<"" | "sim" | "nao">("");
+
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
   const [weeks, setWeeks] = useState("4");
@@ -261,6 +272,11 @@ export default function PrevisaoIaPage() {
           weightTrend: weightTrend || undefined,
           lastCycleAdherence: adherence || undefined,
           lastCycleActualKcal: actualKcal ? parseFloat(actualKcal) : undefined,
+          lastCycleStrengthTrend: strengthTrend || undefined,
+          lastCycleMissedSessionsFatigue: missedSessionsFatigue ? parseFloat(missedSessionsFatigue) : undefined,
+          lastCycleSleepHoursAvg: sleepHoursAvg ? parseFloat(sleepHoursAvg) : undefined,
+          lastCycleSleepDisturbance: sleepDisturbance ? sleepDisturbance === "sim" : undefined,
+          lastCycleDaytimeFatigue: daytimeFatigue ? daytimeFatigue === "sim" : undefined,
         }),
       });
       const data = await res.json();
@@ -713,6 +729,58 @@ export default function PrevisaoIaPage() {
               Isso corrige o cálculo de TDEE pra usar o que você realmente comeu, não o que foi prescrito — importa
               porque o algoritmo retrocalcula seu gasto real a partir disso.
             </p>
+
+            <p className="text-xs text-muted mt-5 mb-2">
+              Sobre o ciclo que terminou — isso decide se o déficit foi grande demais e ajusta automaticamente o
+              próximo, sem você precisar avaliar "quão cansado" se sentiu.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Comparado ao início desse ciclo, sua carga nos exercícios principais:">
+                <select value={strengthTrend} onChange={(e) => setStrengthTrend(e.target.value as typeof strengthTrend)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="subiu">Consegui subir carga ou repetições</option>
+                  <option value="manteve">Mantive a mesma carga</option>
+                  <option value="caiu">Precisei reduzir carga ou repetições</option>
+                </select>
+              </Field>
+              <Field label="Quantos treinos você pulou ou encurtou por cansaço nesse ciclo (não por falta de tempo)?">
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={missedSessionsFatigue}
+                  onChange={(e) => setMissedSessionsFatigue(e.target.value)}
+                  className="input"
+                  placeholder="ex: 0"
+                />
+              </Field>
+              <Field label="Quantas horas você dormiu, em média, por noite nesse ciclo?">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="14"
+                  value={sleepHoursAvg}
+                  onChange={(e) => setSleepHoursAvg(e.target.value)}
+                  className="input"
+                  placeholder="ex: 7"
+                />
+              </Field>
+              <Field label="Notou mais dificuldade pra dormir ou acordou mais vezes que o normal?">
+                <select value={sleepDisturbance} onChange={(e) => setSleepDisturbance(e.target.value as typeof sleepDisturbance)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="nao">Não</option>
+                  <option value="sim">Sim</option>
+                </select>
+              </Field>
+              <Field label="Fora do treino, precisou de cochilos ou parar atividades por cansaço que não sentia antes desse ciclo?">
+                <select value={daytimeFatigue} onChange={(e) => setDaytimeFatigue(e.target.value as typeof daytimeFatigue)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="nao">Não</option>
+                  <option value="sim">Sim</option>
+                </select>
+              </Field>
+            </div>
           </div>
         )}
 
