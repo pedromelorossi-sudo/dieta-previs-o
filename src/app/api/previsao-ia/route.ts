@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { predictNextCycle, E_SCENARIOS } from "@/lib/dietEngine";
 import { estimateBodyComposition, classifyPathFromBf, scoreRecoverySignals, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
+import { planMonths } from "@/lib/periodization";
 import { Cycle, GainComposition } from "@/lib/types";
 import {
   ActivityLevel,
@@ -423,9 +424,18 @@ ${VISUAL_BF_PROTOCOL}`,
         ? `TDEE calculado com peso 30% fórmula (${comp.tdee.toFixed(0)}kcal) / 70% prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
         : `TDEE calculado só pela fórmula (${comp.tdee.toFixed(0)}kcal) — informe quanto você vem comendo e como o peso responde pra deixar essa conta mais realista.`;
 
+    const monthlyPlan = planMonths({
+      currentWeightKg,
+      currentBfPercent: clamp(bfRaw.bfPercentVisual, 3, 60),
+      sex,
+      tdee: blendedTdee,
+      monthsAhead: 6,
+    });
+
     return NextResponse.json({
       isFirstCycle: true,
       oneMonthProjection,
+      monthlyPlan,
       activityLevelDisplay: comp.activityLevelDisplay,
       bfPercentVisual: clamp(bfRaw.bfPercentVisual, 3, 60),
       bfConfidence: bfRaw.bfConfidence,
@@ -631,6 +641,15 @@ Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do
     note: `Com o kcal recomendado (${recommendedKcal.toFixed(0)}kcal, ${PATH_LABEL[strategy]}) frente à manutenção estimada (~${tdeeMid.toFixed(0)}kcal), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
   };
 
+  const monthlyPlan = planMonths({
+    currentWeightKg,
+    currentBfPercent: bfPercentVisual,
+    sex,
+    tdee: tdeeMid,
+    monthsAhead: 6,
+    recoveryScore,
+  });
+
   return NextResponse.json({
     isFirstCycle: false,
     oneMonthProjection,
@@ -658,6 +677,7 @@ Para decidir gainComposition, aplique o mesmo teto de plausibilidade muscular do
     },
     rateKgWeek: result.rateKgWeek,
     recoveryScore,
+    monthlyPlan,
     meals,
     dietWarnings,
   });

@@ -79,6 +79,18 @@ interface PredictionResponse {
     weightRange: { min: number; max: number };
     note: string;
   };
+  monthlyPlan?: {
+    monthIndex: number;
+    label: string;
+    phase: "cutting" | "normocalorico" | "bulking";
+    phaseLabel: string;
+    phaseReason: string;
+    recommendedKcal: number;
+    startWeightKg: number;
+    endWeightKg: number;
+    startBfPercent: number;
+    endBfPercent: number;
+  }[];
 }
 
 export default function PrevisaoIaPage() {
@@ -820,6 +832,42 @@ export default function PrevisaoIaPage() {
             <div className="mt-2 text-xl font-semibold text-accent">{result.strategyLabel}</div>
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.strategyReason}</p>
           </div>
+
+          {result.monthlyPlan && result.monthlyPlan.length > 0 && (
+            <div className="card p-5 animate-fade-in-up stagger-2">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconClipboard className="h-4 w-4" /> Planejamento dos próximos meses
+              </div>
+              <p className="text-xs text-muted mt-2 leading-relaxed">
+                Projeção de trabalho, mês a mês: a fase muda sozinha quando o %BF projetado cruza os limiares — não
+                é garantia, cada ciclo real com fotos recalibra a rota.
+              </p>
+              <div className="mt-4 space-y-2">
+                {result.monthlyPlan.map((m) => {
+                  const tone =
+                    m.phase === "cutting"
+                      ? "bg-danger/15 text-danger"
+                      : m.phase === "bulking"
+                        ? "bg-accent/15 text-accent"
+                        : "bg-surface-raised text-muted";
+                  return (
+                    <div
+                      key={m.monthIndex}
+                      className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-raised/40 p-3"
+                    >
+                      <span className="text-xs text-muted w-14 shrink-0">{m.label}</span>
+                      <span className={`badge ${tone} shrink-0`}>{m.phaseLabel}</span>
+                      <span className="text-sm shrink-0">{fmt(m.recommendedKcal, 0)}kcal</span>
+                      <span className="text-xs text-muted ml-auto whitespace-nowrap">
+                        {fmt(m.startWeightKg, 1)}→{fmt(m.endWeightKg, 1)}kg · {fmt(m.startBfPercent, 1)}→
+                        {fmt(m.endBfPercent, 1)}%BF
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {result.evolutionNote && (
             <div className="card p-5 animate-fade-in-up stagger-2">
