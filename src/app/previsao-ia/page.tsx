@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Cycle } from "@/lib/types";
 import { loadCycles, addCycle, deleteCycle } from "@/lib/storage";
-import { sortByDate } from "@/lib/dietEngine";
+import { sortByDate, daysBetween } from "@/lib/dietEngine";
 import {
   Sex,
   ActivityLevel,
@@ -148,8 +148,9 @@ export default function PrevisaoIaPage() {
     e.preventDefault();
     if (!canSubmit || cycles === null || !activityLevel) return;
 
-    // duas entradas na mesma data quebram o cálculo de taxa de variação (fica ~0, TDEE vira uma
-    // cópia do ciclo anterior) — em vez de deixar isso passar silenciosamente, confirma com o usuário
+    // duas entradas na mesma data (ou muito próximas) quebram o cálculo de taxa de variação — com
+    // menos de 5 dias de intervalo a taxa semanal vira ruído amplificado (kg/semana explode) e isso
+    // se propaga multiplicado pra proteína/gordura/kcal recomendados, gerando números absurdos.
     let effectiveCycles = cycles;
     if (last && last.date === date) {
       const overwrite = window.confirm(
@@ -161,6 +162,13 @@ export default function PrevisaoIaPage() {
       await deleteCycle(last.id);
       effectiveCycles = cycles.filter((c) => c.id !== last.id);
       setCycles(effectiveCycles);
+    } else if (last && daysBetween(last.date, date) < 5) {
+      const proceed = window.confirm(
+        `O último ciclo foi em ${fmtDate(last.date)} — só ${Math.round(daysBetween(last.date, date))} dia(s) atrás.\n\n` +
+          `Com um intervalo tão curto, a taxa de variação de peso fica instável e pode gerar kcal/proteína fora da realidade.\n\n` +
+          `OK = gerar mesmo assim.\nCancelar = escolher uma data mais distante do último ciclo.`
+      );
+      if (!proceed) return;
     }
 
     setLoading(true);
@@ -221,19 +229,18 @@ export default function PrevisaoIaPage() {
         cycleId: null,
       });
 
-      if (data.isFirstCycle) {
-        await addCycle({
-          id: crypto.randomUUID(),
-          date,
-          weightKg: parseFloat(weight),
-          bodyFatPercent: data.bfPercentVisual,
-          kcal: data.recommendedKcal,
-          proteinG: data.recommendedProteinG,
-          fatG: data.recommendedFatG,
-          carbG: data.recommendedCarbG,
-          isPrediction: true,
-        });
-      }
+      await addCycle({
+        id: crypto.randomUUID(),
+        date,
+        weightKg: parseFloat(weight),
+        bodyFatPercent: data.bfPercentVisual,
+        kcal: data.recommendedKcal,
+        proteinG: data.recommendedProteinG,
+        fatG: data.recommendedFatG,
+        carbG: data.recommendedCarbG,
+        isPrediction: true,
+      });
+      setCycles(sortByDate(await loadCycles()));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao gerar previsão.");
     } finally {

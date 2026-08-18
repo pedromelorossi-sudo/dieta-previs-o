@@ -23,6 +23,10 @@ export function weeklyRate(currentWeightKg: number, currentDate: string, prev: C
   return (currentWeightKg - prev.weightKg) / (days / 7);
 }
 
+function clampRate(rate: number, maxAbs: number): number {
+  return Math.max(-maxAbs, Math.min(maxAbs, rate));
+}
+
 /** Passo 2 — TDEE empírico retrocalculado a partir da taxa e de E */
 export function tdeeFromRate(prevIntakeKcal: number, rateKgWeek: number, E: number): number {
   return prevIntakeKcal - (rateKgWeek * E) / 7;
@@ -177,6 +181,12 @@ export function predictNextCycle(input: PredictionInput): PredictionResult | nul
   const currentIntake = input.currentIntakeOverride ?? last.kcal;
 
   const rate = weeklyRate(input.currentWeightKg, input.currentDate, last);
+  // taxa observada acima disso não é fisiologicamente plausível como tendência sustentada (é ruído de
+  // pesagem/retenção ou intervalo curto demais entre ciclos) — reportamos a taxa real em rateKgWeek pro
+  // usuário perceber o problema, mas a projeção de peso/kcal/proteína usa a versão limitada, senão o
+  // ruído se multiplica e vira um kcal/proteína absurdo lá na frente
+  const MAX_PLAUSIBLE_RATE_KG_WEEK = 2.5;
+  const rateForProjection = clampRate(rate, MAX_PLAUSIBLE_RATE_KG_WEEK);
 
   let tdeeMin: number;
   let tdeeMax: number;
@@ -196,10 +206,10 @@ export function predictNextCycle(input: PredictionInput): PredictionResult | nul
   const surplusMax = surplusPercent(currentIntake, tdeeMin);
 
   // Passo 5 — projeção de peso (assume manutenção do ritmo atual de superávit)
-  const projMin = input.currentWeightKg + rate * input.weeksToNextConsult;
+  const projMin = input.currentWeightKg + rateForProjection * input.weeksToNextConsult;
   const projMax = projMin; // taxa observada é o ponto central; ver nota de incerteza no rodapé da página
   // pequena banda de incerteza (±10% da variação projetada) para refletir que é extrapolação
-  const delta = Math.abs(rate * input.weeksToNextConsult) * 0.15;
+  const delta = Math.abs(rateForProjection * input.weeksToNextConsult) * 0.15;
   const projectedWeightRange: PredictionRange = { min: projMin - delta, max: projMax + delta };
 
   const rules = extractRules(history);
