@@ -102,6 +102,10 @@ create table if not exists public.cycles (
 -- comeu de verdade
 alter table public.cycles add column if not exists actual_kcal numeric;
 
+-- leitura visual por grupo muscular desse ciclo (muscleGroupAssessment da análise de foto) — guardada
+-- junto do ciclo pra dar pra montar a evolução por grupo ao longo do tempo (ver muscleEvolution.ts)
+alter table public.cycles add column if not exists muscle_assessment jsonb;
+
 alter table public.cycles enable row level security;
 
 drop policy if exists "cycles: all own" on public.cycles;

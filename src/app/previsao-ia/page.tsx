@@ -360,6 +360,7 @@ export default function PrevisaoIaPage() {
         fatG: data.recommendedFatG,
         carbG: data.recommendedCarbG,
         isPrediction: true,
+        muscleAssessment: data.muscleGroupAssessment?.length ? data.muscleGroupAssessment : null,
       });
       setCycles(sortByDate(await loadCycles()));
     } catch (err) {

@@ -7,8 +7,11 @@ import { LoggedSetEntry, ReserveType, TrainingLog } from "@/lib/trainingBuilder"
 import { addTrainingLog, loadTrainingLogs } from "@/lib/trainingStorage";
 import { readVolumeStatus, weeklyVolumeByMuscle, VolumeReading } from "@/lib/trainingVolume";
 import { recommendNextWeek, WeeklyRecommendation } from "@/lib/trainingPeriodization";
+import { buildMuscleEvolution, MuscleEvolution } from "@/lib/muscleEvolution";
+import { loadCycles } from "@/lib/storage";
+import { fmtDate } from "@/lib/format";
 import { Field } from "@/components/DietMealsEditor";
-import { IconDumbbell, IconCheck } from "@/components/icons";
+import { IconDumbbell, IconCheck, IconTrend } from "@/components/icons";
 
 const RESERVE_LABEL: Record<ReserveType, string> = {
   warmup: "Warm up",
@@ -41,6 +44,7 @@ export default function TreinoPage() {
   const { ready, user } = useAuth();
   const [logs, setLogs] = useState<TrainingLog[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [muscleEvolution, setMuscleEvolution] = useState<MuscleEvolution[]>([]);
 
   const [sessionLabel, setSessionLabel] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -65,6 +69,7 @@ export default function TreinoPage() {
   useEffect(() => {
     if (!ready || !user) return;
     refresh();
+    loadCycles().then((cycles) => setMuscleEvolution(buildMuscleEvolution(cycles)));
   }, [ready, user]);
 
   const volumeReadings: VolumeReading[] = useMemo(() => {
@@ -187,7 +192,46 @@ export default function TreinoPage() {
         </div>
       </section>
 
-      <section className="card p-6 space-y-5 animate-fade-in-up stagger-2">
+      {muscleEvolution.length > 0 && (
+        <section className="animate-fade-in-up stagger-2">
+          <h2 className="text-lg font-semibold tracking-tight mb-1">Evolução por grupo muscular</h2>
+          <p className="text-sm text-muted mb-4">
+            A partir da leitura visual das fotos em cada ciclo — só compara leituras com confiança media/alta, um
+            palpite de baixa confiança não conta como piora ou melhora.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {muscleEvolution.map((e) => {
+              const tone =
+                e.trend === "melhorando"
+                  ? "bg-accent/15 text-accent"
+                  : e.trend === "piorando"
+                    ? "bg-danger/15 text-danger"
+                    : "bg-surface-raised text-muted";
+              return (
+                <div key={e.muscle} className="card p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{e.muscleLabel}</span>
+                    <span className={`badge ${tone} shrink-0 flex items-center gap-1`}>
+                      {e.trend === "melhorando" && <IconTrend className="h-3 w-3" />}
+                      {e.trend === "melhorando" ? "melhorando" : e.trend === "piorando" ? "piorando" : e.trend === "estavel" ? "estável" : "sem dado"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted mt-2 leading-relaxed">{e.trendNote}</p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {e.points.slice(-6).map((p, i) => (
+                      <span key={i} className="badge bg-surface-raised text-muted border border-border text-[10px]">
+                        {fmtDate(p.date)}: {p.relativeDevelopment === "atras_dos_outros" ? "atrás" : p.relativeDevelopment === "destaque" ? "destaque" : "prop."}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="card p-6 space-y-5 animate-fade-in-up stagger-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight mb-1">Registrar sessão</h2>
           <p className="text-sm text-muted">O que você fez de verdade — carga real, não o planejado.</p>

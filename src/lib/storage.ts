@@ -1,5 +1,5 @@
 import { createClient } from "./supabase/client";
-import { Cycle } from "./types";
+import { Cycle, CycleMuscleAssessment } from "./types";
 
 interface CycleRow {
   id: string;
@@ -12,6 +12,7 @@ interface CycleRow {
   carb_g: number;
   is_prediction: boolean;
   actual_kcal: number | null;
+  muscle_assessment: CycleMuscleAssessment[] | null;
 }
 
 function rowToCycle(row: CycleRow): Cycle {
@@ -26,6 +27,7 @@ function rowToCycle(row: CycleRow): Cycle {
     carbG: Number(row.carb_g),
     isPrediction: row.is_prediction,
     actualKcal: row.actual_kcal != null ? Number(row.actual_kcal) : null,
+    muscleAssessment: row.muscle_assessment ?? null,
   };
 }
 
@@ -55,6 +57,7 @@ export async function addCycle(cycle: Cycle): Promise<void> {
     carb_g: cycle.carbG,
     is_prediction: cycle.isPrediction ?? false,
     actual_kcal: cycle.actualKcal ?? null,
+    muscle_assessment: cycle.muscleAssessment ?? null,
   });
   if (error) throw error;
 }
