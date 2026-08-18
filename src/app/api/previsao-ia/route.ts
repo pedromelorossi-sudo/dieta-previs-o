@@ -429,7 +429,19 @@ ${evolutionInstruction}`;
     note: string;
   };
 
-  const recommendedKcal = clamp(raw.recommendedKcal, result.kcalRange.min, result.kcalRange.max);
+  // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo) — decide ONDE dentro da
+  // faixa já calculada pelo algoritmo o kcal deve ficar, não substitui a faixa em si
+  const { path: strategy, pathReason: strategyReason } = classifyPathFromBf(clamp(raw.bfPercentVisual, 3, 60), sex);
+
+  const kcalSpan = result.kcalRange.max - result.kcalRange.min;
+  const kcalStrategyRange =
+    strategy === "cutting"
+      ? { min: result.kcalRange.min, max: result.kcalRange.min + kcalSpan / 3 }
+      : strategy === "bulking"
+        ? { min: result.kcalRange.max - kcalSpan / 3, max: result.kcalRange.max }
+        : { min: result.kcalRange.min + kcalSpan / 3, max: result.kcalRange.max - kcalSpan / 3 };
+
+  const recommendedKcal = clamp(raw.recommendedKcal, kcalStrategyRange.min, kcalStrategyRange.max);
   const recommendedProteinG = clamp(raw.recommendedProteinG, result.proteinRange.min, result.proteinRange.max);
   const recommendedFatG = clamp(raw.recommendedFatG, result.fatRange.min, result.fatRange.max);
   const recommendedCarbG = clamp(raw.recommendedCarbG, result.carbRange.min, result.carbRange.max);
@@ -455,10 +467,6 @@ ${evolutionInstruction}`;
     weightRange: { min: oneMonthMid - oneMonthDelta, max: oneMonthMid + oneMonthDelta },
     note: `Mantendo o padrão observado (${result.rateKgWeek >= 0 ? "+" : ""}${result.rateKgWeek.toFixed(2)} kg/semana), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
   };
-
-  // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo) — a tendência histórica de
-  // peso só define os macros específicos dentro da faixa, não decide se é cutting/bulking/normo
-  const { path: strategy, pathReason: strategyReason } = classifyPathFromBf(clamp(raw.bfPercentVisual, 3, 60), sex);
 
   return NextResponse.json({
     isFirstCycle: false,
