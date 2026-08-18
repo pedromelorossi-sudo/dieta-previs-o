@@ -344,17 +344,18 @@ ${historyText}
 Contexto do usuário: sexo ${sex}, altura ${heightCm}cm, peso atual informado ${currentWeightKg}kg em ${date}.
 
 Regras extraídas do histórico pelo algoritmo determinístico (NÃO recalcule, use como estão):
-- kcal/kg projetado: ${result.rules.kcalPerKgExtrapolated.toFixed(2)}
+- kcal/kg projetado pela tendência histórica: ${result.rules.kcalPerKgExtrapolated.toFixed(2)} (cuidado: isso só continua a direção que o histórico já vinha seguindo — se o %BF pedir uma estratégia diferente da tendência, esse número deixa de valer)
 - proteína/kg: ${result.proteinPerKgUsed.toFixed(2)}
 - gordura/kg: ${result.fatPerKgUsed.toFixed(2)}
 - taxa de variação observada: ${result.rateKgWeek.toFixed(3)} kg/semana
+- TDEE estimado (manutenção real, calculado a partir da resposta do próprio usuário): ${result.tdeeRange.min.toFixed(0)}–${result.tdeeRange.max.toFixed(0)}kcal
 - peso projetado em ${weeksToNextConsult} semana(s): ${result.projectedWeightRange.min.toFixed(1)}–${result.projectedWeightRange.max.toFixed(1)}kg
 
-Faixas já calculadas pelo algoritmo (seus valores recomendados DEVEM ficar dentro destas faixas):
-- kcal: ${result.kcalRange.min.toFixed(0)}–${result.kcalRange.max.toFixed(0)}
+Faixas de proteína/gordura já calculadas pelo algoritmo (seus valores recomendados DEVEM ficar dentro destas faixas):
 - proteína: ${result.proteinRange.min.toFixed(1)}–${result.proteinRange.max.toFixed(1)}g
 - gordura: ${result.fatRange.min.toFixed(1)}–${result.fatRange.max.toFixed(1)}g
-- carboidrato: ${result.carbRange.min.toFixed(1)}–${result.carbRange.max.toFixed(1)}g
+
+Kcal: sua estimativa de %BF vai decidir a estratégia (cutting/normocalórico/bulking), e o kcal final será recalculado a partir do TDEE acima + o superávit/déficit dessa estratégia — não da extrapolação da tendência histórica. Dê seu melhor palpite de kcal mesmo assim, mas não se preocupe em bater exatamente na faixa histórica.
 
 Modo estabilidade: ${stabilityMode ? "sim" : "não"}. Degrau de proteína aplicado: ${applyProteinStep ? "sim" : "não"}.
 
@@ -429,22 +430,33 @@ ${evolutionInstruction}`;
     note: string;
   };
 
-  // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo) — decide ONDE dentro da
-  // faixa já calculada pelo algoritmo o kcal deve ficar, não substitui a faixa em si
-  const { path: strategy, pathReason: strategyReason } = classifyPathFromBf(clamp(raw.bfPercentVisual, 3, 60), sex);
+  // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo). O kcal NÃO vem mais da
+  // extrapolação pura do histórico (rules.kcalPerKgExtrapolated) — essa extrapolação só continua a
+  // direção que o histórico já vinha seguindo (ex: bulking), e não tem como "desligar" sozinha quando
+  // o %BF pede uma troca de estratégia. Em vez disso, usa o TDEE real do algoritmo (calculado a partir
+  // da resposta observada do próprio usuário, não uma fórmula genérica) + o superávit/déficit da
+  // estratégia decidida — assim o número sempre acompanha a estratégia, não só a etiqueta.
+  const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(
+    clamp(raw.bfPercentVisual, 3, 60),
+    sex
+  );
 
-  const kcalSpan = result.kcalRange.max - result.kcalRange.min;
-  const kcalStrategyRange =
-    strategy === "cutting"
-      ? { min: result.kcalRange.min, max: result.kcalRange.min + kcalSpan / 3 }
-      : strategy === "bulking"
-        ? { min: result.kcalRange.max - kcalSpan / 3, max: result.kcalRange.max }
-        : { min: result.kcalRange.min + kcalSpan / 3, max: result.kcalRange.max - kcalSpan / 3 };
+  const kcalStrategyRange = {
+    min: result.tdeeRange.min * (1 + strategySurplusPercent),
+    max: result.tdeeRange.max * (1 + strategySurplusPercent),
+  };
 
   const recommendedKcal = clamp(raw.recommendedKcal, kcalStrategyRange.min, kcalStrategyRange.max);
   const recommendedProteinG = clamp(raw.recommendedProteinG, result.proteinRange.min, result.proteinRange.max);
   const recommendedFatG = clamp(raw.recommendedFatG, result.fatRange.min, result.fatRange.max);
-  const recommendedCarbG = clamp(raw.recommendedCarbG, result.carbRange.min, result.carbRange.max);
+
+  // carboidrato é resíduo de kcal - proteína - gordura — recalcula a partir do novo kcal (não do
+  // kcalRange antigo baseado em extrapolação), senão fica inconsistente com o kcal recomendado de fato
+  const carbStrategyRange = {
+    min: Math.max(0, (kcalStrategyRange.min - result.proteinRange.max * 4 - result.fatRange.max * 9) / 4),
+    max: Math.max(0, (kcalStrategyRange.max - result.proteinRange.min * 4 - result.fatRange.min * 9) / 4),
+  };
+  const recommendedCarbG = clamp(raw.recommendedCarbG, carbStrategyRange.min, carbStrategyRange.max);
 
   let meals, dietWarnings;
   try {
@@ -489,10 +501,10 @@ ${evolutionInstruction}`;
     recommendedCarbG,
     note: raw.note,
     ranges: {
-      kcal: result.kcalRange,
+      kcal: kcalStrategyRange,
       protein: result.proteinRange,
       fat: result.fatRange,
-      carb: result.carbRange,
+      carb: carbStrategyRange,
       weight: result.projectedWeightRange,
     },
     rateKgWeek: result.rateKgWeek,
