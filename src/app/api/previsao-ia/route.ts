@@ -5,7 +5,17 @@ import { predictNextCycle, E_SCENARIOS } from "@/lib/dietEngine";
 import { estimateBodyComposition, classifyPathFromBf, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { Cycle, GainComposition } from "@/lib/types";
-import { ActivityLevel, Restriction, ExerciseFreq, DailyRoutine, SessionDuration } from "@/lib/questionnaire";
+import {
+  ActivityLevel,
+  Restriction,
+  ExerciseFreq,
+  SessionDuration,
+  OccupationActivity,
+  CommuteActivity,
+  HouseholdActivity,
+  LeisureActivity,
+  StairsUse,
+} from "@/lib/questionnaire";
 
 const ANGLE_LABEL: Record<string, string> = {
   frente: "Frente",
@@ -32,8 +42,13 @@ interface RequestBody {
   age: number;
   activityLevel: ActivityLevel;
   exerciseFreq?: ExerciseFreq;
-  dailyRoutine?: DailyRoutine;
   sessionDuration?: SessionDuration;
+  dailyStepsAvg?: number;
+  occupationActivity?: OccupationActivity;
+  commuteActivity?: CommuteActivity;
+  householdActivity?: HouseholdActivity;
+  leisureActivity?: LeisureActivity;
+  stairsUse?: StairsUse;
   currentWeightKg: number;
   date: string;
   weeksToNextConsult: number;
@@ -203,8 +218,13 @@ export async function POST(request: Request) {
     age,
     activityLevel,
     exerciseFreq,
-    dailyRoutine,
     sessionDuration,
+    dailyStepsAvg,
+    occupationActivity,
+    commuteActivity,
+    householdActivity,
+    leisureActivity,
+    stairsUse,
     currentWeightKg,
     date,
     weeksToNextConsult,
@@ -318,8 +338,13 @@ ${VISUAL_BF_PROTOCOL}`,
       sex,
       activityLevel,
       exerciseFreq,
-      dailyRoutine,
       sessionDuration,
+      dailyStepsAvg,
+      occupationActivity,
+      commuteActivity,
+      householdActivity,
+      leisureActivity,
+      stairsUse,
     });
 
     // meio-termo entre a fórmula (Mifflin/Katch, erro documentado de ±10-15%, maior ainda em quem
