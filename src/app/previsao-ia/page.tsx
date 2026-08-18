@@ -32,8 +32,21 @@ import { Diet, DietMeal, dietTotals, mealTotals, itemMacros } from "@/lib/dietBu
 import { getFood } from "@/lib/foods";
 import { upsertDiet } from "@/lib/dietStorage";
 import { generateDietPdf } from "@/lib/pdf";
+import { exerciseById } from "@/lib/exerciseLibrary";
+import { TrainingSession } from "@/lib/trainingBuilder";
+import { upsertTrainingProgram } from "@/lib/trainingStorage";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
-import { IconCheck, IconClipboard, IconDrumstick, IconDroplet, IconFlame, IconScale, IconTarget, IconWheat } from "@/components/icons";
+import {
+  IconCheck,
+  IconClipboard,
+  IconDrumstick,
+  IconDroplet,
+  IconFlame,
+  IconScale,
+  IconTarget,
+  IconWheat,
+  IconDumbbell,
+} from "@/components/icons";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -90,6 +103,21 @@ interface PredictionResponse {
     endWeightKg: number;
     startBfPercent: number;
     endBfPercent: number;
+  }[];
+  muscleGroupAssessment?: {
+    muscle: string;
+    relativeDevelopment: "atras_dos_outros" | "proporcional" | "destaque";
+    developmentNote: string;
+    symmetryNote: string;
+    confidence: "baixa" | "media" | "alta";
+  }[];
+  suggestedTrainingProgram?: TrainingSession[];
+  trainingPeriodizationPlan?: {
+    weekIndex: number;
+    label: string;
+    isDeload: boolean;
+    totalWeeklySets: number;
+    muscles: { muscle: string; muscleLabel: string; weeklySets: number }[];
   }[];
 }
 
@@ -172,6 +200,8 @@ export default function PrevisaoIaPage() {
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [saved, setSaved] = useState(false);
   const [dietSaved, setDietSaved] = useState(false);
+  const [programSaving, setProgramSaving] = useState(false);
+  const [programSaved, setProgramSaved] = useState(false);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -381,6 +411,22 @@ export default function PrevisaoIaPage() {
     setDietSaved(true);
   }
 
+  async function handleSaveTrainingProgram() {
+    if (!result?.suggestedTrainingProgram || !user) return;
+    setProgramSaving(true);
+    try {
+      await upsertTrainingProgram({
+        id: crypto.randomUUID(),
+        name: `Divisão sugerida ${fmtDate(date)}`,
+        createdAt: new Date().toISOString(),
+        sessions: result.suggestedTrainingProgram,
+      });
+      setProgramSaved(true);
+    } finally {
+      setProgramSaving(false);
+    }
+  }
+
   async function handleDownloadPdf() {
     const diet = dietFromResult();
     if (!diet) return;
@@ -529,7 +575,7 @@ export default function PrevisaoIaPage() {
           {stepsKnown === "nao" && (
             <>
               <p className="text-xs text-muted mt-4 mb-2">
-                Responda com números reais, não com "quão ativo você se sente" — o algoritmo calcula o nível a
+                Responda com números reais, não com &quot;quão ativo você se sente&quot; — o algoritmo calcula o nível a
                 partir disso.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -744,7 +790,7 @@ export default function PrevisaoIaPage() {
 
             <p className="text-xs text-muted mt-5 mb-2">
               Sobre o ciclo que terminou — isso decide se o déficit foi grande demais e ajusta automaticamente o
-              próximo, sem você precisar avaliar "quão cansado" se sentiu.
+              próximo, sem você precisar avaliar &quot;quão cansado&quot; se sentiu.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Comparado ao início desse ciclo, sua carga nos exercícios principais:">
@@ -865,6 +911,77 @@ export default function PrevisaoIaPage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {result.suggestedTrainingProgram && result.suggestedTrainingProgram.length > 0 && (
+            <div className="card p-5 animate-fade-in-up stagger-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                  <IconDumbbell className="h-4 w-4" /> Divisão de treino sugerida
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveTrainingProgram}
+                  disabled={programSaving}
+                  className="btn-secondary text-xs py-1.5 px-3"
+                >
+                  {programSaved ? <IconCheck className="h-3.5 w-3.5" /> : null}
+                  {programSaving ? "Salvando…" : programSaved ? "Salvo" : "Salvar como programa"}
+                </button>
+              </div>
+              <p className="text-xs text-muted mt-2 leading-relaxed">
+                Gerada a partir da leitura visual por grupo muscular nas fotos — meta de volume no MAV, ajustada pra
+                cima nos grupos que a IA marcou atrás dos outros. Edite livremente depois de salvar.
+              </p>
+              <div className="mt-4 space-y-4">
+                {result.suggestedTrainingProgram.map((session, i) => (
+                  <div key={i} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+                    <div className="text-sm font-medium mb-2">{session.label}</div>
+                    <div className="space-y-1">
+                      {session.items.map((item, j) => {
+                        const ex = exerciseById(item.exerciseId);
+                        const block = item.blocks[0];
+                        return (
+                          <div key={j} className="flex items-center justify-between text-xs text-muted">
+                            <span>{ex?.name ?? item.exerciseId}</span>
+                            <span className="shrink-0">
+                              {block.sets}x{block.repRange}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {result.trainingPeriodizationPlan && result.trainingPeriodizationPlan.length > 0 && (
+            <div className="card p-5 animate-fade-in-up stagger-3">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconDumbbell className="h-4 w-4" /> Periodização de treino
+              </div>
+              <p className="text-xs text-muted mt-2 leading-relaxed">
+                Mesociclo de 5 semanas: volume sobe progressivamente até a meta e cai pra ~metade na semana de
+                deload, antes de recomeçar. Esquemas de periodização produzem hipertrofia parecida quando o volume
+                é equalizado — o que importa é não empilhar semanas seguidas perto do teto recuperável.
+              </p>
+              <div className="mt-4 space-y-2">
+                {result.trainingPeriodizationPlan.map((w) => (
+                  <div
+                    key={w.weekIndex}
+                    className={`flex items-center gap-3 rounded-lg border p-3 ${
+                      w.isDeload ? "border-warn/30 bg-warn/5" : "border-border bg-surface-raised/40"
+                    }`}
+                  >
+                    <span className="text-xs text-muted w-20 shrink-0">{w.label}</span>
+                    {w.isDeload && <span className="badge bg-warn/15 text-warn shrink-0">deload</span>}
+                    <span className="text-sm ml-auto">{w.totalWeeklySets} séries/semana (total)</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

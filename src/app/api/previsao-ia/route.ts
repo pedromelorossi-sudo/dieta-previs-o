@@ -7,6 +7,7 @@ import { generateDietMeals } from "@/lib/dietGenerator";
 import { planMonths } from "@/lib/periodization";
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
 import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, VolumeStatus } from "@/lib/trainingVolume";
+import { computeMuscleTargets, buildSplit, planTrainingPeriodization } from "@/lib/trainingSplitBuilder";
 import { Cycle, GainComposition } from "@/lib/types";
 import {
   ActivityLevel,
@@ -530,7 +531,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   try {
     visionResponse = await client.messages.create({
       model: "claude-opus-5",
-      max_tokens: 1000,
+      max_tokens: 2500,
       output_config: { effort: "medium" },
       system: SYSTEM_PROMPT,
       tools: [
@@ -549,7 +550,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
               muscleGroupAssessment: {
                 type: "array",
                 description:
-                  "Um item por grupo muscular visível nos ângulos enviados — não force os 12 grupos se a foto não mostra bem algum deles (ver protocolo).",
+                  "Um item por grupo muscular visível nos ângulos enviados — não force os 12 grupos se a foto não mostra bem algum deles, mas com frente+costas+laterais a maioria dos grupos grandes (peito, costas, ombro, quadríceps, abdômen, braços) costuma dar pra avaliar com confidence pelo menos 'media'. Não deixe esse array vazio quando há fotos suficientes — use confidence 'baixa' em vez de omitir o grupo se a leitura for incerta, mas incerta ainda é uma leitura.",
                 items: {
                   type: "object",
                   properties: {
@@ -709,6 +710,19 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     }
   }
 
+  // divisão de treino + periodização de volume automáticas, geradas a partir da leitura visual por
+  // grupo (muscleGroupAssessment) — não é um passo manual separado, sai direto da mesma análise de foto
+  const DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
+  const daysPerWeek = exerciseFreq ? DAYS_PER_WEEK_BY_FREQ[exerciseFreq] : 0;
+  let suggestedTrainingProgram: ReturnType<typeof buildSplit> | null = null;
+  let trainingPeriodizationPlan: ReturnType<typeof planTrainingPeriodization> | null = null;
+  let muscleTargetsOut: ReturnType<typeof computeMuscleTargets> | null = null;
+  if (daysPerWeek > 0 && vision.muscleGroupAssessment && vision.muscleGroupAssessment.length > 0) {
+    muscleTargetsOut = computeMuscleTargets(vision.muscleGroupAssessment);
+    suggestedTrainingProgram = buildSplit(daysPerWeek, muscleTargetsOut);
+    trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, 10);
+  }
+
   const bfPercentVisual = clamp(vision.bfPercentVisual, 3, 60);
   const gainComposition: GainComposition = ["musculo", "misto", "gordura"].includes(vision.gainComposition)
     ? vision.gainComposition
@@ -834,6 +848,9 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     monthlyPlan,
     muscleGroupAssessment: vision.muscleGroupAssessment ?? [],
     muscleCrossCheck,
+    muscleTargets: muscleTargetsOut ?? [],
+    suggestedTrainingProgram,
+    trainingPeriodizationPlan,
     meals,
     dietWarnings,
   });
