@@ -48,15 +48,33 @@ export const ACTIVITY_LABEL: Record<ActivityLevel, string> = {
 export type ExerciseFreq = "0" | "1-2" | "3-4" | "5+";
 export type SessionDuration = "<30" | "30-60" | "60-90" | "90+";
 
-// NEAT (gasto fora do treino formal) — em vez de 1 pergunta genérica de "rotina diária", decompõe em
-// dimensões independentes. Quando o usuário sabe a própria contagem média de passos, essa é a pergunta
-// que decide sozinha (sinal mais direto que existe); as outras só entram quando ele não sabe.
+// NEAT (gasto fora do treino formal) — em vez de rótulos subjetivos ("rotina ativa", "atividade
+// moderada"), pergunta fatos contáveis (horas, minutos, contagens reais) e deixa o algoritmo concluir o
+// nível. Quando o usuário sabe a própria contagem média de passos, essa é a pergunta que decide sozinha
+// (sinal mais direto que existe); o orçamento de tempo abaixo só entra quando ele não sabe.
 export type StepsKnown = "sim" | "nao";
-export type OccupationActivity = "sentado" | "alternado" | "em_pe_parado" | "em_pe_caminhando" | "trabalho_pesado";
-export type CommuteActivity = "sentado" | "caminhada_curta" | "caminhada_moderada" | "caminhada_longa";
-export type HouseholdActivity = "baixo" | "medio" | "alto";
-export type LeisureActivity = "baixa" | "leve" | "moderada" | "alta";
-export type StairsUse = "nunca" | "as_vezes" | "sempre";
+
+// Esporte/atividade física regular fora da academia principal — capturado à parte, com frequência e
+// duração reais em vez de "quanto de lazer você faz". Catálogo com valores de MET do Compendium of
+// Physical Activities (Ainsworth et al. 2011) — ver bodyComposition.ts para os valores e a citação.
+export type HasOtherSport = "sim" | "nao";
+export type OtherSportActivity =
+  | "corrida"
+  | "caminhada_rapida"
+  | "natacao"
+  | "ciclismo"
+  | "futebol"
+  | "basquete_ou_volei"
+  | "tenis_ou_padel"
+  | "luta_ou_artes_marciais"
+  | "danca"
+  | "yoga_ou_pilates"
+  | "hiit_ou_crossfit"
+  | "outro";
+
+// Intensidade pelo talk test (Reed & Pipe 2014) em vez de autoavaliação ("achei leve/intenso") — o
+// usuário relata um fato observável (consegue ou não conversar durante o esforço), não uma opinião.
+export type TalkTestIntensity = "consegue_conversar" | "frases_curtas" | "nao_consegue_conversar";
 
 export const EXERCISE_FREQ_LABEL: Record<ExerciseFreq, string> = {
   "0": "Não treino atualmente",
@@ -77,71 +95,31 @@ export const STEPS_KNOWN_LABEL: Record<StepsKnown, string> = {
   nao: "Não acompanho",
 };
 
-export const OCCUPATION_ACTIVITY_LABEL: Record<OccupationActivity, string> = {
-  sentado: "Sentado(a) quase o dia todo (escritório, home office, aula)",
-  alternado: "Alterno entre sentado e em pé ao longo do dia",
-  em_pe_parado: "Em pé a maior parte do tempo, mas parado(a) no mesmo lugar",
-  em_pe_caminhando: "Em pé e caminhando bastante (vendas, professor, plantão)",
-  trabalho_pesado: "Trabalho fisicamente pesado (construção, carga, mudança)",
+export const HAS_OTHER_SPORT_LABEL: Record<HasOtherSport, string> = {
+  sim: "Sim",
+  nao: "Não",
 };
 
-export const COMMUTE_ACTIVITY_LABEL: Record<CommuteActivity, string> = {
-  sentado: "Carro/moto/ônibus sentado o trajeto todo",
-  caminhada_curta: "Transporte com até 10min de caminhada no total",
-  caminhada_moderada: "Caminho ou pedalo de 10 a 30min por dia",
-  caminhada_longa: "Caminho ou pedalo mais de 30min por dia",
+export const OTHER_SPORT_ACTIVITY_LABEL: Record<OtherSportActivity, string> = {
+  corrida: "Corrida",
+  caminhada_rapida: "Caminhada rápida/recreativa",
+  natacao: "Natação",
+  ciclismo: "Ciclismo",
+  futebol: "Futebol",
+  basquete_ou_volei: "Basquete ou vôlei",
+  tenis_ou_padel: "Tênis ou padel",
+  luta_ou_artes_marciais: "Luta ou artes marciais",
+  danca: "Dança",
+  yoga_ou_pilates: "Yoga ou pilates",
+  hiit_ou_crossfit: "HIIT ou crossfit (fora da academia principal)",
+  outro: "Outro",
 };
 
-export const HOUSEHOLD_ACTIVITY_LABEL: Record<HouseholdActivity, string> = {
-  baixo: "Pouco (moro com quem faz, ou terceirizo/simplifico bastante)",
-  medio: "Médio (limpo, cozinho, faço compras com alguma frequência)",
-  alto: "Alto (faço a maior parte das tarefas de casa sozinho(a))",
+export const TALK_TEST_LABEL: Record<TalkTestIntensity, string> = {
+  consegue_conversar: "Consigo conversar normalmente enquanto faço",
+  frases_curtas: "Consigo falar só frases curtas, fico ofegante",
+  nao_consegue_conversar: "Não consigo conversar, só palavras soltas",
 };
-
-export const LEISURE_ACTIVITY_LABEL: Record<LeisureActivity, string> = {
-  baixa: "Quase nenhuma (fora do treino, o resto do tempo é parado)",
-  leve: "Leve — caminhada ou esporte casual 1-2x/semana",
-  moderada: "Moderada — 3-4x/semana (caminhada, esporte casual, cuidar de criança/pet)",
-  alta: "Alta — quase todo dia tem alguma atividade fora do treino formal",
-};
-
-export const STAIRS_USE_LABEL: Record<StairsUse, string> = {
-  nunca: "Praticamente nunca (elevador/escada rolante)",
-  as_vezes: "Às vezes, poucos andares",
-  sempre: "Regularmente, vários andares por dia",
-};
-
-const EXERCISE_INDEX: Record<ExerciseFreq, number> = { "0": 0, "1-2": 1, "3-4": 2, "5+": 3 };
-const OCCUPATION_INDEX: Record<OccupationActivity, number> = {
-  sentado: 0,
-  alternado: 1,
-  em_pe_parado: 1,
-  em_pe_caminhando: 2,
-  trabalho_pesado: 3,
-};
-const LEVELS: ActivityLevel[] = ["sedentario", "leve", "moderado", "intenso"];
-
-/** Deriva o nível de atividade (usado no multiplicador de TDEE de fallback) a partir de frequência de
- * treino + ocupação principal do dia, em vez do usuário escolher um rótulo genérico "moderado" às cegas. */
-export function calculateActivityLevel(exercise: ExerciseFreq, occupation: OccupationActivity): ActivityLevel {
-  const exerciseIdx = EXERCISE_INDEX[exercise];
-  const occupationIdx = OCCUPATION_INDEX[occupation];
-  let idx = Math.max(exerciseIdx, occupationIdx);
-  if (exerciseIdx >= 2 && occupationIdx >= 1) idx = Math.min(3, idx + 1);
-  return LEVELS[idx];
-}
-
-/** Classificação por faixa de passos/dia — ancorada em dados de acelerômetro por categoria ocupacional
- * (Steeves et al. 2018, J Phys Act Health, DOI 10.1123/jpah.2017-0465): ocupações de baixa atividade
- * (ex: serviços comunitários) ficaram em ~5.700 passos/dia, ocupações de alta atividade (ex: manutenção
- * predial) em ~10.500-11.600. Usado só como rótulo de exibição quando o usuário informa a própria média
- * de passos — o cálculo de NEAT em si já vem direto dos passos, não desse rótulo. */
-export function activityLevelFromSteps(steps: number): ActivityLevel {
-  if (steps < 5000) return "sedentario";
-  if (steps < 7500) return "leve";
-  if (steps < 10000) return "moderado";
-  return "intenso";
-}
 
 export const COOKING_LABEL: Record<CookingTime, string> = {
   pouco: "Pouco tempo — prático e rápido",

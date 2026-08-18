@@ -1,13 +1,4 @@
-import {
-  ActivityLevel,
-  ExerciseFreq,
-  SessionDuration,
-  OccupationActivity,
-  CommuteActivity,
-  HouseholdActivity,
-  LeisureActivity,
-  StairsUse,
-} from "./questionnaire";
+import { ActivityLevel, ExerciseFreq, SessionDuration, OtherSportActivity, TalkTestIntensity } from "./questionnaire";
 
 export type Sex = "masculino" | "feminino";
 export type DietPath = "cutting" | "normocalorico" | "bulking";
@@ -18,22 +9,30 @@ export interface BodyCompositionInput {
   bodyFatPercent: number;
   age: number;
   sex: Sex;
-  activityLevel: ActivityLevel;
-  /** quando informados, o TDEE é calculado por componentes (NEAT + EAT do treino + TEF) em vez do
-   * multiplicador único de ACTIVITY_MULTIPLIER — mais preciso porque separa treino intenso de rotina
-   * fora do treino, que um multiplicador único não distingue */
+  /** usado só como fallback quando `exerciseFreq` não é informado (ex: calculadora rápida em /estimar);
+   * no fluxo principal o TDEE vem sempre dos componentes abaixo, e o nível de atividade exibido pro
+   * usuário (`activityLevelDisplay`, no resultado) é CALCULADO a partir do TDEE final, não escolhido
+   * de antemão — evita que o usuário precise se autoavaliar como "moderado" às cegas. */
+  activityLevel?: ActivityLevel;
   exerciseFreq?: ExerciseFreq;
   sessionDuration?: SessionDuration;
   /** NEAT — quando `dailyStepsAvg` vem preenchido é o sinal primário (mais direto e objetivo que
-   * qualquer questionário); senão usa a combinação das 5 dimensões abaixo. Precisão importa muito aqui:
-   * bulking magro/cutting natural trabalham com margens de 12-20% sobre o TDEE (ver classifyPathFromBf),
-   * então um NEAT mal estimado pode inverter a estratégia sem o usuário perceber. */
+   * qualquer questionário); senão usa o orçamento de tempo abaixo (horas/minutos/contagens reais, não
+   * rótulos de "quão ativo você se sente"). Precisão importa muito aqui: bulking magro/cutting natural
+   * trabalham com margens de 12-20% sobre o TDEE (ver classifyPathFromBf), então um NEAT mal estimado
+   * pode inverter a estratégia sem o usuário perceber. */
   dailyStepsAvg?: number;
-  occupationActivity?: OccupationActivity;
-  commuteActivity?: CommuteActivity;
-  householdActivity?: HouseholdActivity;
-  leisureActivity?: LeisureActivity;
-  stairsUse?: StairsUse;
+  sittingHoursPerDay?: number;
+  standingWorkHoursPerDay?: number;
+  activeCommuteMinutesPerDay?: number;
+  choresHoursPerWeek?: number;
+  stairFlightsPerDay?: number;
+  /** esporte/atividade física regular fora da academia — capturado à parte do treino principal
+   * (exerciseFreq/sessionDuration), com intensidade lida pelo talk test em vez de autoavaliação */
+  otherSportActivity?: OtherSportActivity;
+  otherSportSessionsPerWeek?: number;
+  otherSportMinutesPerSession?: number;
+  otherSportTalkTest?: TalkTestIntensity;
 }
 
 export interface BodyCompositionResult {
@@ -43,7 +42,11 @@ export interface BodyCompositionResult {
   bmrKatch: number;
   bmrMifflin: number;
   bmr: number;
+  neatKcal: number;
+  eatKcal: number;
   tdee: number;
+  /** nível de atividade (WHO/FAO/UNU PAL = TDEE/BMR) calculado a partir do TDEE final, só pra exibição */
+  activityLevelDisplay: ActivityLevel;
   path: DietPath;
   pathReason: string;
   surplusPercent: number;
@@ -71,88 +74,70 @@ function neatFromSteps(dailyStepsAvg: number, weightKg: number): number {
   return dailyStepsAvg * KCAL_PER_STEP_PER_KG * weightKg;
 }
 
-// quando o usuário não sabe a contagem de passos, decompõe NEAT em 5 dimensões independentes em vez de
-// 1 balde único "rotina sedentária/ativa/pesada" — Levine et al. 2005 (Science, DOI 10.1126/science.1106561)
-// mediu que só a diferença de POSTURA/movimento no dia a dia (sem nenhum exercício formal envolvido) já
-// explica até ~350kcal/dia entre pessoas magras e obesas de peso comparável, e que isso não muda quando
-// a pessoa emagrece ou engorda — ou seja, é uma característica estável do estilo de vida, não do peso,
-// o que justifica perguntar diretamente em vez de inferir de "rotina" genérica
-const OCCUPATION_NEAT_FACTOR: Record<OccupationActivity, number> = {
-  sentado: 0.06,
-  alternado: 0.14,
-  em_pe_parado: 0.11,
-  em_pe_caminhando: 0.24,
-  trabalho_pesado: 0.4,
-};
-const COMMUTE_NEAT_FACTOR: Record<CommuteActivity, number> = {
-  sentado: 0,
-  caminhada_curta: 0.02,
-  caminhada_moderada: 0.05,
-  caminhada_longa: 0.09,
-};
-const HOUSEHOLD_NEAT_FACTOR: Record<HouseholdActivity, number> = {
-  baixo: 0,
-  medio: 0.03,
-  alto: 0.06,
-};
-const LEISURE_NEAT_FACTOR: Record<LeisureActivity, number> = {
-  baixa: 0,
-  leve: 0.02,
-  moderada: 0.05,
-  alta: 0.09,
-};
-const STAIRS_NEAT_FACTOR: Record<StairsUse, number> = {
-  nunca: 0,
-  as_vezes: 0.01,
-  sempre: 0.03,
-};
+// Sem contagem de passos, NEAT vem de um orçamento de tempo real (horas sentado, horas em pé/se
+// movimentando fora da academia, minutos de deslocamento ativo, horas de tarefas domésticas, lances de
+// escada) em vez de rótulos subjetivos tipo "rotina ativa" — o usuário relata fatos contáveis, o
+// algoritmo é que classifica. Estrutura de domínios de tempo segue o IPAQ (Craig et al. 2003, Med Sci
+// Sports Exerc, DOI 10.1249/01.MSS.0000078924.61453.FB); valores de MET vêm do Compendium of Physical
+// Activities (Ainsworth et al. 2011, Med Sci Sports Exerc, DOI 10.1249/MSS.0b013e31821ece12). Cada termo
+// usa (MET-1) — o incremento ACIMA do repouso — porque a taxa de repouso já está no BMR individualizado
+// (Katch/Mifflin); somar o MET inteiro contaria o metabolismo basal duas vezes.
+const MET_SITTING = 1.3; // sentado, trabalho leve de escritório/estudo
+const MET_STANDING_WORK = 2.5; // em pé / se movimentando no trabalho ou estudo, fora da academia
+const MET_ACTIVE_COMMUTE = 3.3; // caminhada em ritmo de deslocamento (~5km/h)
+const MET_CHORES = 3.0; // tarefas domésticas em movimento (limpar, cozinhar, compras, carregar objetos)
+const MET_STAIRS = 8.8; // subida de escada
+const MINUTES_PER_FLIGHT = 0.15; // ~9s por lance de ~10-12 degraus em ritmo normal
 
-function neatFromQuestionnaire(
-  bmr: number,
-  occupationActivity: OccupationActivity,
-  commuteActivity: CommuteActivity,
-  householdActivity: HouseholdActivity,
-  leisureActivity: LeisureActivity,
-  stairsUse: StairsUse
-): number {
-  const factor =
-    OCCUPATION_NEAT_FACTOR[occupationActivity] +
-    COMMUTE_NEAT_FACTOR[commuteActivity] +
-    HOUSEHOLD_NEAT_FACTOR[householdActivity] +
-    LEISURE_NEAT_FACTOR[leisureActivity] +
-    STAIRS_NEAT_FACTOR[stairsUse];
-  return bmr * factor;
+function kcalPerMinuteAboveRest(met: number, weightKg: number): number {
+  return ((met - 1) * 3.5 * weightKg) / 200;
 }
 
-interface NeatInput {
+interface TimeBudgetInput {
+  sittingHoursPerDay?: number;
+  standingWorkHoursPerDay?: number;
+  activeCommuteMinutesPerDay?: number;
+  choresHoursPerWeek?: number;
+  stairFlightsPerDay?: number;
+}
+
+function hasTimeBudget(input: TimeBudgetInput): boolean {
+  return (
+    input.sittingHoursPerDay != null ||
+    input.standingWorkHoursPerDay != null ||
+    input.activeCommuteMinutesPerDay != null ||
+    input.choresHoursPerWeek != null ||
+    input.stairFlightsPerDay != null
+  );
+}
+
+function neatFromTimeBudget(weightKg: number, input: TimeBudgetInput): number {
+  const sitting = (input.sittingHoursPerDay ?? 0) * 60 * kcalPerMinuteAboveRest(MET_SITTING, weightKg);
+  const standing = (input.standingWorkHoursPerDay ?? 0) * 60 * kcalPerMinuteAboveRest(MET_STANDING_WORK, weightKg);
+  const commute = (input.activeCommuteMinutesPerDay ?? 0) * kcalPerMinuteAboveRest(MET_ACTIVE_COMMUTE, weightKg);
+  const chores = ((input.choresHoursPerWeek ?? 0) / 7) * 60 * kcalPerMinuteAboveRest(MET_CHORES, weightKg);
+  const stairs = (input.stairFlightsPerDay ?? 0) * MINUTES_PER_FLIGHT * kcalPerMinuteAboveRest(MET_STAIRS, weightKg);
+  return sitting + standing + commute + chores + stairs;
+}
+
+interface NeatInput extends TimeBudgetInput {
   dailyStepsAvg?: number;
-  occupationActivity?: OccupationActivity;
-  commuteActivity?: CommuteActivity;
-  householdActivity?: HouseholdActivity;
-  leisureActivity?: LeisureActivity;
-  stairsUse?: StairsUse;
 }
 
 function estimateNeat(bmr: number, weightKg: number, input: NeatInput): number {
   if (input.dailyStepsAvg && input.dailyStepsAvg > 0) {
     return neatFromSteps(input.dailyStepsAvg, weightKg);
   }
-  if (input.occupationActivity) {
-    return neatFromQuestionnaire(
-      bmr,
-      input.occupationActivity,
-      input.commuteActivity ?? "sentado",
-      input.householdActivity ?? "baixo",
-      input.leisureActivity ?? "baixa",
-      input.stairsUse ?? "nunca"
-    );
+  if (hasTimeBudget(input)) {
+    return neatFromTimeBudget(weightKg, input);
   }
-  // sem passos nem questionário — fallback conservador equivalente à antiga rotina "sedentária"
+  // sem passos nem orçamento de tempo — fallback conservador equivalente a uma rotina sedentária
   return bmr * 0.15;
 }
 
-// EAT: sessões por semana × duração real relatada × custo por minuto de musculação (~5kcal/min,
-// consistente com a faixa de 200-400kcal/sessão de ~60min já documentada), não um valor fixo por sessão
+// EAT do treino principal: sessões por semana × duração real relatada × custo por minuto de musculação
+// (~5kcal/min, calibrado contra a faixa de 200-400kcal/sessão de ~60min já documentada nos dados reais
+// de consultoria do usuário) — mantido como está, não é o componente com baixa precisão.
 const SESSIONS_PER_WEEK: Record<ExerciseFreq, number> = {
   "0": 0,
   "1-2": 1.5,
@@ -169,19 +154,71 @@ const EAT_KCAL_PER_MINUTE = 5;
 const DEFAULT_SESSION_MINUTES = 45;
 const TEF_FACTOR = 0.1;
 
+// Esporte/atividade extra fora da academia — MET "moderado" de referência por atividade (Compendium
+// 2011). O talk test (Reed & Pipe 2014, Curr Opin Cardiol, DOI 10.1097/HCO.0000000000000097) ajusta esse
+// valor pra cima/baixo em vez de pedir pro usuário se autoavaliar como "leve/moderado/intenso" — conseguir
+// conversar durante o esforço é um proxy objetivo e validado do limiar ventilatório/lactato, não uma
+// opinião subjetiva sobre a própria intensidade.
+const OTHER_SPORT_MET: Record<OtherSportActivity, number> = {
+  corrida: 8.3,
+  caminhada_rapida: 4.3,
+  natacao: 6.0,
+  ciclismo: 6.8,
+  futebol: 7.0,
+  basquete_ou_volei: 6.5,
+  tenis_ou_padel: 7.3,
+  luta_ou_artes_marciais: 8.0,
+  danca: 4.8,
+  yoga_ou_pilates: 3.0,
+  hiit_ou_crossfit: 8.0,
+  outro: 5.0,
+};
+const TALK_TEST_MULTIPLIER: Record<TalkTestIntensity, number> = {
+  consegue_conversar: 0.72, // abaixo do limiar ventilatório — intensidade leve
+  frases_curtas: 1.0, // próximo do limiar — intensidade moderada, valor de referência do catálogo
+  nao_consegue_conversar: 1.3, // acima do limiar — intensidade vigorosa
+};
+
+interface OtherSportInput {
+  otherSportActivity?: OtherSportActivity;
+  otherSportSessionsPerWeek?: number;
+  otherSportMinutesPerSession?: number;
+  otherSportTalkTest?: TalkTestIntensity;
+}
+
+function eatFromOtherSport(weightKg: number, input: OtherSportInput): number {
+  if (!input.otherSportActivity || !input.otherSportSessionsPerWeek || !input.otherSportMinutesPerSession) return 0;
+  const met = OTHER_SPORT_MET[input.otherSportActivity] * TALK_TEST_MULTIPLIER[input.otherSportTalkTest ?? "frases_curtas"];
+  const kcalPerMinute = (met * 3.5 * weightKg) / 200;
+  return (input.otherSportSessionsPerWeek * input.otherSportMinutesPerSession * kcalPerMinute) / 7;
+}
+
+// PAL (physical activity level) = TDEE/BMR — classificação padrão FAO/WHO/UNU (2001): <1.4 sedentário,
+// 1.4-1.7 leve, 1.7-2.0 moderado, 2.0+ intenso. Usado só como rótulo de exibição CALCULADO a partir do
+// TDEE final — o usuário não escolhe seu próprio nível de atividade de antemão.
+function activityLevelFromPAL(tdee: number, bmr: number): ActivityLevel {
+  const pal = bmr > 0 ? tdee / bmr : 1.4;
+  if (pal < 1.4) return "sedentario";
+  if (pal < 1.7) return "leve";
+  if (pal < 2.0) return "moderado";
+  return "intenso";
+}
+
 function estimateTdeeFromComponents(
   bmr: number,
   weightKg: number,
   exerciseFreq: ExerciseFreq,
   sessionDuration: SessionDuration | undefined,
-  neatInput: NeatInput
+  neatInput: NeatInput,
+  otherSportInput: OtherSportInput
 ) {
   const minutesPerSession = sessionDuration ? SESSION_MINUTES[sessionDuration] : DEFAULT_SESSION_MINUTES;
   const neat = estimateNeat(bmr, weightKg, neatInput);
   const eat = (SESSIONS_PER_WEEK[exerciseFreq] * minutesPerSession * EAT_KCAL_PER_MINUTE) / 7;
-  const subtotal = bmr + neat + eat;
+  const otherSportEat = eatFromOtherSport(weightKg, otherSportInput);
+  const subtotal = bmr + neat + eat + otherSportEat;
   const tef = subtotal * TEF_FACTOR;
-  return { neat, eat, tef, tdee: subtotal + tef };
+  return { neat, eat: eat + otherSportEat, tef, tdee: subtotal + tef };
 }
 
 /** limites de %BF usados para decidir o caminho — faixas de referência aproximadas, não clínicas */
@@ -267,11 +304,15 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
     exerciseFreq,
     sessionDuration,
     dailyStepsAvg,
-    occupationActivity,
-    commuteActivity,
-    householdActivity,
-    leisureActivity,
-    stairsUse,
+    sittingHoursPerDay,
+    standingWorkHoursPerDay,
+    activeCommuteMinutesPerDay,
+    choresHoursPerWeek,
+    stairFlightsPerDay,
+    otherSportActivity,
+    otherSportSessionsPerWeek,
+    otherSportMinutesPerSession,
+    otherSportTalkTest,
   } = input;
   const heightM = heightCm / 100;
   const bmi = weightKg / (heightM * heightM);
@@ -290,16 +331,20 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
 
   // TDEE por componentes (NEAT detalhado + EAT do treino real, com duração) quando informados — mais
   // preciso que multiplicador único, que não distingue treino intenso de rotina fora do treino
-  const tdee = exerciseFreq
-    ? estimateTdeeFromComponents(bmr, weightKg, exerciseFreq, sessionDuration, {
-        dailyStepsAvg,
-        occupationActivity,
-        commuteActivity,
-        householdActivity,
-        leisureActivity,
-        stairsUse,
-      }).tdee
-    : bmr * ACTIVITY_MULTIPLIER[activityLevel];
+  const components = exerciseFreq
+    ? estimateTdeeFromComponents(
+        bmr,
+        weightKg,
+        exerciseFreq,
+        sessionDuration,
+        { dailyStepsAvg, sittingHoursPerDay, standingWorkHoursPerDay, activeCommuteMinutesPerDay, choresHoursPerWeek, stairFlightsPerDay },
+        { otherSportActivity, otherSportSessionsPerWeek, otherSportMinutesPerSession, otherSportTalkTest }
+      )
+    : null;
+  const tdee = components ? components.tdee : bmr * ACTIVITY_MULTIPLIER[activityLevel ?? "moderado"];
+  const neatKcal = components ? components.neat : 0;
+  const eatKcal = components ? components.eat : 0;
+  const activityLevelDisplay = activityLevelFromPAL(tdee, bmr);
 
   const { path, pathReason, surplusPercent } = classifyPathFromBf(bodyFatPercent, sex);
 
@@ -317,7 +362,10 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
     bmrKatch,
     bmrMifflin,
     bmr,
+    neatKcal,
+    eatKcal,
     tdee,
+    activityLevelDisplay,
     path,
     pathReason,
     surplusPercent,

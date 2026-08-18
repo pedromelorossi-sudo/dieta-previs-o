@@ -8,7 +8,6 @@ import { loadCycles, addCycle, deleteCycle } from "@/lib/storage";
 import { sortByDate, daysBetween } from "@/lib/dietEngine";
 import {
   Sex,
-  ActivityLevel,
   ACTIVITY_LABEL,
   ExerciseFreq,
   SessionDuration,
@@ -16,18 +15,12 @@ import {
   SESSION_DURATION_LABEL,
   StepsKnown,
   STEPS_KNOWN_LABEL,
-  OccupationActivity,
-  OCCUPATION_ACTIVITY_LABEL,
-  CommuteActivity,
-  COMMUTE_ACTIVITY_LABEL,
-  HouseholdActivity,
-  HOUSEHOLD_ACTIVITY_LABEL,
-  LeisureActivity,
-  LEISURE_ACTIVITY_LABEL,
-  StairsUse,
-  STAIRS_USE_LABEL,
-  calculateActivityLevel,
-  activityLevelFromSteps,
+  HasOtherSport,
+  HAS_OTHER_SPORT_LABEL,
+  OtherSportActivity,
+  OTHER_SPORT_ACTIVITY_LABEL,
+  TalkTestIntensity,
+  TALK_TEST_LABEL,
   loadPreferences,
   savePreferences,
 } from "@/lib/questionnaire";
@@ -55,6 +48,7 @@ const ANGLES: { key: Angle; label: string; required: boolean }[] = [
 
 interface PredictionResponse {
   isFirstCycle: boolean;
+  activityLevelDisplay?: "sedentario" | "leve" | "moderado" | "intenso";
   bfPercentVisual: number;
   bfConfidence: "baixa" | "media" | "alta";
   bfReasoning: string;
@@ -100,28 +94,48 @@ export default function PrevisaoIaPage() {
   const [exerciseFreq, setExerciseFreq] = useState<ExerciseFreq | "">("");
   const [sessionDuration, setSessionDuration] = useState<SessionDuration | "">("");
 
-  // NEAT — passos/dia é o sinal mais direto quando disponível; senão, decompõe em 5 dimensões objetivas
-  // em vez de 1 pergunta genérica de "rotina" (ver nota em bodyComposition.ts sobre por que isso importa
-  // pra precisão de lean bulk/cutting, que trabalham com margens estreitas sobre o TDEE)
+  // NEAT — passos/dia é o sinal mais direto quando disponível; senão, orçamento de tempo real (horas
+  // sentado, horas em pé/se movimentando, minutos de deslocamento ativo, horas de tarefas domésticas,
+  // lances de escada) em vez de rótulos subjetivos tipo "rotina ativa" — o algoritmo conclui o nível a
+  // partir dos fatos, o usuário não se autoavalia (ver nota em bodyComposition.ts).
   const [stepsKnown, setStepsKnown] = useState<StepsKnown | "">("");
   const [dailyStepsAvg, setDailyStepsAvg] = useState("");
-  const [occupationActivity, setOccupationActivity] = useState<OccupationActivity | "">("");
-  const [commuteActivity, setCommuteActivity] = useState<CommuteActivity | "">("");
-  const [householdActivity, setHouseholdActivity] = useState<HouseholdActivity | "">("");
-  const [leisureActivity, setLeisureActivity] = useState<LeisureActivity | "">("");
-  const [stairsUse, setStairsUse] = useState<StairsUse | "">("");
+  const [sittingHoursPerDay, setSittingHoursPerDay] = useState("");
+  const [standingWorkHoursPerDay, setStandingWorkHoursPerDay] = useState("");
+  const [activeCommuteMinutesPerDay, setActiveCommuteMinutesPerDay] = useState("");
+  const [choresHoursPerWeek, setChoresHoursPerWeek] = useState("");
+  const [stairFlightsPerDay, setStairFlightsPerDay] = useState("");
+
+  // esporte fora da academia — capturado à parte do treino principal, com intensidade lida pelo talk
+  // test (fato observável: "consegue conversar?") em vez do usuário se autoavaliar como leve/moderado
+  const [hasOtherSport, setHasOtherSport] = useState<HasOtherSport | "">("");
+  const [otherSportActivity, setOtherSportActivity] = useState<OtherSportActivity | "">("");
+  const [otherSportSessionsPerWeek, setOtherSportSessionsPerWeek] = useState("");
+  const [otherSportMinutesPerSession, setOtherSportMinutesPerSession] = useState("");
+  const [otherSportTalkTest, setOtherSportTalkTest] = useState<TalkTestIntensity | "">("");
 
   const neatComplete = useMemo(() => {
     if (stepsKnown === "sim") return !!dailyStepsAvg && parseFloat(dailyStepsAvg) > 0;
-    if (stepsKnown === "nao") return !!occupationActivity && !!commuteActivity && !!householdActivity && !!leisureActivity && !!stairsUse;
+    if (stepsKnown === "nao") {
+      return (
+        !!sittingHoursPerDay &&
+        !!standingWorkHoursPerDay &&
+        !!activeCommuteMinutesPerDay &&
+        !!choresHoursPerWeek &&
+        !!stairFlightsPerDay
+      );
+    }
     return false;
-  }, [stepsKnown, dailyStepsAvg, occupationActivity, commuteActivity, householdActivity, leisureActivity, stairsUse]);
+  }, [stepsKnown, dailyStepsAvg, sittingHoursPerDay, standingWorkHoursPerDay, activeCommuteMinutesPerDay, choresHoursPerWeek, stairFlightsPerDay]);
 
-  const activityLevel: ActivityLevel | null = useMemo(() => {
-    if (stepsKnown === "sim" && dailyStepsAvg) return activityLevelFromSteps(parseFloat(dailyStepsAvg));
-    if (exerciseFreq && occupationActivity) return calculateActivityLevel(exerciseFreq, occupationActivity);
-    return null;
-  }, [stepsKnown, dailyStepsAvg, exerciseFreq, occupationActivity]);
+  const otherSportComplete = useMemo(() => {
+    if (hasOtherSport === "nao") return true;
+    if (hasOtherSport === "sim") {
+      return !!otherSportActivity && !!otherSportSessionsPerWeek && !!otherSportMinutesPerSession && !!otherSportTalkTest;
+    }
+    return false;
+  }, [hasOtherSport, otherSportActivity, otherSportSessionsPerWeek, otherSportMinutesPerSession, otherSportTalkTest]);
+
   const [currentIntakeKcal, setCurrentIntakeKcal] = useState("");
   const [weightTrend, setWeightTrend] = useState<"" | "subindo" | "descendo" | "estavel" | "nao_sei">("");
   const [adherence, setAdherence] = useState<"" | "seguiu" | "comeu_mais" | "comeu_menos" | "nao_acompanhou">("");
@@ -157,14 +171,14 @@ export default function PrevisaoIaPage() {
       !!heightCm &&
       !!age &&
       !!exerciseFreq &&
-      !!activityLevel &&
       neatComplete &&
+      otherSportComplete &&
       (exerciseFreq === "0" || !!sessionDuration) &&
       parseFloat(weight) > 0 &&
       parseFloat(heightCm) > 0 &&
       parseFloat(age) > 0
     );
-  }, [files, weight, heightCm, age, activityLevel, exerciseFreq, sessionDuration, neatComplete]);
+  }, [files, weight, heightCm, age, exerciseFreq, sessionDuration, neatComplete, otherSportComplete]);
 
   function handleFileChange(angle: Angle, f: File | null) {
     setFiles((prev) => ({ ...prev, [angle]: f ?? undefined }));
@@ -177,7 +191,7 @@ export default function PrevisaoIaPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || cycles === null || !activityLevel) return;
+    if (!canSubmit || cycles === null) return;
 
     // duas entradas na mesma data (ou muito próximas) quebram o cálculo de taxa de variação — com
     // menos de 5 dias de intervalo a taxa semanal vira ruído amplificado (kg/semana explode) e isso
@@ -224,15 +238,22 @@ export default function PrevisaoIaPage() {
           sex,
           heightCm: parseFloat(heightCm),
           age: parseFloat(age),
-          activityLevel,
+          activityLevel: "moderado",
           exerciseFreq: exerciseFreq || undefined,
           sessionDuration: sessionDuration || undefined,
           dailyStepsAvg: stepsKnown === "sim" && dailyStepsAvg ? parseFloat(dailyStepsAvg) : undefined,
-          occupationActivity: stepsKnown === "nao" ? occupationActivity || undefined : undefined,
-          commuteActivity: stepsKnown === "nao" ? commuteActivity || undefined : undefined,
-          householdActivity: stepsKnown === "nao" ? householdActivity || undefined : undefined,
-          leisureActivity: stepsKnown === "nao" ? leisureActivity || undefined : undefined,
-          stairsUse: stepsKnown === "nao" ? stairsUse || undefined : undefined,
+          sittingHoursPerDay: stepsKnown === "nao" && sittingHoursPerDay ? parseFloat(sittingHoursPerDay) : undefined,
+          standingWorkHoursPerDay: stepsKnown === "nao" && standingWorkHoursPerDay ? parseFloat(standingWorkHoursPerDay) : undefined,
+          activeCommuteMinutesPerDay:
+            stepsKnown === "nao" && activeCommuteMinutesPerDay ? parseFloat(activeCommuteMinutesPerDay) : undefined,
+          choresHoursPerWeek: stepsKnown === "nao" && choresHoursPerWeek ? parseFloat(choresHoursPerWeek) : undefined,
+          stairFlightsPerDay: stepsKnown === "nao" && stairFlightsPerDay ? parseFloat(stairFlightsPerDay) : undefined,
+          otherSportActivity: hasOtherSport === "sim" ? otherSportActivity || undefined : undefined,
+          otherSportSessionsPerWeek:
+            hasOtherSport === "sim" && otherSportSessionsPerWeek ? parseFloat(otherSportSessionsPerWeek) : undefined,
+          otherSportMinutesPerSession:
+            hasOtherSport === "sim" && otherSportMinutesPerSession ? parseFloat(otherSportMinutesPerSession) : undefined,
+          otherSportTalkTest: hasOtherSport === "sim" ? otherSportTalkTest || undefined : undefined,
           currentWeightKg: parseFloat(weight),
           date,
           weeksToNextConsult: parseFloat(weeks),
@@ -249,7 +270,13 @@ export default function PrevisaoIaPage() {
 
       // salva as informações básicas no perfil, pra não pedir de novo da próxima vez
       const prefs = await loadPreferences();
-      await savePreferences({ ...prefs, sex, heightCm: parseFloat(heightCm), age: parseFloat(age), activityLevel });
+      await savePreferences({
+        ...prefs,
+        sex,
+        heightCm: parseFloat(heightCm),
+        age: parseFloat(age),
+        activityLevel: data.activityLevelDisplay ?? prefs.activityLevel,
+      });
 
       const frenteFile = files.frente!;
       const anglesUsed = Object.keys(files).filter((a) => files[a as Angle]);
@@ -472,78 +499,151 @@ export default function PrevisaoIaPage() {
           )}
 
           {stepsKnown === "nao" && (
+            <>
+              <p className="text-xs text-muted mt-4 mb-2">
+                Responda com números reais, não com "quão ativo você se sente" — o algoritmo calcula o nível a
+                partir disso.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Horas por dia sentado(a) — trabalho, estudo, trajeto, tela (fora o sono)">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="20"
+                    value={sittingHoursPerDay}
+                    onChange={(e) => setSittingHoursPerDay(e.target.value)}
+                    className="input"
+                    placeholder="ex: 9"
+                  />
+                </Field>
+                <Field label="Horas por dia em pé ou se movimentando fora da academia (trabalho, tarefas, estudo em pé)">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="20"
+                    value={standingWorkHoursPerDay}
+                    onChange={(e) => setStandingWorkHoursPerDay(e.target.value)}
+                    className="input"
+                    placeholder="ex: 1"
+                  />
+                </Field>
+                <Field label="Minutos por dia caminhando ou pedalando pra se deslocar (ida + volta)">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={activeCommuteMinutesPerDay}
+                    onChange={(e) => setActiveCommuteMinutesPerDay(e.target.value)}
+                    className="input"
+                    placeholder="ex: 20"
+                  />
+                </Field>
+                <Field label="Horas por semana com tarefas domésticas em movimento (limpar, cozinhar, compras)">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={choresHoursPerWeek}
+                    onChange={(e) => setChoresHoursPerWeek(e.target.value)}
+                    className="input"
+                    placeholder="ex: 3"
+                  />
+                </Field>
+                <Field label="Lances de escada (andares) que você sobe a pé, em média, por dia">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={stairFlightsPerDay}
+                    onChange={(e) => setStairFlightsPerDay(e.target.value)}
+                    className="input"
+                    placeholder="ex: 4"
+                  />
+                </Field>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div>
+          <span className="block text-xs text-muted mb-2">3. Outro esporte ou atividade física fora da academia</span>
+          <Field label="Além do treino principal, você pratica algum outro esporte ou atividade física regular?">
+            <select value={hasOtherSport} onChange={(e) => setHasOtherSport(e.target.value as HasOtherSport)} className="input">
+              <option value="" disabled>
+                Selecione…
+              </option>
+              {(Object.keys(HAS_OTHER_SPORT_LABEL) as HasOtherSport[]).map((h) => (
+                <option key={h} value={h}>
+                  {HAS_OTHER_SPORT_LABEL[h]}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {hasOtherSport === "sim" && (
             <div className="grid gap-4 sm:grid-cols-2 mt-4">
-              <Field label="Como é sua ocupação principal durante o dia?">
-                <select value={occupationActivity} onChange={(e) => setOccupationActivity(e.target.value as OccupationActivity)} className="input">
+              <Field label="Qual atividade?">
+                <select
+                  value={otherSportActivity}
+                  onChange={(e) => setOtherSportActivity(e.target.value as OtherSportActivity)}
+                  className="input"
+                >
                   <option value="" disabled>
                     Selecione…
                   </option>
-                  {(Object.keys(OCCUPATION_ACTIVITY_LABEL) as OccupationActivity[]).map((o) => (
+                  {(Object.keys(OTHER_SPORT_ACTIVITY_LABEL) as OtherSportActivity[]).map((o) => (
                     <option key={o} value={o}>
-                      {OCCUPATION_ACTIVITY_LABEL[o]}
+                      {OTHER_SPORT_ACTIVITY_LABEL[o]}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Como você se desloca no dia a dia?">
-                <select value={commuteActivity} onChange={(e) => setCommuteActivity(e.target.value as CommuteActivity)} className="input">
-                  <option value="" disabled>
-                    Selecione…
-                  </option>
-                  {(Object.keys(COMMUTE_ACTIVITY_LABEL) as CommuteActivity[]).map((c) => (
-                    <option key={c} value={c}>
-                      {COMMUTE_ACTIVITY_LABEL[c]}
-                    </option>
-                  ))}
-                </select>
+              <Field label="Quantas vezes por semana?">
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  value={otherSportSessionsPerWeek}
+                  onChange={(e) => setOtherSportSessionsPerWeek(e.target.value)}
+                  className="input"
+                  placeholder="ex: 2"
+                />
               </Field>
-              <Field label="Quanto de tarefas domésticas você faz por conta própria?">
-                <select value={householdActivity} onChange={(e) => setHouseholdActivity(e.target.value as HouseholdActivity)} className="input">
-                  <option value="" disabled>
-                    Selecione…
-                  </option>
-                  {(Object.keys(HOUSEHOLD_ACTIVITY_LABEL) as HouseholdActivity[]).map((h) => (
-                    <option key={h} value={h}>
-                      {HOUSEHOLD_ACTIVITY_LABEL[h]}
-                    </option>
-                  ))}
-                </select>
+              <Field label="Quantos minutos por sessão, em média?">
+                <input
+                  type="number"
+                  step="5"
+                  min="1"
+                  value={otherSportMinutesPerSession}
+                  onChange={(e) => setOtherSportMinutesPerSession(e.target.value)}
+                  className="input"
+                  placeholder="ex: 60"
+                />
               </Field>
-              <Field label="Atividade fora do treino formal (caminhada, esporte casual, etc.)?">
-                <select value={leisureActivity} onChange={(e) => setLeisureActivity(e.target.value as LeisureActivity)} className="input">
+              <Field label="Durante essa atividade, você consegue conversar normalmente?">
+                <select
+                  value={otherSportTalkTest}
+                  onChange={(e) => setOtherSportTalkTest(e.target.value as TalkTestIntensity)}
+                  className="input"
+                >
                   <option value="" disabled>
                     Selecione…
                   </option>
-                  {(Object.keys(LEISURE_ACTIVITY_LABEL) as LeisureActivity[]).map((l) => (
-                    <option key={l} value={l}>
-                      {LEISURE_ACTIVITY_LABEL[l]}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Uso de escadas no dia a dia?">
-                <select value={stairsUse} onChange={(e) => setStairsUse(e.target.value as StairsUse)} className="input">
-                  <option value="" disabled>
-                    Selecione…
-                  </option>
-                  {(Object.keys(STAIRS_USE_LABEL) as StairsUse[]).map((s) => (
-                    <option key={s} value={s}>
-                      {STAIRS_USE_LABEL[s]}
+                  {(Object.keys(TALK_TEST_LABEL) as TalkTestIntensity[]).map((t) => (
+                    <option key={t} value={t}>
+                      {TALK_TEST_LABEL[t]}
                     </option>
                   ))}
                 </select>
               </Field>
             </div>
           )}
-          {activityLevel && (
-            <p className="text-xs text-muted mt-3">
-              Nível de atividade calculado: <span className="text-accent font-medium">{ACTIVITY_LABEL[activityLevel]}</span>
-            </p>
-          )}
         </div>
 
         <div>
-          <span className="block text-xs text-muted mb-2">3. Fotos (frente obrigatória, o resto ajuda a precisão)</span>
+          <span className="block text-xs text-muted mb-2">4. Fotos (frente obrigatória, o resto ajuda a precisão)</span>
           <div className="grid gap-4 sm:grid-cols-4">
             {ANGLES.map(({ key, label, required }) => (
               <div key={key}>
@@ -577,7 +677,7 @@ export default function PrevisaoIaPage() {
 
         {!isFirstCycle && last && (
           <div>
-            <span className="block text-xs text-muted mb-2">4. Parâmetros da previsão</span>
+            <span className="block text-xs text-muted mb-2">5. Parâmetros da previsão</span>
             <Field label="Semanas até a próxima consulta">
               <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
             </Field>
@@ -637,6 +737,12 @@ export default function PrevisaoIaPage() {
               <span className="ml-2 text-xs font-normal text-muted">confiança {result.bfConfidence}</span>
             </div>
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.bfReasoning}</p>
+            {result.activityLevelDisplay && (
+              <p className="text-xs text-muted mt-3 border-t border-border pt-3">
+                Nível de atividade calculado a partir do seu gasto real (NEAT + treino):{" "}
+                <span className="text-accent font-medium">{ACTIVITY_LABEL[result.activityLevelDisplay]}</span>
+              </p>
+            )}
           </div>
 
           <div className="card p-5 border-accent/30 animate-fade-in-up stagger-1">

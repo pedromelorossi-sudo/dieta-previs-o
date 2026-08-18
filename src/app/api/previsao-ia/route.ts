@@ -10,11 +10,8 @@ import {
   Restriction,
   ExerciseFreq,
   SessionDuration,
-  OccupationActivity,
-  CommuteActivity,
-  HouseholdActivity,
-  LeisureActivity,
-  StairsUse,
+  OtherSportActivity,
+  TalkTestIntensity,
 } from "@/lib/questionnaire";
 
 const ANGLE_LABEL: Record<string, string> = {
@@ -44,11 +41,15 @@ interface RequestBody {
   exerciseFreq?: ExerciseFreq;
   sessionDuration?: SessionDuration;
   dailyStepsAvg?: number;
-  occupationActivity?: OccupationActivity;
-  commuteActivity?: CommuteActivity;
-  householdActivity?: HouseholdActivity;
-  leisureActivity?: LeisureActivity;
-  stairsUse?: StairsUse;
+  sittingHoursPerDay?: number;
+  standingWorkHoursPerDay?: number;
+  activeCommuteMinutesPerDay?: number;
+  choresHoursPerWeek?: number;
+  stairFlightsPerDay?: number;
+  otherSportActivity?: OtherSportActivity;
+  otherSportSessionsPerWeek?: number;
+  otherSportMinutesPerSession?: number;
+  otherSportTalkTest?: TalkTestIntensity;
   currentWeightKg: number;
   date: string;
   weeksToNextConsult: number;
@@ -220,11 +221,15 @@ export async function POST(request: Request) {
     exerciseFreq,
     sessionDuration,
     dailyStepsAvg,
-    occupationActivity,
-    commuteActivity,
-    householdActivity,
-    leisureActivity,
-    stairsUse,
+    sittingHoursPerDay,
+    standingWorkHoursPerDay,
+    activeCommuteMinutesPerDay,
+    choresHoursPerWeek,
+    stairFlightsPerDay,
+    otherSportActivity,
+    otherSportSessionsPerWeek,
+    otherSportMinutesPerSession,
+    otherSportTalkTest,
     currentWeightKg,
     date,
     weeksToNextConsult,
@@ -340,11 +345,15 @@ ${VISUAL_BF_PROTOCOL}`,
       exerciseFreq,
       sessionDuration,
       dailyStepsAvg,
-      occupationActivity,
-      commuteActivity,
-      householdActivity,
-      leisureActivity,
-      stairsUse,
+      sittingHoursPerDay,
+      standingWorkHoursPerDay,
+      activeCommuteMinutesPerDay,
+      choresHoursPerWeek,
+      stairFlightsPerDay,
+      otherSportActivity,
+      otherSportSessionsPerWeek,
+      otherSportMinutesPerSession,
+      otherSportTalkTest,
     });
 
     // meio-termo entre a fórmula (Mifflin/Katch, erro documentado de ±10-15%, maior ainda em quem
@@ -404,6 +413,7 @@ ${VISUAL_BF_PROTOCOL}`,
     return NextResponse.json({
       isFirstCycle: true,
       oneMonthProjection,
+      activityLevelDisplay: comp.activityLevelDisplay,
       bfPercentVisual: clamp(bfRaw.bfPercentVisual, 3, 60),
       bfConfidence: bfRaw.bfConfidence,
       bfReasoning: bfRaw.bfReasoning,
