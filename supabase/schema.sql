@@ -368,6 +368,43 @@ drop policy if exists "progress-photos: delete own" on storage.objects;
 create policy "progress-photos: delete own" on storage.objects
   for delete using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
+-- ============ PREDICTION AUDIT (calibração contínua) ============
+-- registra, a cada ciclo recorrente, fórmula vs. realidade (TDEE) e a consistência da leitura visual de
+-- %BF/composição do ganho — junto com sinais de adesão já coletados, pra saber se uma divergência é
+-- erro da fórmula ou só adesão ruim antes de deixar isso "aprender" e ajustar a fórmula (ver
+-- src/lib/calibration.ts). Nunca é editado depois de inserido — é um log de auditoria, não estado mutável.
+create table if not exists public.prediction_audit (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  cycle_id uuid references public.cycles(id) on delete set null,
+  date date not null,
+  formula_tdee numeric,
+  empirical_tdee numeric,
+  bf_percent_visual numeric,
+  bf_confidence text,
+  gain_composition text,
+  weight_delta_kg numeric,
+  diet_clean boolean not null default false,
+  training_clean boolean not null default false,
+  bf_consistent boolean,
+  notes jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.prediction_audit enable row level security;
+
+drop policy if exists "prediction_audit: select own or admin" on public.prediction_audit;
+create policy "prediction_audit: select own or admin" on public.prediction_audit
+  for select using (auth.uid() = user_id or public.is_admin());
+drop policy if exists "prediction_audit: insert own" on public.prediction_audit;
+create policy "prediction_audit: insert own" on public.prediction_audit
+  for insert with check (auth.uid() = user_id);
+drop policy if exists "prediction_audit: delete own" on public.prediction_audit;
+create policy "prediction_audit: delete own" on public.prediction_audit
+  for delete using (auth.uid() = user_id);
+
+create index if not exists prediction_audit_user_date_idx on public.prediction_audit (user_id, date);
+
 -- força o PostgREST a recarregar o cache do schema com as tabelas/colunas novas
 notify pgrst, 'reload schema';
 

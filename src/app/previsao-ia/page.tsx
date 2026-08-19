@@ -46,6 +46,7 @@ import {
   IconTarget,
   IconWheat,
   IconDumbbell,
+  IconTrend,
 } from "@/components/icons";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -121,6 +122,26 @@ interface PredictionResponse {
   }[];
   trainingAdherenceScore?: number;
   plannedSessions?: number;
+  tdeeCalibration?: {
+    factor: number;
+    confidence: "nenhuma" | "baixa" | "media" | "alta";
+    cleanCyclesUsed: number;
+    totalCyclesSeen: number;
+    note: string;
+  };
+  bfConsistency?: { consistent: boolean; note: string } | null;
+  cardioPrescription?: {
+    sessions: {
+      modality: string;
+      frequencyPerWeek: number;
+      minutesPerSession: number;
+      intensityLabel: string;
+      timingNote: string;
+    }[];
+    totalMinutesPerWeek: number;
+    reason: string;
+    interferenceNote: string;
+  };
 }
 
 export default function PrevisaoIaPage() {
@@ -199,6 +220,15 @@ export default function PrevisaoIaPage() {
   const [keptExercisesAndLoads, setKeptExercisesAndLoads] = useState<
     "" | "seguiu_de_perto" | "trocou_mas_manteve_volume" | "reduziu_bastante"
   >("");
+  const [effortNearFailure, setEffortNearFailure] = useState<"" | "sim" | "nao">("");
+
+  // adesão detalhada — fatos contáveis, não autoavaliação, usados só pra decidir se esse ciclo é
+  // confiável o bastante pra calibrar a fórmula (ver calibration.ts e Lichtman et al. 1992: autorrelato
+  // sem medição real é o maior confundidor conhecido nessa área, não a fórmula em si)
+  const [daysFollowedPerWeek, setDaysFollowedPerWeek] = useState("");
+  const [trackingMethod, setTrackingMethod] = useState<"" | "pesei_a_maioria" | "estimei_de_olho">("");
+  const [weighInConsistent, setWeighInConsistent] = useState<"" | "sim" | "nao">("");
+  const [alcoholDosesPerWeek, setAlcoholDosesPerWeek] = useState("");
 
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
@@ -330,6 +360,11 @@ export default function PrevisaoIaPage() {
           lastCycleDaytimeFatigue: daytimeFatigue ? daytimeFatigue === "sim" : undefined,
           lastCycleCompletedSessions: completedSessions ? parseFloat(completedSessions) : undefined,
           lastCycleKeptExercisesAndLoads: keptExercisesAndLoads || undefined,
+          lastCycleEffortNearFailure: effortNearFailure || undefined,
+          lastCycleDaysFollowedPerWeek: daysFollowedPerWeek ? parseFloat(daysFollowedPerWeek) : undefined,
+          lastCycleTrackingMethod: trackingMethod || undefined,
+          lastCycleWeighInConsistent: weighInConsistent ? weighInConsistent === "sim" : undefined,
+          lastCycleAlcoholDosesPerWeek: alcoholDosesPerWeek ? parseFloat(alcoholDosesPerWeek) : undefined,
         }),
       });
       const data = await res.json();
@@ -801,6 +836,50 @@ export default function PrevisaoIaPage() {
             </p>
 
             <p className="text-xs text-muted mt-5 mb-2">
+              Detalhes de execução — usados só pra decidir se esse ciclo é confiável o bastante pra ensinar algo à
+              fórmula (ver nota de calibração nos resultados), não pra te julgar.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Em quantos dos 7 dias da semana você seguiu a dieta à risca?">
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="7"
+                  value={daysFollowedPerWeek}
+                  onChange={(e) => setDaysFollowedPerWeek(e.target.value)}
+                  className="input"
+                  placeholder="ex: 6"
+                />
+              </Field>
+              <Field label="Você pesou/mediu os alimentos ou estimou de olho na maior parte do tempo?">
+                <select value={trackingMethod} onChange={(e) => setTrackingMethod(e.target.value as typeof trackingMethod)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="pesei_a_maioria">Pesei/medi a maior parte</option>
+                  <option value="estimei_de_olho">Estimei de olho</option>
+                </select>
+              </Field>
+              <Field label="Você se pesou sempre nas mesmas condições (mesma balança, mesmo horário, em jejum)?">
+                <select value={weighInConsistent} onChange={(e) => setWeighInConsistent(e.target.value as typeof weighInConsistent)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="sim">Sim</option>
+                  <option value="nao">Não</option>
+                </select>
+              </Field>
+              <Field label="Quantas doses de álcool, em média por semana, durante o ciclo?">
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={alcoholDosesPerWeek}
+                  onChange={(e) => setAlcoholDosesPerWeek(e.target.value)}
+                  className="input"
+                  placeholder="ex: 0"
+                />
+              </Field>
+            </div>
+
+            <p className="text-xs text-muted mt-5 mb-2">
               Sobre o ciclo que terminou — isso decide se o déficit foi grande demais e ajusta automaticamente o
               próximo, sem você precisar avaliar &quot;quão cansado&quot; se sentiu.
             </p>
@@ -879,6 +958,13 @@ export default function PrevisaoIaPage() {
                   <option value="seguiu_de_perto">Segui de perto</option>
                   <option value="trocou_mas_manteve_volume">Troquei alguns exercícios, mas mantive o volume</option>
                   <option value="reduziu_bastante">Reduzi bastante (menos séries/carga que o sugerido)</option>
+                </select>
+              </Field>
+              <Field label="Nas séries de trabalho, você geralmente chegava perto da falha (1-2 reps de reserva)?">
+                <select value={effortNearFailure} onChange={(e) => setEffortNearFailure(e.target.value as typeof effortNearFailure)} className="input">
+                  <option value="">Selecione…</option>
+                  <option value="sim">Sim</option>
+                  <option value="nao">Não, parava bem antes</option>
                 </select>
               </Field>
             </div>
@@ -1025,6 +1111,52 @@ export default function PrevisaoIaPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {result.cardioPrescription && (
+            <div className="card p-5 animate-fade-in-up stagger-3">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconTrend className="h-4 w-4" /> Cardio — turnover metabólico
+              </div>
+              <p className="text-sm text-muted mt-2 leading-relaxed">{result.cardioPrescription.reason}</p>
+              <div className="mt-4 space-y-2">
+                {result.cardioPrescription.sessions.map((s, i) => (
+                  <div key={i} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium">{s.modality}</span>
+                      <span className="text-muted">
+                        {s.frequencyPerWeek}x/semana · {s.minutesPerSession}min · {s.intensityLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted mt-1">{s.timingNote}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted mt-3 border-t border-border pt-3">
+                Total: {result.cardioPrescription.totalMinutesPerWeek}min/semana. {result.cardioPrescription.interferenceNote}
+              </p>
+            </div>
+          )}
+
+          {result.tdeeCalibration && (
+            <div className="card p-5 animate-fade-in-up stagger-3">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconCheck className="h-4 w-4" /> Calibração contínua da fórmula
+              </div>
+              <p className="text-sm text-muted mt-2 leading-relaxed">{result.tdeeCalibration.note}</p>
+              {result.tdeeCalibration.confidence !== "nenhuma" && (
+                <span
+                  className={`badge mt-2 inline-block ${
+                    result.tdeeCalibration.confidence === "alta" ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"
+                  }`}
+                >
+                  confiança {result.tdeeCalibration.confidence}
+                </span>
+              )}
+              {result.bfConsistency && !result.bfConsistency.consistent && (
+                <p className="text-xs text-warn mt-3 border-t border-border pt-3">⚠ {result.bfConsistency.note}</p>
+              )}
             </div>
           )}
 

@@ -8,6 +8,8 @@ import { planMonths } from "@/lib/periodization";
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
 import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, VolumeStatus } from "@/lib/trainingVolume";
 import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence } from "@/lib/trainingSplitBuilder";
+import { assessDietCleanliness, assessTrainingCleanliness, checkBfConsistency, computeTdeeCalibration, CalibrationAuditRow } from "@/lib/calibration";
+import { prescribeCardio } from "@/lib/cardioPrescription";
 import { Cycle, GainComposition } from "@/lib/types";
 import {
   ActivityLevel,
@@ -75,6 +77,13 @@ interface RequestBody {
    * de MRV quando a execução real ficou abaixo do planejado (ver scoreTrainingAdherence) */
   lastCycleCompletedSessions?: number;
   lastCycleKeptExercisesAndLoads?: KeptExercisesAndLoads;
+  /** adesão detalhada, pra decidir se um ciclo é "limpo" o suficiente pra calibrar a fórmula de TDEE
+   * (ver src/lib/calibration.ts) — nenhum campo é autoavaliação, todos são fatos contáveis */
+  lastCycleDaysFollowedPerWeek?: number;
+  lastCycleTrackingMethod?: "pesei_a_maioria" | "estimei_de_olho";
+  lastCycleWeighInConsistent?: boolean;
+  lastCycleAlcoholDosesPerWeek?: number;
+  lastCycleEffortNearFailure?: "sim" | "nao";
 }
 
 interface CycleRow {
@@ -281,6 +290,11 @@ export async function POST(request: Request) {
     lastCycleDaytimeFatigue,
     lastCycleCompletedSessions,
     lastCycleKeptExercisesAndLoads,
+    lastCycleDaysFollowedPerWeek,
+    lastCycleTrackingMethod,
+    lastCycleWeighInConsistent,
+    lastCycleAlcoholDosesPerWeek,
+    lastCycleEffortNearFailure,
   } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
@@ -462,10 +476,17 @@ ${VISUAL_BF_PROTOCOL}`,
       monthsAhead: 6,
     });
 
+    const FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
+    const cardioPrescription = prescribeCardio({
+      strategy: comp.path,
+      strengthDaysPerWeek: exerciseFreq ? FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ[exerciseFreq] : 0,
+    });
+
     return NextResponse.json({
       isFirstCycle: true,
       oneMonthProjection,
       monthlyPlan,
+      cardioPrescription,
       activityLevelDisplay: comp.activityLevelDisplay,
       bfPercentVisual: clamp(bfRaw.bfPercentVisual, 3, 60),
       bfConfidence: bfRaw.bfConfidence,
@@ -775,6 +796,102 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     daytimeFatigueLastCycle: lastCycleDaytimeFatigue,
   });
 
+  // Calibração contínua: fórmula vs. realidade, só aprendendo com ciclos "limpos" (adesão real, não
+  // autorrelato duvidoso) — ver src/lib/calibration.ts. Nunca deixa uma divergência virar "a fórmula
+  // está errada" sem primeiro descartar que a causa é adesão (Lichtman et al. 1992: gente que jurava
+  // "resistência a dieta" tinha gasto normal, o problema era subestimar o que comeu).
+  const { clean: dietClean, reasons: dietDirtyReasons } = assessDietCleanliness({
+    adherence: lastCycleAdherence,
+    daysFollowedPerWeek: lastCycleDaysFollowedPerWeek,
+    trackingMethod: lastCycleTrackingMethod,
+    weighInConsistent: lastCycleWeighInConsistent,
+    alcoholDosesPerWeek: lastCycleAlcoholDosesPerWeek,
+    recoveryScore,
+  });
+  const { clean: trainingClean, reasons: trainingDirtyReasons } = assessTrainingCleanliness({
+    completedSessions: lastCycleCompletedSessions,
+    plannedSessions,
+    keptExercisesAndLoads: lastCycleKeptExercisesAndLoads,
+    effortNearFailure: lastCycleEffortNearFailure,
+  });
+  const cycleCleanForCalibration = dietClean && trainingClean;
+
+  // TDEE "de fórmula" calculado em paralelo só pra auditoria/calibração — a prescrição real desse ciclo
+  // continua vindo do TDEE empírico (result.tdeeRange), que já é a fonte mais confiável quando há
+  // histórico (ver TDEE Empírico e Histórico de Ciclos). Isso nunca substitui a prescrição, só alimenta
+  // o aprendizado de quanto a fórmula erra pra essa pessoa especificamente.
+  const shadowFormulaComp = estimateBodyComposition({
+    weightKg: currentWeightKg,
+    heightCm,
+    bodyFatPercent: bfPercentVisual,
+    age,
+    sex,
+    activityLevel,
+    exerciseFreq,
+    sessionDuration,
+    dailyStepsAvg,
+    sittingHoursPerDay,
+    standingWorkHoursPerDay,
+    activeCommuteMinutesPerDay,
+    choresHoursPerWeek,
+    stairFlightsPerDay,
+    otherSportActivity,
+    otherSportSessionsPerWeek,
+    otherSportMinutesPerSession,
+    otherSportTalkTest,
+  });
+  const empiricalTdeeMid = (result.tdeeRange.min + result.tdeeRange.max) / 2;
+
+  let tdeeCalibration: ReturnType<typeof computeTdeeCalibration> = {
+    factor: 1,
+    confidence: "nenhuma",
+    cleanCyclesUsed: 0,
+    totalCyclesSeen: 0,
+    note: "Auditoria de calibração ainda não disponível nessa conta.",
+  };
+  let bfConsistency: { consistent: boolean; note: string } | null = null;
+
+  try {
+    const { data: auditRows } = await supabase
+      .from("prediction_audit")
+      .select("date,formula_tdee,empirical_tdee,diet_clean,training_clean")
+      .eq("user_id", user.id)
+      .order("date", { ascending: true });
+
+    const calibrationInput: CalibrationAuditRow[] = (auditRows ?? []).map((r) => ({
+      date: r.date,
+      formulaTdee: r.formula_tdee != null ? Number(r.formula_tdee) : null,
+      empiricalTdee: r.empirical_tdee != null ? Number(r.empirical_tdee) : null,
+      dietClean: r.diet_clean,
+      trainingClean: r.training_clean,
+    }));
+    tdeeCalibration = computeTdeeCalibration(calibrationInput);
+
+    if (lastCycle?.bodyFatPercent != null) {
+      bfConsistency = checkBfConsistency(gainComposition, currentWeightKg - lastCycle.weightKg, bfPercentVisual - lastCycle.bodyFatPercent);
+    }
+
+    // grava esse ciclo na auditoria pra alimentar a calibração dos próximos — melhor esforço, nunca
+    // quebra a previsão principal se a tabela ainda não foi migrada ou o insert falhar por qualquer motivo
+    await supabase.from("prediction_audit").insert({
+      user_id: user.id,
+      date,
+      formula_tdee: shadowFormulaComp.tdee,
+      empirical_tdee: empiricalTdeeMid,
+      bf_percent_visual: bfPercentVisual,
+      bf_confidence: vision.bfConfidence,
+      gain_composition: gainComposition,
+      weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
+      diet_clean: dietClean,
+      training_clean: trainingClean,
+      bf_consistent: bfConsistency?.consistent ?? null,
+      notes: [...dietDirtyReasons, ...trainingDirtyReasons],
+    });
+  } catch {
+    // tabela de auditoria ainda não migrada, ou qualquer erro nessa etapa acessória — não quebra a
+    // previsão principal por causa disso
+  }
+
   // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo). O kcal vem do TDEE real do
   // algoritmo (calculado a partir da resposta observada do próprio usuário, usando o E da composição
   // decidida acima) + o superávit/déficit da estratégia — não da extrapolação pura da tendência histórica,
@@ -785,6 +902,8 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     sex,
     recoveryScore
   );
+
+  const cardioPrescription = prescribeCardio({ strategy, strengthDaysPerWeek: daysPerWeek, recoveryScore });
 
   const kcalStrategyRange = {
     min: result.tdeeRange.min * (1 + strategySurplusPercent),
@@ -873,6 +992,9 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     trainingPeriodizationPlan,
     trainingAdherenceScore,
     plannedSessions,
+    cardioPrescription,
+    tdeeCalibration,
+    bfConsistency,
     meals,
     dietWarnings,
   });
