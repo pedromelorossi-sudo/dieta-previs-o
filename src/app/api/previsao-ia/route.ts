@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { predictNextCycle, E_SCENARIOS } from "@/lib/dietEngine";
+import { predictNextCycle, E_SCENARIOS, daysBetween } from "@/lib/dietEngine";
 import { estimateBodyComposition, classifyPathFromBf, scoreRecoverySignals, PATH_LABEL } from "@/lib/bodyComposition";
 import { generateDietMeals } from "@/lib/dietGenerator";
 import { planMonths } from "@/lib/periodization";
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
 import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, VolumeStatus } from "@/lib/trainingVolume";
-import { computeMuscleTargets, buildSplit, planTrainingPeriodization } from "@/lib/trainingSplitBuilder";
+import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence } from "@/lib/trainingSplitBuilder";
 import { Cycle, GainComposition } from "@/lib/types";
 import {
   ActivityLevel,
@@ -36,6 +36,7 @@ interface PhotoInput {
 type WeightTrend = "subindo" | "descendo" | "estavel" | "nao_sei";
 type Adherence = "seguiu" | "comeu_mais" | "comeu_menos" | "nao_acompanhou";
 type StrengthTrend = "subiu" | "manteve" | "caiu";
+type KeptExercisesAndLoads = "seguiu_de_perto" | "trocou_mas_manteve_volume" | "reduziu_bastante";
 
 interface RequestBody {
   photos: PhotoInput[];
@@ -69,6 +70,11 @@ interface RequestBody {
   lastCycleSleepHoursAvg?: number;
   lastCycleSleepDisturbance?: boolean;
   lastCycleDaytimeFatigue?: boolean;
+  /** adesão ao treino do ciclo anterior — sessões previstas vêm calculadas (dias/semana × semanas
+   * decorridas), não perguntadas; usado pra travar o teto de volume do próximo mesociclo em MAV em vez
+   * de MRV quando a execução real ficou abaixo do planejado (ver scoreTrainingAdherence) */
+  lastCycleCompletedSessions?: number;
+  lastCycleKeptExercisesAndLoads?: KeptExercisesAndLoads;
 }
 
 interface CycleRow {
@@ -273,6 +279,8 @@ export async function POST(request: Request) {
     lastCycleSleepHoursAvg,
     lastCycleSleepDisturbance,
     lastCycleDaytimeFatigue,
+    lastCycleCompletedSessions,
+    lastCycleKeptExercisesAndLoads,
   } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
@@ -720,10 +728,19 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   let suggestedTrainingProgram: ReturnType<typeof buildSplit> | null = null;
   let trainingPeriodizationPlan: ReturnType<typeof planTrainingPeriodization> | null = null;
   let muscleTargetsOut: ReturnType<typeof computeMuscleTargets> | null = null;
+  // sessões previstas = dias/semana atuais × semanas decorridas desde o último ciclo — calculado, não
+  // perguntado; o usuário só informa quantas completou de verdade
+  const weeksSinceLastCycle = lastCycle ? daysBetween(lastCycle.date, date) / 7 : 0;
+  const plannedSessions = Math.round(daysPerWeek * weeksSinceLastCycle);
+  const trainingAdherenceScore = scoreTrainingAdherence({
+    completedSessions: lastCycleCompletedSessions,
+    plannedSessions,
+    keptExercisesAndLoads: lastCycleKeptExercisesAndLoads,
+  });
   if (daysPerWeek > 0) {
-    muscleTargetsOut = computeMuscleTargets(vision.muscleGroupAssessment ?? [], prefs?.priority_muscles ?? []);
+    muscleTargetsOut = computeMuscleTargets(vision.muscleGroupAssessment ?? [], prefs?.priority_muscles ?? [], trainingAdherenceScore);
     suggestedTrainingProgram = buildSplit(daysPerWeek, muscleTargetsOut);
-    trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, 10);
+    trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, daysPerWeek, 10);
   }
 
   const bfPercentVisual = clamp(vision.bfPercentVisual, 3, 60);
@@ -854,6 +871,8 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     muscleTargets: muscleTargetsOut ?? [],
     suggestedTrainingProgram,
     trainingPeriodizationPlan,
+    trainingAdherenceScore,
+    plannedSessions,
     meals,
     dietWarnings,
   });

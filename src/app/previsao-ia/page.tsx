@@ -116,9 +116,11 @@ interface PredictionResponse {
     weekIndex: number;
     label: string;
     isDeload: boolean;
-    totalWeeklySets: number;
-    muscles: { muscle: string; muscleLabel: string; weeklySets: number }[];
+    focusNote: string;
+    sessions: TrainingSession[];
   }[];
+  trainingAdherenceScore?: number;
+  plannedSessions?: number;
 }
 
 export default function PrevisaoIaPage() {
@@ -190,6 +192,13 @@ export default function PrevisaoIaPage() {
   const [sleepHoursAvg, setSleepHoursAvg] = useState("");
   const [sleepDisturbance, setSleepDisturbance] = useState<"" | "sim" | "nao">("");
   const [daytimeFatigue, setDaytimeFatigue] = useState<"" | "sim" | "nao">("");
+
+  // adesão ao treino do ciclo anterior — sessões previstas são calculadas (dias/semana × semanas
+  // decorridas), você só informa quantas completou de verdade e se manteve exercícios/cargas
+  const [completedSessions, setCompletedSessions] = useState("");
+  const [keptExercisesAndLoads, setKeptExercisesAndLoads] = useState<
+    "" | "seguiu_de_perto" | "trocou_mas_manteve_volume" | "reduziu_bastante"
+  >("");
 
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
@@ -319,6 +328,8 @@ export default function PrevisaoIaPage() {
           lastCycleSleepHoursAvg: sleepHoursAvg ? parseFloat(sleepHoursAvg) : undefined,
           lastCycleSleepDisturbance: sleepDisturbance ? sleepDisturbance === "sim" : undefined,
           lastCycleDaytimeFatigue: daytimeFatigue ? daytimeFatigue === "sim" : undefined,
+          lastCycleCompletedSessions: completedSessions ? parseFloat(completedSessions) : undefined,
+          lastCycleKeptExercisesAndLoads: keptExercisesAndLoads || undefined,
         }),
       });
       const data = await res.json();
@@ -840,6 +851,37 @@ export default function PrevisaoIaPage() {
                 </select>
               </Field>
             </div>
+
+            <p className="text-xs text-muted mt-5 mb-2">
+              Adesão ao treino — as sessões previstas são calculadas sozinhas (dias/semana × tempo desde o último
+              ciclo), isso só ajusta o volume do próximo mesociclo pra não mirar o teto se o atual nem está sendo
+              completado.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Quantas sessões de treino você completou de verdade desde o último ciclo?">
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={completedSessions}
+                  onChange={(e) => setCompletedSessions(e.target.value)}
+                  className="input"
+                  placeholder="ex: 10"
+                />
+              </Field>
+              <Field label="Nas sessões que fez, manteve os exercícios e cargas sugeridos?">
+                <select
+                  value={keptExercisesAndLoads}
+                  onChange={(e) => setKeptExercisesAndLoads(e.target.value as typeof keptExercisesAndLoads)}
+                  className="input"
+                >
+                  <option value="">Selecione…</option>
+                  <option value="seguiu_de_perto">Segui de perto</option>
+                  <option value="trocou_mas_manteve_volume">Troquei alguns exercícios, mas mantive o volume</option>
+                  <option value="reduziu_bastante">Reduzi bastante (menos séries/carga que o sugerido)</option>
+                </select>
+              </Field>
+            </div>
           </div>
         )}
 
@@ -967,8 +1009,7 @@ export default function PrevisaoIaPage() {
               </div>
               <p className="text-xs text-muted mt-2 leading-relaxed">
                 Mesociclo de 5 semanas: volume sobe progressivamente até a meta e cai pra ~metade na semana de
-                deload, antes de recomeçar. Esquemas de periodização produzem hipertrofia parecida quando o volume
-                é equalizado — o que importa é não empilhar semanas seguidas perto do teto recuperável.
+                deload, antes de recomeçar.
               </p>
               <div className="mt-4 space-y-2">
                 {result.trainingPeriodizationPlan.map((w) => (
@@ -980,7 +1021,7 @@ export default function PrevisaoIaPage() {
                   >
                     <span className="text-xs text-muted w-20 shrink-0">{w.label}</span>
                     {w.isDeload && <span className="badge bg-warn/15 text-warn shrink-0">deload</span>}
-                    <span className="text-sm ml-auto">{w.totalWeeklySets} séries/semana (total)</span>
+                    <span className="text-xs text-muted">{w.focusNote}</span>
                   </div>
                 ))}
               </div>

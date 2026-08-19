@@ -32,36 +32,67 @@ const DEVELOPMENT_ADJUSTMENT: Record<RelativeDevelopment, number> = {
   destaque: 0.85,
 };
 
+export interface TrainingAdherenceSignals {
+  /** sessões de treino completadas de verdade desde o último ciclo — fato contável */
+  completedSessions?: number;
+  /** sessões previstas no período (dias/semana × semanas decorridas) — calculado, não perguntado */
+  plannedSessions?: number;
+  keptExercisesAndLoads?: "seguiu_de_perto" | "trocou_mas_manteve_volume" | "reduziu_bastante";
+}
+
+/** Pontua adesão ao treino do ciclo anterior — fatos observáveis (sessões completadas vs. previstas,
+ * se manteve exercícios/cargas ou precisou reduzir), não autoavaliação de "quão disciplinado" foi.
+ * Score > 0 significa que o volume-alvo do próximo mesociclo deve ficar mais conservador: não faz
+ * sentido ramping até o MRV se a pessoa não está completando nem o volume atual — mesmo raciocínio do
+ * recoveryScore em bodyComposition.ts, aplicado ao lado do treino. */
+export function scoreTrainingAdherence(signals: TrainingAdherenceSignals): number {
+  let score = 0;
+  if (signals.plannedSessions && signals.plannedSessions > 0) {
+    const rate = (signals.completedSessions ?? 0) / signals.plannedSessions;
+    if (rate < 0.5) score += 1;
+  }
+  if (signals.keptExercisesAndLoads === "reduziu_bastante") score += 1;
+  return score;
+}
+
 /** Meta de séries/semana por grupo pro mesociclo atual. Prioridade declarada (`priorityMuscles`, ex:
  * "consultoria real disse pra focar costas e braço") vence qualquer leitura de foto e vai direto pro
  * teto recuperável (MRV) — é informação mais confiável que um algoritmo lendo ângulo de câmera. Sem
  * prioridade declarada, cai na leitura visual: MAV como padrão, puxado pra cima quando a foto marca o
  * grupo "atrás dos outros", relaxado quando "destaque" (confidence "baixa" é ignorada, chute demais pra
- * virar meta de volume). */
+ * virar meta de volume). `adherenceScore` > 0 (ver scoreTrainingAdherence) trava o teto em MAV mesmo pra
+ * prioridade/leitura "atrás" — não adianta mirar MRV se o ciclo anterior já não foi executado direito. */
 export function computeMuscleTargets(
   assessment: MuscleAssessmentInput[] = [],
-  priorityMuscles: MuscleGroup[] = []
+  priorityMuscles: MuscleGroup[] = [],
+  adherenceScore = 0
 ): MuscleTarget[] {
+  const lowAdherence = adherenceScore >= 1;
+
   return VOLUME_LANDMARKS.map((landmark) => {
     const muscleLabel = MUSCLE_GROUP_LABEL[landmark.muscle];
+    const ceiling = lowAdherence ? landmark.mav : landmark.mrv;
+    const adherenceSuffix = lowAdherence
+      ? ` Adesão baixa no ciclo anterior — teto travado no MAV (${landmark.mav}) até a execução melhorar, em vez do MRV.`
+      : "";
 
     if (priorityMuscles.includes(landmark.muscle)) {
       return {
         muscle: landmark.muscle,
         muscleLabel,
-        weeklySets: landmark.mrv,
-        reason: `Prioridade declarada (consultoria) — meta no teto recuperável (MRV: ${landmark.mrv} séries/semana) em vez do MAV padrão, exercícios desse grupo entram primeiro na sessão e a frequência semanal sobe quando possível.`,
+        weeklySets: Math.min(landmark.mrv, ceiling),
+        reason: `Prioridade declarada (consultoria) — meta ${lowAdherence ? "no MAV" : "no teto recuperável (MRV)"} (${ceiling} séries/semana), exercícios desse grupo entram primeiro na sessão e a frequência semanal sobe quando possível.${adherenceSuffix}`,
         isPriority: true,
       };
     }
 
     const a = assessment.find((x) => x.muscle === landmark.muscle && x.confidence !== "baixa");
     const adjustment = a ? DEVELOPMENT_ADJUSTMENT[a.relativeDevelopment] : 1.0;
-    const weeklySets = Math.round(Math.min(landmark.mrv, Math.max(landmark.mev, landmark.mav * adjustment)));
+    const weeklySets = Math.round(Math.min(ceiling, Math.max(landmark.mev, landmark.mav * adjustment)));
     const reason =
-      a && a.relativeDevelopment !== "proporcional"
+      (a && a.relativeDevelopment !== "proporcional"
         ? `Leitura visual marcou esse grupo como "${a.relativeDevelopment === "atras_dos_outros" ? "atrás dos outros" : "destaque"}" — meta ajustada do MAV padrão (${landmark.mav}) pra ${weeklySets} séries/semana.`
-        : `Meta padrão: MAV (${landmark.mav} séries/semana) — melhor custo-benefício da dose-resposta volume→hipertrofia.`;
+        : `Meta padrão: MAV (${landmark.mav} séries/semana) — melhor custo-benefício da dose-resposta volume→hipertrofia.`) + adherenceSuffix;
     return { muscle: landmark.muscle, muscleLabel, weeklySets, reason };
   });
 }
@@ -230,8 +261,10 @@ export interface WeekVolumePlan {
   weekIndex: number;
   label: string;
   isDeload: boolean;
-  totalWeeklySets: number;
-  muscles: { muscle: MuscleGroup; muscleLabel: string; weeklySets: number }[];
+  /** o que fazer nessa semana e por quê — não uma lista de números por grupo, uma frase acionável */
+  focusNote: string;
+  /** exercícios, séries e repetições prontos pra treinar nessa semana (já com o volume rampado) */
+  sessions: TrainingSession[];
 }
 
 // Mesociclo de 5 semanas (4 de acúmulo progressivo + 1 de deload) — convenção prática de periodização,
@@ -242,11 +275,12 @@ export interface WeekVolumePlan {
 // tempo demais perto do MRV sem descanso — o esquema abaixo faz isso de forma simples e previsível.
 const MESOCYCLE_WEEKS = 5;
 
-/** Projeta a progressão de volume por grupo ao longo de várias semanas: rampa de MEV até a meta
- * (MAV, ajustado pela leitura visual) ao longo de 4 semanas, com a 5ª semana em deload (~50% do volume)
- * antes de reiniciar o ciclo — evita empilhar semanas seguidas perto do MRV, mesmo raciocínio de
- * "recuperação virando fator limitante" já usado em trainingVolume.ts/trainingPeriodization.ts. */
-export function planTrainingPeriodization(muscleTargets: MuscleTarget[], weeksAhead: number): WeekVolumePlan[] {
+/** Projeta a progressão de volume por grupo ao longo de várias semanas e já monta os exercícios/séries/
+ * repetições de cada semana (não só o número-alvo): rampa de MEV até a meta ao longo de 4 semanas, com
+ * a 5ª semana em deload (~50% do volume) antes de reiniciar o ciclo — evita empilhar semanas seguidas
+ * perto do MRV, mesmo raciocínio de "recuperação virando fator limitante" já usado em
+ * trainingVolume.ts/trainingPeriodization.ts. */
+export function planTrainingPeriodization(muscleTargets: MuscleTarget[], daysPerWeek: number, weeksAhead: number): WeekVolumePlan[] {
   const plan: WeekVolumePlan[] = [];
 
   for (let w = 1; w <= weeksAhead; w++) {
@@ -254,20 +288,28 @@ export function planTrainingPeriodization(muscleTargets: MuscleTarget[], weeksAh
     const isDeload = cyclePosition === MESOCYCLE_WEEKS;
     const progressFraction = Math.min(1, cyclePosition / (MESOCYCLE_WEEKS - 1));
 
-    const muscles = muscleTargets.map((t) => {
+    const rampedTargets: MuscleTarget[] = muscleTargets.map((t) => {
       const landmark = landmarkFor(t.muscle);
-      const rampedTarget = isDeload
+      const rampedSets = isDeload
         ? Math.round(t.weeklySets * 0.5)
         : Math.round(landmark.mev + (t.weeklySets - landmark.mev) * progressFraction);
-      return { muscle: t.muscle, muscleLabel: t.muscleLabel, weeklySets: Math.max(0, rampedTarget) };
+      return { ...t, weeklySets: Math.max(0, rampedSets) };
     });
+
+    const focusNote = isDeload
+      ? "Semana de deload — volume reduzido de propósito (~metade) pra recuperar antes do próximo bloco de acúmulo."
+      : cyclePosition === 1
+        ? "Início do mesociclo — volume mais perto do mínimo produtivo, pra entrar aos poucos."
+        : cyclePosition >= MESOCYCLE_WEEKS - 1
+          ? "Última semana de acúmulo antes do deload — volume no pico da meta do mesociclo."
+          : "Semana de acúmulo — volume subindo progressivamente rumo à meta.";
 
     plan.push({
       weekIndex: w,
       label: `Semana ${w}`,
       isDeload,
-      totalWeeklySets: muscles.reduce((sum, m) => sum + m.weeklySets, 0),
-      muscles,
+      focusNote,
+      sessions: buildSplit(daysPerWeek, rampedTargets),
     });
   }
 
