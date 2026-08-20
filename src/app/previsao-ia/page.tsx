@@ -32,7 +32,8 @@ import { Diet, DietMeal, dietTotals, mealTotals, itemMacros } from "@/lib/dietBu
 import { getFood } from "@/lib/foods";
 import { upsertDiet } from "@/lib/dietStorage";
 import { generateDietPdf } from "@/lib/pdf";
-import { exerciseById } from "@/lib/exerciseLibrary";
+import { exerciseById, MUSCLE_GROUP_LABEL } from "@/lib/exerciseLibrary";
+import { generateTrainingPdf } from "@/lib/pdf";
 import { TrainingSession } from "@/lib/trainingBuilder";
 import { upsertTrainingProgram } from "@/lib/trainingStorage";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
@@ -1327,40 +1328,124 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                 <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                   <IconDumbbell className="h-4 w-4" /> Divisão de treino sugerida
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSaveTrainingProgram}
-                  disabled={programSaving}
-                  className="btn-secondary text-xs py-1.5 px-3"
-                >
-                  {programSaved ? <IconCheck className="h-3.5 w-3.5" /> : null}
-                  {programSaving ? "Salvando…" : programSaved ? "Salvo" : "Salvar como programa"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => generateTrainingPdf(result.suggestedTrainingProgram!, "Plano de treino")}
+                    className="btn-secondary text-xs py-1.5 px-3"
+                  >
+                    Baixar PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTrainingProgram}
+                    disabled={programSaving}
+                    className="btn-secondary text-xs py-1.5 px-3"
+                  >
+                    {programSaved ? <IconCheck className="h-3.5 w-3.5" /> : null}
+                    {programSaving ? "Salvando…" : programSaved ? "Salvo" : "Salvar como programa"}
+                  </button>
+                </div>
               </div>
               <p className="text-xs text-muted mt-2 leading-relaxed">
                 Gerada a partir da leitura visual por grupo muscular nas fotos — meta de volume no MAV, ajustada pra
                 cima nos grupos que a IA marcou atrás dos outros. Edite livremente depois de salvar.
               </p>
-              <div className="mt-4 space-y-4">
-                {result.suggestedTrainingProgram.map((session, i) => (
-                  <div key={i} className="rounded-lg border border-border bg-surface-raised/40 p-3">
-                    <div className="text-sm font-medium mb-2">{session.label}</div>
-                    <div className="space-y-1">
-                      {session.items.map((item, j) => {
-                        const ex = exerciseById(item.exerciseId);
-                        const block = item.blocks[0];
-                        return (
-                          <div key={j} className="flex items-center justify-between text-xs text-muted">
-                            <span>{ex?.name ?? item.exerciseId}</span>
-                            <span className="shrink-0">
-                              {block.sets}x{block.repRange}
+              <div className="mt-4 space-y-5">
+                {result.suggestedTrainingProgram.map((session, i) => {
+                  // Séries de TRABALHO apenas — aquecimento não é estímulo e não entra na contagem
+                  // (mesma regra de isEffective em trainingVolume.ts).
+                  const workSets = session.items.reduce(
+                    (a, it) => a + it.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset").reduce((c, b) => c + b.sets, 0),
+                    0
+                  );
+                  const warmSets = session.items.reduce(
+                    (a, it) => a + it.blocks.filter((b) => b.reserveType === "warmup").reduce((c, b) => c + b.sets, 0),
+                    0
+                  );
+                  // ~2,5min por série de trabalho (execução + descanso) e ~1min por série de aproximação
+                  const minutos = Math.round(workSets * 2.5 + warmSets);
+                  const grupos = [...new Set(session.items.map((it) => exerciseById(it.exerciseId)?.primaryMuscle).filter(Boolean))];
+
+                  return (
+                    <div key={i} className="rounded-xl border border-border overflow-hidden">
+                      <div className="bg-surface-raised/70 px-4 py-3 border-b border-border">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="text-sm font-semibold">
+                            <span className="text-muted font-normal mr-2">Dia {i + 1}</span>
+                            {session.label}
+                          </span>
+                          <span className="text-xs text-muted tabular-nums">
+                            {session.items.length} exercícios · {workSets} séries · ~{minutos}min
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {grupos.map((g) => (
+                            <span key={g} className="badge bg-border/50 text-[10px]">
+                              {MUSCLE_GROUP_LABEL[g as keyof typeof MUSCLE_GROUP_LABEL]}
                             </span>
-                          </div>
-                        );
-                      })}
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="divide-y divide-border/60">
+                        {session.items.map((item, j) => {
+                          const ex = exerciseById(item.exerciseId);
+                          const aquecimento = item.blocks.find((b) => b.reserveType === "warmup");
+                          const trabalho = item.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset");
+                          return (
+                            <div key={j} className="px-4 py-3">
+                              <div className="flex items-baseline gap-2.5">
+                                <span className="text-xs text-muted tabular-nums shrink-0 w-4">{j + 1}</span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-medium leading-snug">{ex?.name ?? item.exerciseId}</div>
+                                  {ex && (
+                                    <div className="text-[11px] text-muted mt-0.5">
+                                      {MUSCLE_GROUP_LABEL[ex.primaryMuscle]} · {ex.equipment}
+                                      {ex.unilateral ? " · unilateral (conta por lado)" : ""}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="mt-2 ml-6 space-y-1">
+                                {aquecimento && (
+                                  <div className="flex items-center gap-3 text-xs text-muted">
+                                    <span className="badge bg-border/40 text-[10px] shrink-0 w-20 text-center">aquecimento</span>
+                                    <span className="tabular-nums">
+                                      {aquecimento.sets} × {aquecimento.repRange}
+                                    </span>
+                                    <span className="text-[11px]">
+                                      {aquecimento.loadKg != null ? `~${fmt(aquecimento.loadKg, 1)}kg` : "carga leve, subindo"}
+                                    </span>
+                                  </div>
+                                )}
+                                {trabalho.map((b, k) => (
+                                  <div key={k} className="flex items-center gap-3 text-sm">
+                                    <span className="badge bg-accent/15 text-accent text-[10px] shrink-0 w-20 text-center">
+                                      {b.reserveType === "topset" ? "top set" : "trabalho"}
+                                    </span>
+                                    <span className="font-medium tabular-nums">
+                                      {b.sets} × {b.repRange}
+                                    </span>
+                                    {b.loadKg != null && (
+                                      <span className="text-xs text-muted tabular-nums">{fmt(b.loadKg, 1)}kg</span>
+                                    )}
+                                    {b.rirTarget != null && (
+                                      <span className="text-[11px] text-muted ml-auto shrink-0">
+                                        deixar {b.rirTarget} {b.rirTarget === 1 ? "rep" : "reps"} na reserva
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

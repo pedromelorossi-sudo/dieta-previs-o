@@ -1,6 +1,8 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Diet, dietTotals, itemMacros, mealTotals } from "./dietBuilder";
+import { TrainingSession } from "./trainingBuilder";
+import { exerciseById, MUSCLE_GROUP_LABEL } from "./exerciseLibrary";
 import { findSubstitutes, getFood } from "./foods";
 import { fmt, fmtDate } from "./format";
 
@@ -160,4 +162,129 @@ export function generateDietPdf(diet: Diet): void {
 
   const filename = `${(diet.name || "dieta").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`;
   doc.save(filename);
+}
+
+
+/** Plano de treino em PDF — o artefato que se leva pra academia. A dieta já tinha o equivalente
+ * (generateDietPdf); o treino era só uma lista na tela, e uma divisão de 5 dias não cabe na memória.
+ *
+ * Uma decisão de conteúdo: as séries de AQUECIMENTO aparecem, mas em linha separada e discreta, porque
+ * não são estímulo e não entram na contagem de volume (mesma regra de isEffective em trainingVolume.ts).
+ * Misturá-las com as séries de trabalho faria o praticante achar que fez mais volume do que fez. */
+export function generateTrainingPdf(sessions: TrainingSession[], nome = "Plano de treino"): void {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const marginX = 40;
+  let y = 48;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...DARK);
+  doc.text(nome, marginX, y);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...MUTED);
+  y += 16;
+
+  const totalTrabalho = sessions.reduce(
+    (a, s) =>
+      a +
+      s.items.reduce(
+        (b, it) => b + it.blocks.filter((x) => x.reserveType === "work" || x.reserveType === "topset").reduce((c, x) => c + x.sets, 0),
+        0
+      ),
+    0
+  );
+  doc.text(
+    `Gerado em ${fmtDate(new Date().toISOString().slice(0, 10))} · ${sessions.length} ${sessions.length === 1 ? "dia" : "dias"}/semana · ${totalTrabalho} séries efetivas/semana`,
+    marginX,
+    y
+  );
+  y += 22;
+
+  for (const [i, session] of sessions.entries()) {
+    const trabalho = session.items.reduce(
+      (b, it) => b + it.blocks.filter((x) => x.reserveType === "work" || x.reserveType === "topset").reduce((c, x) => c + x.sets, 0),
+      0
+    );
+    const aquecimento = session.items.reduce(
+      (b, it) => b + it.blocks.filter((x) => x.reserveType === "warmup").reduce((c, x) => c + x.sets, 0),
+      0
+    );
+    const minutos = Math.round(trabalho * 2.5 + aquecimento);
+
+    // quebra de página quando o dia não cabe no que sobrou da folha
+    if (y > 690) {
+      doc.addPage();
+      y = 48;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(...DARK);
+    doc.text(`Dia ${i + 1} — ${session.label}`, marginX, y);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...MUTED);
+    doc.text(`${session.items.length} exercícios · ${trabalho} séries · ~${minutos}min`, marginX, y + 12);
+    y += 22;
+
+    const linhas: string[][] = [];
+    for (const [j, item] of session.items.entries()) {
+      const ex = exerciseById(item.exerciseId);
+      const nomeEx = ex?.name ?? item.exerciseId;
+      const alvo = ex ? `${MUSCLE_GROUP_LABEL[ex.primaryMuscle]}${ex.unilateral ? " (por lado)" : ""}` : "";
+
+      const aq = item.blocks.find((b) => b.reserveType === "warmup");
+      if (aq) {
+        linhas.push([`${j + 1}. ${nomeEx}`, alvo, "aquecimento", `${aq.sets} x ${aq.repRange}`, "leve"]);
+      }
+      for (const b of item.blocks.filter((x) => x.reserveType === "work" || x.reserveType === "topset")) {
+        linhas.push([
+          aq ? "" : `${j + 1}. ${nomeEx}`,
+          aq ? "" : alvo,
+          b.reserveType === "topset" ? "top set" : "trabalho",
+          `${b.sets} x ${b.repRange}`,
+          [b.loadKg != null ? `${fmt(b.loadKg, 1)}kg` : "", b.rirTarget != null ? `RIR ${b.rirTarget}` : ""].filter(Boolean).join(" · ") || "-",
+        ]);
+      }
+    }
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [["Exercício", "Alvo", "Tipo", "Séries x reps", "Carga / esforço"]],
+      body: linhas,
+      theme: "grid",
+      headStyles: { fillColor: ACCENT, textColor: [255, 255, 255], fontSize: 8.5 },
+      bodyStyles: { fontSize: 8.5, textColor: DARK },
+      styles: { cellPadding: 5 },
+      columnStyles: {
+        0: { cellWidth: 175 },
+        1: { cellWidth: 80 },
+        2: { cellWidth: 62 },
+        3: { cellWidth: 72 },
+      },
+      // linha de aquecimento em cinza, pra não ser confundida com série de trabalho
+      didParseCell: (data) => {
+        if (data.section === "body" && data.row.raw && (data.row.raw as string[])[2] === "aquecimento") {
+          data.cell.styles.textColor = MUTED;
+          data.cell.styles.fontStyle = "italic";
+        }
+      },
+    });
+    y = finalY(doc) + 22;
+  }
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...MUTED);
+  doc.text(
+    "RIR = repetições em reserva: quantas você ainda conseguiria fazer ao encerrar a série. Aquecimento nao conta como volume.",
+    marginX,
+    Math.min(y, 800)
+  );
+
+  doc.save(`${nome.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`);
 }
