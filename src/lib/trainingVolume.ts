@@ -158,3 +158,56 @@ export function adjustLandmarkForInjury(landmark: VolumeLandmark, injury: Injury
     reentryNote: `Fora ${injury.weeksOut} semana(s) — perda estimada de ~${(estimatedLossFraction * 100).toFixed(0)}% de massa/capacidade nesse grupo (Hardy et al. 2022). Reentrada recomendada perto do MEV ajustado (${reentryMev} séries/semana), subindo gradualmente ao longo de 2-3 semanas antes de mirar o MAV normal — não retomar direto no volume pré-lesão.`,
   };
 }
+
+
+/** Compara a META de volume prescrita com o volume EFETIVAMENTE logado, por grupo muscular.
+ *
+ * Os dois números sempre existiram no app e nunca se encontravam: `computeMuscleTargets` produzia a meta,
+ * `weeklyVolumeByMuscle` produzia o realizado, e `readVolumeStatus` só rodava o realizado contra os
+ * landmarks genéricos (MEV/MAV/MRV). Ninguém perguntava "prescrevi 10 séries de peito, ele fez 4, por
+ * quê?". Sem isso, adesão baixa a um grupo específico era invisível — aparecia só no agregado de
+ * sessões completadas, que não distingue quem pulou o dia de perna de quem pulou tudo.
+ */
+export interface VolumeAdherence {
+  muscle: MuscleGroup;
+  muscleLabel: string;
+  targetSets: number;
+  actualSets: number;
+  /** realizado / prescrito; 1 = executou exatamente a meta */
+  ratio: number;
+  note: string;
+}
+
+export function compareVolumeToTarget(
+  targets: { muscle: MuscleGroup; weeklySets: number }[],
+  loggedWeeklyVolume: Map<MuscleGroup, number>
+): { perMuscle: VolumeAdherence[]; overallRatio: number; summary: string } {
+  const perMuscle: VolumeAdherence[] = targets
+    .filter((t) => t.weeklySets > 0)
+    .map((t) => {
+      const actualSets = loggedWeeklyVolume.get(t.muscle) ?? 0;
+      const ratio = t.weeklySets > 0 ? actualSets / t.weeklySets : 1;
+      const note =
+        ratio >= 0.9
+          ? `${actualSets} de ${t.weeklySets} séries/semana — meta cumprida.`
+          : ratio >= 0.6
+            ? `${actualSets} de ${t.weeklySets} séries/semana (${(ratio * 100).toFixed(0)}%) — abaixo da meta, mas dentro do que dá pra recuperar ajustando a sessão.`
+            : `${actualSets} de ${t.weeklySets} séries/semana (${(ratio * 100).toFixed(0)}%) — bem abaixo da meta. Se isso se repetir, a meta é que está irreal pra sua rotina, não a execução que está errada.`;
+      return { muscle: t.muscle, muscleLabel: MUSCLE_GROUP_LABEL[t.muscle], targetSets: t.weeklySets, actualSets, ratio, note };
+    });
+
+  const totalTarget = perMuscle.reduce((sum, m) => sum + m.targetSets, 0);
+  const totalActual = perMuscle.reduce((sum, m) => sum + m.actualSets, 0);
+  const overallRatio = totalTarget > 0 ? totalActual / totalTarget : 1;
+
+  const atrasados = perMuscle.filter((m) => m.ratio < 0.6).map((m) => m.muscleLabel);
+  const summary =
+    totalTarget === 0
+      ? "Sem meta de volume registrada para comparar."
+      : `Volume executado: ${totalActual} de ${totalTarget} séries/semana (${(overallRatio * 100).toFixed(0)}% da meta).` +
+        (atrasados.length > 0
+          ? ` Bem abaixo da meta em: ${atrasados.join(", ")}. Grupo específico ficando pra trás é diferente de treinar menos no geral — vale olhar se é o dia da semana, o exercício ou a ordem na sessão.`
+          : "");
+
+  return { perMuscle, overallRatio, summary };
+}

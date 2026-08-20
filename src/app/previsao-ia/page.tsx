@@ -167,6 +167,21 @@ interface PredictionResponse {
   /** este ciclo vai alimentar a calibração, ou está "sujo" demais pra isso? */
   cycleCleanForCalibration?: boolean;
   cycleDirtyReasons?: string[];
+  confrontoDoPlano?: {
+    mesesDecorridos: number;
+    pesoProjetado: number;
+    pesoReal: number;
+    bfProjetado: number;
+    bfReal: number;
+    dentroDoPlano: boolean;
+    veredito: string;
+  } | null;
+  volumeAdherence?: {
+    perMuscle: { muscle: string; muscleLabel: string; targetSets: number; actualSets: number; ratio: number; note: string }[];
+    overallRatio: number;
+    summary: string;
+  } | null;
+  cardioSessionsPlanned?: number;
   bfConsistency?: { consistent: boolean; note: string } | null;
   cardioPrescription?: {
     sessions: {
@@ -259,6 +274,7 @@ export default function PrevisaoIaPage() {
     "" | "seguiu_de_perto" | "trocou_mas_manteve_volume" | "reduziu_bastante"
   >("");
   const [effortNearFailure, setEffortNearFailure] = useState<"" | "sim" | "nao">("");
+  const [cardioSessions, setCardioSessions] = useState("");
 
   // adesão detalhada — fatos contáveis, não autoavaliação, usados só pra decidir se esse ciclo é
   // confiável o bastante pra calibrar a fórmula (ver calibration.ts e Lichtman et al. 1992: autorrelato
@@ -399,6 +415,7 @@ export default function PrevisaoIaPage() {
           lastCycleCompletedSessions: completedSessions ? parseFloat(completedSessions) : undefined,
           lastCycleKeptExercisesAndLoads: keptExercisesAndLoads || undefined,
           lastCycleEffortNearFailure: effortNearFailure || undefined,
+          lastCycleCardioSessions: cardioSessions ? parseInt(cardioSessions, 10) : undefined,
           lastCycleDaysFollowedPerWeek: daysFollowedPerWeek ? parseFloat(daysFollowedPerWeek) : undefined,
           lastCycleTrackingMethod: trackingMethod || undefined,
           lastCycleWeighInConsistent: weighInConsistent ? weighInConsistent === "sim" : undefined,
@@ -1013,6 +1030,17 @@ export default function PrevisaoIaPage() {
                   <option value="nao">Não, parava bem antes</option>
                 </select>
               </Field>
+              <Field label="Quantas sessões de CARDIO você completou desde o último ciclo?">
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={cardioSessions}
+                  onChange={(e) => setCardioSessions(e.target.value)}
+                  className="input"
+                  placeholder="ex: 10"
+                />
+              </Field>
             </div>
           </div>
         )}
@@ -1098,6 +1126,53 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
             <div className="mt-2 text-xl font-semibold text-accent">{result.strategyLabel}</div>
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.strategyReason}</p>
           </div>
+
+          {result.confrontoDoPlano && (
+            <div className={`card p-5 animate-fade-in-up stagger-1 ${result.confrontoDoPlano.dentroDoPlano ? "" : "border-warn/40"}`}>
+              <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${result.confrontoDoPlano.dentroDoPlano ? "text-accent" : "text-warn"}`}>
+                {result.confrontoDoPlano.dentroDoPlano ? "✓" : "⚠"} O plano anterior vs. o que aconteceu
+              </div>
+              <p className="text-sm mt-2 leading-relaxed">{result.confrontoDoPlano.veredito}</p>
+              <div className="grid gap-2 sm:grid-cols-2 mt-3 text-xs tabular-nums text-muted">
+                <span>
+                  Peso: projetado {fmt(result.confrontoDoPlano.pesoProjetado, 1)}kg · real{" "}
+                  {fmt(result.confrontoDoPlano.pesoReal, 1)}kg
+                </span>
+                <span>
+                  Gordura: projetada {fmt(result.confrontoDoPlano.bfProjetado, 1)}% · real{" "}
+                  {fmt(result.confrontoDoPlano.bfReal, 1)}%
+                </span>
+              </div>
+            </div>
+          )}
+
+          {result.volumeAdherence && result.volumeAdherence.perMuscle.length > 0 && (
+            <div className="card p-5 animate-fade-in-up stagger-2">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconTarget className="h-4 w-4" /> Volume prescrito vs. executado
+              </div>
+              <p className="text-sm text-muted mt-2 leading-relaxed">{result.volumeAdherence.summary}</p>
+              <div className="mt-3 space-y-1.5">
+                {result.volumeAdherence.perMuscle
+                  .slice()
+                  .sort((a, b) => a.ratio - b.ratio)
+                  .map((m) => (
+                    <div key={m.muscle} className="flex items-center gap-3 text-xs">
+                      <span className="w-32 shrink-0 text-muted">{m.muscleLabel}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${m.ratio >= 0.9 ? "bg-accent" : m.ratio >= 0.6 ? "bg-warn" : "bg-danger"}`}
+                          style={{ width: `${Math.min(100, m.ratio * 100)}%` }}
+                        />
+                      </div>
+                      <span className="w-20 shrink-0 text-right tabular-nums text-muted">
+                        {m.actualSets}/{m.targetSets}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {result.planoDeFases && result.planoDeFases.fases.length > 0 && (
             <div className="card p-5 animate-fade-in-up stagger-1">

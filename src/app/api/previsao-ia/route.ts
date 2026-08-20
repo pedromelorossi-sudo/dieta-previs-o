@@ -12,9 +12,9 @@ import {
 } from "@/lib/bodyComposition";
 import { applySafetyLimits } from "@/lib/safety";
 import { generateDietMeals } from "@/lib/dietGenerator";
-import { planejarFases } from "@/lib/planoDeFases";
+import { planejarFases, confrontarPlano, MesProjetado } from "@/lib/planoDeFases";
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
-import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, VolumeStatus } from "@/lib/trainingVolume";
+import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, compareVolumeToTarget, VolumeStatus } from "@/lib/trainingVolume";
 import { TrainingLog, LoggedSetEntry } from "@/lib/trainingBuilder";
 import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence } from "@/lib/trainingSplitBuilder";
 import { suggestLoadProgression } from "@/lib/trainingPeriodization";
@@ -94,6 +94,8 @@ interface RequestBody {
   lastCycleWeighInConsistent?: boolean;
   lastCycleAlcoholDosesPerWeek?: number;
   lastCycleEffortNearFailure?: "sim" | "nao";
+  /** sessões de cardio realmente completadas desde o último ciclo */
+  lastCycleCardioSessions?: number;
 }
 
 interface CycleRow {
@@ -315,6 +317,7 @@ export async function POST(request: Request) {
     lastCycleWeighInConsistent,
     lastCycleAlcoholDosesPerWeek,
     lastCycleEffortNearFailure,
+    lastCycleCardioSessions,
   } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
@@ -624,12 +627,70 @@ ${VISUAL_BF_PROTOCOL}`,
     )
     .join("\n");
 
+  let tdeeCalibration: ReturnType<typeof computeTdeeCalibration> = {
+    factor: 1,
+    confidence: "nenhuma",
+    cleanCyclesUsed: 0,
+    totalCyclesSeen: 0,
+    note: "Nenhum ciclo auditado ainda — a calibração começa a partir do segundo ciclo limpo.",
+  };
+  let bfConsistency: { consistent: boolean; note: string } | null = null;
+
+  // Este bloco NÃO usa try/catch pra detectar tabela ausente: o cliente Supabase não lança exceção em
+  // erro de Postgres, devolve `{ error }`. O código antigo desestruturava só `data` e ignorava o retorno
+  // do insert, então "tabela prediction_audit não existe" era indistinguível de "tabela vazia" — o
+  // usuário lia "Nenhum ciclo limpo ainda pra calibrar" pra sempre, sem saber que a migração não rodou.
+  let calibrationUnavailableReason: string | null = null;
+  let ultimaAuditoria: {
+    date: string;
+    bf_percent_visual: number | null;
+    bf_reasoning: string | null;
+    evolution_note: string | null;
+    plano_projetado: MesProjetado[] | null;
+  } | null = null;
+
+  const { data: auditRows, error: auditSelectError } = await supabase
+    .from("prediction_audit")
+    .select("date,formula_tdee,empirical_tdee,diet_clean,training_clean,bf_percent_visual,bf_reasoning,evolution_note,plano_projetado")
+    .eq("user_id", user.id)
+    .order("date", { ascending: true });
+
+  if (auditSelectError) {
+    calibrationUnavailableReason = `Não foi possível ler o histórico de auditoria (${auditSelectError.message}). A calibração contínua fica desligada até isso ser resolvido — normalmente é a migração da tabela prediction_audit que ainda não rodou no Supabase.`;
+  } else {
+    const calibrationInput: CalibrationAuditRow[] = (auditRows ?? []).map((r) => ({
+      date: r.date,
+      formulaTdee: r.formula_tdee != null ? Number(r.formula_tdee) : null,
+      empiricalTdee: r.empirical_tdee != null ? Number(r.empirical_tdee) : null,
+      dietClean: r.diet_clean,
+      trainingClean: r.training_clean,
+    }));
+    tdeeCalibration = computeTdeeCalibration(calibrationInput);
+    ultimaAuditoria = (auditRows ?? [])[(auditRows ?? []).length - 1] ?? null;
+  }
+
+
+  // MEMÓRIA QUALITATIVA. O bfReasoning e o evolutionNote que o modelo escreve eram exibidos e
+  // descartados: no ciclo seguinte ele recebia só o histórico numérico e não via o que ele mesmo tinha
+  // concluído antes. Não podia dizer "no ciclo passado achei o ombro atrás; melhorou". Passar as
+  // leituras anteriores é barato — e com o prompt caching ativo, quase de graça.
+  const memoriaDeLeituras = ultimaAuditoria?.bf_reasoning
+    ? `
+Sua própria leitura no ciclo anterior (${ultimaAuditoria.date}), para você comparar e dizer o que mudou:
+- %BF que você estimou: ${ultimaAuditoria.bf_percent_visual ?? "?"}%
+- Seu raciocínio: ${ultimaAuditoria.bf_reasoning}${ultimaAuditoria.evolution_note ? `
+- Sua nota de evolução: ${ultimaAuditoria.evolution_note}` : ""}
+
+Compare explicitamente com essa leitura anterior: confirme, corrija ou refine. Se discordar de si mesmo, diga por quê — uma leitura anterior errada é informação útil, não algo a esconder.`
+    : "";
+
   const visionContextText = `Histórico de ciclos:
 ${historyText}
 
 Contexto do usuário: sexo ${sex}, altura ${heightCm}cm, peso atual informado ${currentWeightKg}kg em ${date}.
 
 ${evolutionInstruction}
+${memoriaDeLeituras}
 
 Além do %BF, decida a composição do ganho/perda desde o último ciclo — isto é, o quanto da mudança de peso parece ser músculo vs. gordura, cruzando a foto atual com a anterior (se houver) e a variação de peso registrada:
 - "musculo": ganho quase todo massa magra (físico mais definido/cheio sem acúmulo de gordura visível)
@@ -851,6 +912,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   let suggestedTrainingProgram: ReturnType<typeof buildSplit> | null = null;
   let trainingPeriodizationPlan: ReturnType<typeof planTrainingPeriodization> | null = null;
   let muscleTargetsOut: ReturnType<typeof computeMuscleTargets> | null = null;
+  let volumeAdherence: ReturnType<typeof compareVolumeToTarget> | null = null;
   // sessões previstas = dias/semana atuais × semanas decorridas desde o último ciclo — calculado, não
   // perguntado; o usuário só informa quantas completou de verdade
   const weeksSinceLastCycle = lastCycle ? daysBetween(lastCycle.date, date) / 7 : 0;
@@ -898,6 +960,19 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       recoveryScore
     );
     suggestedTrainingProgram = buildSplit(daysPerWeek, muscleTargetsOut, loadByExercise);
+
+    // META vs REALIZADO por grupo. Os dois números sempre existiram e nunca se encontravam: adesão
+    // baixa a um grupo específico ficava invisível no agregado de sessões completadas, que não
+    // distingue quem pulou o dia de perna de quem pulou tudo.
+    if (trainingLogs.length > 0) {
+      const semanas = Math.max(1, weeksSinceLastCycle);
+      const volumeTotal = weeklyVolumeByMuscle(
+        trainingLogs.flatMap((l) => l.setsLogged),
+        (id) => exerciseById(id)?.primaryMuscle
+      );
+      const volumeSemanal = new Map([...volumeTotal].map(([m, v]) => [m, Math.round(v / semanas)]));
+      volumeAdherence = compareVolumeToTarget(muscleTargetsOut, volumeSemanal);
+    }
     // 5 semanas = um mesociclo completo. Antes eram 10, e as semanas 6-10 saíam byte a byte idênticas
     // às 1-5, inflando a resposta em ~20KB por requisição sem nenhuma informação nova.
     trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, daysPerWeek, 5, loadByExercise);
@@ -945,11 +1020,27 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     alcoholDosesPerWeek: lastCycleAlcoholDosesPerWeek,
     recoveryScore,
   });
+  // Sessões de cardio previstas: a prescrição anterior não é persistida, então é reconstruída com a
+  // estratégia que valia naquele momento. Aproximação, mas é a mesma que o usuário viu na tela.
+  const cardioAnterior =
+    lastCycle?.bodyFatPercent != null
+      ? prescribeCardio({
+          strategy: classifyPathFromBf(lastCycle.bodyFatPercent, sex).path,
+          strengthDaysPerWeek: daysPerWeek,
+          weightKg: lastCycle.weightKg,
+        })
+      : null;
+  const cardioSessionsPlanned = cardioAnterior
+    ? Math.round(cardioAnterior.sessions.reduce((sum, x) => sum + x.frequencyPerWeek, 0) * weeksSinceLastCycle)
+    : undefined;
+
   const { clean: trainingClean, reasons: trainingDirtyReasons } = assessTrainingCleanliness({
     completedSessions: lastCycleCompletedSessions,
     plannedSessions,
     keptExercisesAndLoads: lastCycleKeptExercisesAndLoads,
     effortNearFailure: lastCycleEffortNearFailure,
+    cardioSessionsCompleted: lastCycleCardioSessions,
+    cardioSessionsPlanned,
   });
   // Este ciclo vai (ou não) ensinar a calibração. Antes a variável era calculada e descartada; agora
   // volta na resposta, porque saber que um ciclo "não conta" é justamente o que faz o usuário entender
@@ -982,40 +1073,6 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   });
   const empiricalTdeeMid = (result.tdeeRange.min + result.tdeeRange.max) / 2;
 
-  let tdeeCalibration: ReturnType<typeof computeTdeeCalibration> = {
-    factor: 1,
-    confidence: "nenhuma",
-    cleanCyclesUsed: 0,
-    totalCyclesSeen: 0,
-    note: "Nenhum ciclo auditado ainda — a calibração começa a partir do segundo ciclo limpo.",
-  };
-  let bfConsistency: { consistent: boolean; note: string } | null = null;
-
-  // Este bloco NÃO usa try/catch pra detectar tabela ausente: o cliente Supabase não lança exceção em
-  // erro de Postgres, devolve `{ error }`. O código antigo desestruturava só `data` e ignorava o retorno
-  // do insert, então "tabela prediction_audit não existe" era indistinguível de "tabela vazia" — o
-  // usuário lia "Nenhum ciclo limpo ainda pra calibrar" pra sempre, sem saber que a migração não rodou.
-  let calibrationUnavailableReason: string | null = null;
-
-  const { data: auditRows, error: auditSelectError } = await supabase
-    .from("prediction_audit")
-    .select("date,formula_tdee,empirical_tdee,diet_clean,training_clean")
-    .eq("user_id", user.id)
-    .order("date", { ascending: true });
-
-  if (auditSelectError) {
-    calibrationUnavailableReason = `Não foi possível ler o histórico de auditoria (${auditSelectError.message}). A calibração contínua fica desligada até isso ser resolvido — normalmente é a migração da tabela prediction_audit que ainda não rodou no Supabase.`;
-  } else {
-    const calibrationInput: CalibrationAuditRow[] = (auditRows ?? []).map((r) => ({
-      date: r.date,
-      formulaTdee: r.formula_tdee != null ? Number(r.formula_tdee) : null,
-      empiricalTdee: r.empirical_tdee != null ? Number(r.empirical_tdee) : null,
-      dietClean: r.diet_clean,
-      trainingClean: r.training_clean,
-    }));
-    tdeeCalibration = computeTdeeCalibration(calibrationInput);
-  }
-
   if (lastCycle?.bodyFatPercent != null) {
     bfConsistency = checkBfConsistency(
       gainComposition,
@@ -1026,24 +1083,6 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     );
   }
 
-  const { error: auditInsertError } = await supabase.from("prediction_audit").insert({
-    user_id: user.id,
-    date,
-    formula_tdee: shadowFormulaComp.tdee,
-    empirical_tdee: empiricalTdeeMid,
-    bf_percent_visual: bfPercentVisual,
-    bf_confidence: vision.bfConfidence,
-    gain_composition: gainComposition,
-    weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
-    diet_clean: dietClean,
-    training_clean: trainingClean,
-    bf_consistent: bfConsistency?.consistent ?? null,
-    notes: [...dietDirtyReasons, ...trainingDirtyReasons],
-  });
-
-  if (auditInsertError && !calibrationUnavailableReason) {
-    calibrationUnavailableReason = `Este ciclo não foi gravado na auditoria (${auditInsertError.message}), então não vai contar pra calibração dos próximos.`;
-  }
 
   // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo). O kcal vem do TDEE real do
   // algoritmo (calculado a partir da resposta observada do próprio usuário, usando o E da composição
@@ -1058,7 +1097,8 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     bfPercentVisual,
     sex,
     recoveryScore,
-    previousPath
+    previousPath,
+    vision.bfConfidence
   );
 
   const cardioPrescription = prescribeCardio({ strategy, strengthDaysPerWeek: daysPerWeek, recoveryScore, weightKg: currentWeightKg });
@@ -1143,6 +1183,17 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     note: `Com o kcal recomendado (${recommendedKcal.toFixed(0)}kcal, ${PATH_LABEL[strategy]}) frente à manutenção estimada (~${tdeeMid.toFixed(0)}kcal), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
   };
 
+  const confronto =
+    ultimaAuditoria?.plano_projetado && lastCycle
+      ? confrontarPlano(
+          ultimaAuditoria.plano_projetado,
+          daysBetween(ultimaAuditoria.date, date) / 30.44,
+          currentWeightKg,
+          bfPercentVisual,
+          strategy
+        )
+      : null;
+
   const planoDeFases = planejarFases({
     currentWeightKg,
     currentBfPercent: bfPercentVisual,
@@ -1153,6 +1204,36 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     recoveryScore,
     initialPath: strategy,
   });
+
+  const { error: auditInsertError } = await supabase.from("prediction_audit").insert({
+    user_id: user.id,
+    date,
+    formula_tdee: shadowFormulaComp.tdee,
+    empirical_tdee: empiricalTdeeMid,
+    bf_percent_visual: bfPercentVisual,
+    bf_confidence: vision.bfConfidence,
+    gain_composition: gainComposition,
+    weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
+    diet_clean: dietClean,
+    training_clean: trainingClean,
+    bf_consistent: bfConsistency?.consistent ?? null,
+    notes: [...dietDirtyReasons, ...trainingDirtyReasons],
+    bf_reasoning: vision.bfReasoning ?? null,
+    evolution_note: vision.evolutionNote ?? null,
+    // só os 6 primeiros meses e só os campos do confronto — o plano inteiro encheria a linha de dados
+    // que nunca seriam lidos
+    plano_projetado: planoDeFases.meses.slice(0, 6).map((m) => ({
+      mes: m.monthIndex,
+      fase: m.phase,
+      peso: Number(m.endWeightKg.toFixed(1)),
+      bf: Number(m.endBfPercent.toFixed(1)),
+      kcal: Math.round(m.recommendedKcal),
+    })),
+  });
+
+  if (auditInsertError && !calibrationUnavailableReason) {
+    calibrationUnavailableReason = `Este ciclo não foi gravado na auditoria (${auditInsertError.message}), então não vai contar pra calibração dos próximos.`;
+  }
 
   return NextResponse.json({
     isFirstCycle: false,
@@ -1194,6 +1275,9 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     tdeeCalibration,
     calibrationApplied,
     calibrationUnavailableReason,
+    confrontoDoPlano: confronto,
+    volumeAdherence,
+    cardioSessionsPlanned,
     cycleCleanForCalibration,
     cycleDirtyReasons: [...dietDirtyReasons, ...trainingDirtyReasons],
     safetyWarnings: losingLeanMass

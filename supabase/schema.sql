@@ -421,6 +421,17 @@ notify pgrst, 'reload schema';
 -- As restrições acima só valem para bancos criados do zero, porque as tabelas usam
 -- "create table if not exists". Para aplicar num banco existente:
 
+-- Memória qualitativa entre ciclos e confronto do plano com a realidade.
+-- `bf_reasoning`/`evolution_note`: o que a IA de visão CONCLUIU naquele ciclo. Era exibido e descartado,
+--   então no ciclo seguinte o modelo recebia só o histórico numérico e não podia comparar com a própria
+--   leitura anterior ("no ciclo passado achei o ombro atrás; melhorou?").
+-- `plano_projetado`: recorte do plano de fases gerado naquele ciclo, pra o ciclo seguinte poder dizer
+--   "o plano previa 16% no mês 4, você está em 17,2%". Sem isso o plano era regenerado do zero toda vez
+--   e nunca era confrontado com o que de fato aconteceu.
+alter table public.prediction_audit add column if not exists bf_reasoning text;
+alter table public.prediction_audit add column if not exists evolution_note text;
+alter table public.prediction_audit add column if not exists plano_projetado jsonb;
+
 alter table public.cycles drop constraint if exists cycles_weight_kg_check;
 alter table public.cycles add constraint cycles_weight_kg_check check (weight_kg > 0 and weight_kg < 500);
 

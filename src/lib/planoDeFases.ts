@@ -355,3 +355,91 @@ function oQuePodeMudar(phase: DietPath): string {
   }
   return "Uma leitura de foto diferente do projetado antecipa ou adia a próxima fase — a manutenção é a zona de transição, e é a mais sensível à precisão da leitura.";
 }
+
+
+// ---------------------------------------------------------------------------
+// Confronto do plano com a realidade
+// ---------------------------------------------------------------------------
+
+export interface MesProjetado {
+  mes: number;
+  fase: DietPath;
+  peso: number;
+  bf: number;
+  kcal: number;
+}
+
+export interface ConfrontoPlano {
+  /** quantos meses se passaram desde o plano que está sendo confrontado */
+  mesesDecorridos: number;
+  pesoProjetado: number;
+  pesoReal: number;
+  bfProjetado: number;
+  bfReal: number;
+  fasePrevista: DietPath;
+  faseAtual: DietPath;
+  /** true quando a rota real ainda cabe dentro da margem do plano */
+  dentroDoPlano: boolean;
+  veredito: string;
+}
+
+/** Compara o que o plano de um ciclo anterior projetava para HOJE com o que de fato aconteceu.
+ *
+ * Sem isto, o plano de fases era regenerado do zero a cada ciclo e nunca era confrontado com o
+ * resultado — uma projeção bonita que nunca prestava contas. O valor não é acertar a previsão: é
+ * detectar cedo que a rota divergiu, e dizer se a causa provável é a estimativa (peso seguiu o plano,
+ * %BF não) ou a execução (peso não seguiu o plano).
+ *
+ * As margens são deliberadamente largas — ±1,5kg e ±1,5pp por mês decorrido, com teto. Um plano de
+ * meses não deve ser declarado "errado" por uma diferença que cabe no ruído da balança e da leitura de
+ * foto (ver Protocolo de %BF).
+ */
+export function confrontarPlano(
+  planoAnterior: MesProjetado[],
+  mesesDecorridos: number,
+  pesoRealKg: number,
+  bfRealPercent: number,
+  faseAtual: DietPath
+): ConfrontoPlano | null {
+  if (!planoAnterior || planoAnterior.length === 0 || mesesDecorridos < 1) return null;
+
+  const alvo = planoAnterior.find((m) => m.mes === Math.round(mesesDecorridos)) ?? planoAnterior[planoAnterior.length - 1];
+  if (!alvo) return null;
+
+  const margemPeso = Math.min(4, 1.5 * mesesDecorridos);
+  const margemBf = Math.min(4, 1.5 * mesesDecorridos);
+  const difPeso = pesoRealKg - alvo.peso;
+  const difBf = bfRealPercent - alvo.bf;
+
+  const pesoOk = Math.abs(difPeso) <= margemPeso;
+  const bfOk = Math.abs(difBf) <= margemBf;
+  const dentroDoPlano = pesoOk && bfOk;
+
+  const sinal = (v: number) => (v >= 0 ? "+" : "");
+  let veredito: string;
+  if (dentroDoPlano) {
+    veredito = `A rota está seguindo o plano: projetava ${alvo.peso.toFixed(1)}kg com ${alvo.bf.toFixed(1)}% de gordura para este ponto, e você está em ${pesoRealKg.toFixed(1)}kg com ${bfRealPercent.toFixed(1)}%.`;
+  } else if (!pesoOk && bfOk) {
+    veredito = `O peso divergiu do plano (${sinal(difPeso)}${difPeso.toFixed(1)}kg em relação aos ${alvo.peso.toFixed(1)}kg projetados) mas a gordura corporal está na rota. Isso costuma ser execução — ingestão real diferente da prescrita — mais do que erro de estimativa.`;
+  } else if (pesoOk && !bfOk) {
+    veredito = `O peso está na rota, mas a gordura corporal divergiu (${sinal(difBf)}${difBf.toFixed(1)} pontos em relação aos ${alvo.bf.toFixed(1)}% projetados). Isso aponta para a repartição entre magra e gordura ter sido diferente do assumido — treino e proteína são as alavancas aqui, não a caloria.`;
+  } else {
+    veredito = `Peso e gordura corporal divergiram do plano (${sinal(difPeso)}${difPeso.toFixed(1)}kg e ${sinal(difBf)}${difBf.toFixed(1)} pontos). O plano foi refeito a partir dos dados de hoje; se a divergência se repetir no próximo ciclo, o problema está na estimativa de gasto, não numa oscilação isolada.`;
+  }
+
+  if (alvo.fase !== faseAtual) {
+    veredito += ` A fase também mudou em relação ao previsto (plano: ${alvo.fase}, atual: ${faseAtual}) — o gatilho é o %BF, então a fase acompanha a composição real, não o calendário do plano.`;
+  }
+
+  return {
+    mesesDecorridos,
+    pesoProjetado: alvo.peso,
+    pesoReal: pesoRealKg,
+    bfProjetado: alvo.bf,
+    bfReal: bfRealPercent,
+    fasePrevista: alvo.fase,
+    faseAtual,
+    dentroDoPlano,
+    veredito,
+  };
+}

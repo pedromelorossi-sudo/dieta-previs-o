@@ -7,6 +7,9 @@ import { applySafetyLimits } from "../src/lib/safety";
 import { estimateEmpiricalTdeeSeries, weeklyRate, predictNextCycle, signedDaysBetween } from "../src/lib/dietEngine";
 import { computeMuscleTargets, buildSplit } from "../src/lib/trainingSplitBuilder";
 import { prescribeCardio } from "../src/lib/cardioPrescription";
+import { assessTrainingCleanliness } from "../src/lib/calibration";
+import { compareVolumeToTarget } from "../src/lib/trainingVolume";
+import { confrontarPlano } from "../src/lib/planoDeFases";
 import { suggestLoadProgression } from "../src/lib/trainingPeriodization";
 import { exerciseById } from "../src/lib/exerciseLibrary";
 import { computeTdeeCalibration } from "../src/lib/calibration";
@@ -466,4 +469,68 @@ test("PLAN: a fase é definida por %BF, não por prazo — velocidades diferente
     const corte = p.fases.find((f) => f.phase === "cutting");
     if (corte) assert.equal(corte.bfAlvoTermino, limites.bulkBelow, "o corte deveria terminar no piso de %BF do ciclo");
   }
+});
+
+
+// ---------------------------------------------------------------------------
+// Laços de realimentação — o app prescrevia cinco coisas e media duas
+// ---------------------------------------------------------------------------
+
+test("LAÇO: cardio não feito suja o ciclo (era o único bloco prescrito sem medição)", () => {
+  const feito = assessTrainingCleanliness({
+    completedSessions: 12, plannedSessions: 12, keptExercisesAndLoads: "seguiu_de_perto",
+    effortNearFailure: "sim", cardioSessionsCompleted: 12, cardioSessionsPlanned: 12,
+  });
+  assert.equal(feito.clean, true, "ciclo com tudo em dia deveria ser limpo");
+
+  const semCardio = assessTrainingCleanliness({
+    completedSessions: 12, plannedSessions: 12, keptExercisesAndLoads: "seguiu_de_perto",
+    effortNearFailure: "sim", cardioSessionsCompleted: 2, cardioSessionsPlanned: 12,
+  });
+  assert.equal(semCardio.clean, false, "cardio prescrito e não feito precisa sujar o ciclo");
+  assert.ok(semCardio.reasons.some((r) => r.includes("cardio")), "o motivo tem que dizer que foi o cardio");
+});
+
+test("LAÇO: confiança baixa na leitura amortece a resposta", () => {
+  const alta = classifyPathFromBf(16.5, "masculino", 0, "bulking", "alta").surplusPercent;
+  const baixa = classifyPathFromBf(16.5, "masculino", 0, "bulking", "baixa").surplusPercent;
+  assert.ok(
+    Math.abs(baixa) < Math.abs(alta),
+    `leitura de confiança baixa deveria mover menos: alta ${alta}, baixa ${baixa}`
+  );
+});
+
+test("LAÇO: meta de volume é confrontada com o volume logado, por grupo", () => {
+  const alvos = [
+    { muscle: "peito" as const, weeklySets: 10 },
+    { muscle: "costas" as const, weeklySets: 10 },
+  ];
+  const logado = new Map([["peito" as const, 9], ["costas" as const, 2]]);
+  const r = compareVolumeToTarget(alvos, logado);
+
+  const costas = r.perMuscle.find((m) => m.muscle === "costas")!;
+  assert.ok(costas.ratio < 0.3, "costas deveria aparecer como bem abaixo da meta");
+  assert.ok(r.summary.includes("Costas"), "o resumo tem que NOMEAR o grupo que ficou pra trás");
+  assert.ok(r.overallRatio < 0.7);
+});
+
+test("LAÇO: o plano anterior é confrontado com a realidade e distingue as causas", () => {
+  const plano = [
+    { mes: 1, fase: "bulking" as const, peso: 80, bf: 13.5, kcal: 2900 },
+    { mes: 2, fase: "bulking" as const, peso: 81, bf: 14.2, kcal: 2950 },
+  ];
+
+  const naRota = confrontarPlano(plano, 2, 81.2, 14.4, "bulking")!;
+  assert.equal(naRota.dentroDoPlano, true, "diferença dentro da margem não deveria ser 'fora do plano'");
+
+  // peso fora, %BF na rota -> execução
+  const pesoFora = confrontarPlano(plano, 2, 86, 14.2, "bulking")!;
+  assert.equal(pesoFora.dentroDoPlano, false);
+  assert.ok(pesoFora.veredito.includes("execução"), "peso fora com %BF na rota aponta execução");
+
+  // peso na rota, %BF fora -> repartição
+  const bfFora = confrontarPlano(plano, 2, 81, 19, "bulking")!;
+  assert.ok(bfFora.veredito.includes("repartição"), "%BF fora com peso na rota aponta repartição");
+
+  assert.equal(confrontarPlano([], 2, 81, 14, "bulking"), null, "sem plano anterior devolve null");
 });

@@ -78,6 +78,10 @@ export interface TrainingCleanlinessInput {
   plannedSessions?: number;
   keptExercisesAndLoads?: "seguiu_de_perto" | "trocou_mas_manteve_volume" | "reduziu_bastante";
   effortNearFailure?: "sim" | "nao";
+  /** sessões de CARDIO completadas de verdade no período — fato contável */
+  cardioSessionsCompleted?: number;
+  /** sessões de cardio que a prescrição pedia no período (calculado, não perguntado) */
+  cardioSessionsPlanned?: number;
 }
 
 export function assessTrainingCleanliness(input: TrainingCleanlinessInput): CleanlinessResult {
@@ -100,6 +104,21 @@ export function assessTrainingCleanliness(input: TrainingCleanlinessInput): Clea
   if (input.effortNearFailure === "nao") {
     clean = false;
     reasons.push("não chegou perto da falha nas séries de trabalho — o EAT estimado assume esforço próximo do prescrito");
+  }
+
+  // O cardio era o único bloco de prescrição sem nenhuma medição de volta: o app mandava 126-167min/semana
+  // e nada no sistema sabia se aquilo tinha acontecido. Como o TDEE empírico é retrocalculado da resposta
+  // do peso, um cardio prescrito e não feito aparece como "metabolismo mais lento" — o algoritmo corrige
+  // a fórmula por um erro que é de execução. Por isso entra nos critérios de ciclo limpo, com o mesmo
+  // limiar de 80% usado nas sessões de força.
+  if (input.cardioSessionsPlanned != null && input.cardioSessionsPlanned > 0) {
+    const rate = (input.cardioSessionsCompleted ?? 0) / input.cardioSessionsPlanned;
+    if (rate < 0.8) {
+      clean = false;
+      reasons.push(
+        `completou só ${(rate * 100).toFixed(0)}% das sessões de cardio prescritas — o gasto do cardio entra no balanço energético do período, então não fazê-lo desloca o TDEE retrocalculado`
+      );
+    }
   }
 
   return { clean, reasons };

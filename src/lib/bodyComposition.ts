@@ -353,7 +353,20 @@ export function scoreRecoverySignals(signals: RecoverySignals): number {
  * percentuais (ver Protocolo de %BF), esse degrau convertia ruído de sensor em oscilação de 20% na
  * prescrição de um mês pro outro. A rampa faz o déficit crescer proporcionalmente dentro de uma faixa
  * ao redor do limiar, de forma que um erro de leitura pequeno produza um erro de prescrição pequeno. */
-const RAMP_HALF_WIDTH_PP = 1.0;
+/** A largura da rampa ESCALA com a incerteza da leitura. A IA de visão já devolve `bfConfidence`
+ * (baixa/média/alta) em toda análise, e esse campo era apenas gravado e exibido — nenhum cálculo o
+ * consultava, então uma leitura que a própria IA classificou como duvidosa movia a estratégia com a
+ * mesma força de uma leitura confiante.
+ *
+ * Agora não: quanto menor a confiança, mais larga a rampa, e mais suave a resposta a uma leitura que
+ * pode estar errada. É a mesma lógica de um controlador que confia menos num sensor ruidoso — não
+ * ignora a medida, apenas reage com menos ganho. Com confiança baixa a transição de fase leva o dobro
+ * de pontos percentuais para completar. */
+const RAMP_WIDTH_BY_CONFIDENCE: Record<"baixa" | "media" | "alta", number> = {
+  baixa: 2.0,
+  media: 1.4,
+  alta: 1.0,
+};
 
 /** Abaixo desse superávit/déficit em módulo, a fase é chamada de normocalórica — o rótulo segue o que
  * está sendo prescrito de fato, em vez de anunciar "cutting" com 2% de déficit. */
@@ -374,7 +387,10 @@ export function classifyPathFromBf(
   bodyFatPercent: number,
   sex: Sex,
   recoveryScore = 0,
-  previousPath?: DietPath
+  previousPath?: DietPath,
+  /** confiança da leitura visual de %BF que gerou `bodyFatPercent`. Uma leitura marcada como "baixa"
+   * pela própria IA não pode ter o mesmo peso que uma "alta" — ver RAMP_HALF_WIDTH_PP. */
+  bfConfidence: "baixa" | "media" | "alta" = "alta"
 ): PathClassification {
   const { bulkBelow, cutAbove } = BF_THRESHOLDS[sex];
 
@@ -387,19 +403,21 @@ export function classifyPathFromBf(
   //
   // As duas frações são COMPLEMENTARES dentro de uma fase, então a virada é contínua: na borda, o
   // superávit vai afrouxando enquanto o déficit vai entrando, e o resultado atravessa o zero sem degrau.
+  const larguraRampa = RAMP_WIDTH_BY_CONFIDENCE[bfConfidence];
+
   let cutFraction: number;
   let bulkFraction: number;
 
   if (previousPath === "bulking") {
-    cutFraction = rampFraction(bodyFatPercent, cutAbove, RAMP_HALF_WIDTH_PP);
+    cutFraction = rampFraction(bodyFatPercent, cutAbove, larguraRampa);
     bulkFraction = 1 - cutFraction;
   } else if (previousPath === "cutting") {
-    cutFraction = rampFraction(bodyFatPercent, bulkBelow, RAMP_HALF_WIDTH_PP);
+    cutFraction = rampFraction(bodyFatPercent, bulkBelow, larguraRampa);
     bulkFraction = 1 - cutFraction;
   } else {
     // sem fase anterior: valem os pontos de ENTRADA, e existe uma faixa de manutenção entre eles
-    cutFraction = rampFraction(bodyFatPercent, cutAbove, RAMP_HALF_WIDTH_PP);
-    bulkFraction = 1 - rampFraction(bodyFatPercent, bulkBelow, RAMP_HALF_WIDTH_PP);
+    cutFraction = rampFraction(bodyFatPercent, cutAbove, larguraRampa);
+    bulkFraction = 1 - rampFraction(bodyFatPercent, bulkBelow, larguraRampa);
   }
 
   // O déficit NÃO tem uma intensidade só. Dois cortes muito diferentes usam o mesmo caminho de código:
