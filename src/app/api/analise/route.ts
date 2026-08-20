@@ -126,7 +126,7 @@ export async function POST() {
       model: "claude-opus-5",
       max_tokens: 2048,
       output_config: { effort: "medium" },
-      system: SYSTEM_PROMPT,
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: summary }],
     });
   } catch (err) {

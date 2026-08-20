@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // saída do `npm test` (tsc -> commonjs); não é código-fonte
+    ".test-build/**",
   ]),
 ]);
 

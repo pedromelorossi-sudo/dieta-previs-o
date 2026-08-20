@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { NavLink } from "@/components/NavLink";
 import { UserMenu } from "@/components/UserMenu";
@@ -37,12 +38,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <AuthProvider>
             <header className="border-b border-border/70 sticky top-0 z-10 backdrop-blur-md bg-background/70">
               <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between gap-4">
-                <a href="/" className="flex items-center gap-2.5 font-semibold tracking-tight shrink-0 group">
+                <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight shrink-0 group">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent-strong text-[color:var(--accent-contrast)] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 animate-pop-in">
                     <IconPhysique className="h-4 w-4" />
                   </span>
                   <span className="hidden sm:inline">Degrau</span>
-                </a>
+                </Link>
                 <nav className="flex items-center gap-5 text-sm overflow-x-auto">
                   <NavLink href="/previsao-ia">Novo ciclo</NavLink>
                   <NavLink href="/dieta/novo">Montar dieta</NavLink>

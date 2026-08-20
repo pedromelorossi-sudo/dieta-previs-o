@@ -43,6 +43,11 @@ function newRow(): DraftRow {
 export default function TreinoPage() {
   const { ready, user } = useAuth();
   const [logs, setLogs] = useState<TrainingLog[] | null>(null);
+  // A "hora de agora" precisa ser um estado, não uma leitura durante o render: Date.now() dentro do
+  // useMemo é impuro (React 19 sinaliza) — dois renders com as mesmas dependências dariam resultados
+  // diferentes. Aqui ela é capturada uma vez, quando os logs chegam.
+  const [nowMs, setNowMs] = useState<number | null>(null);
+
   const [loadError, setLoadError] = useState<string | null>(null);
   const [muscleEvolution, setMuscleEvolution] = useState<MuscleEvolution[]>([]);
 
@@ -68,17 +73,27 @@ export default function TreinoPage() {
 
   useEffect(() => {
     if (!ready || !user) return;
-    refresh();
-    loadCycles().then((cycles) => setMuscleEvolution(buildMuscleEvolution(cycles)));
+    let cancelled = false;
+    void (async () => {
+      await refresh();
+      if (cancelled) return;
+      // capturado junto com os logs, depois do await: fora do render e fora da fase síncrona do efeito
+      setNowMs(Date.now());
+      const cycles = await loadCycles();
+      if (!cancelled) setMuscleEvolution(buildMuscleEvolution(cycles));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [ready, user]);
 
   const volumeReadings: VolumeReading[] = useMemo(() => {
-    if (!logs) return [];
-    const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    if (!logs || nowMs == null) return [];
+    const since = nowMs - 7 * 24 * 60 * 60 * 1000;
     const recentSets = logs.filter((l) => new Date(l.date).getTime() >= since).flatMap((l) => l.setsLogged);
     const volume = weeklyVolumeByMuscle(recentSets, (id) => exerciseById(id)?.primaryMuscle);
     return readVolumeStatus(volume);
-  }, [logs]);
+  }, [logs, nowMs]);
 
   const recommendation: WeeklyRecommendation | null = useMemo(() => {
     if (!logs) return null;

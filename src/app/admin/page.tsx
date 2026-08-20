@@ -5,8 +5,10 @@ import { useAuth } from "@/context/AuthContext";
 import { AdminUserSummary, loadAllUsersSummary } from "@/lib/admin";
 import { fmt, fmtDate } from "@/lib/format";
 import { IconScale } from "@/components/icons";
+import { useRouter } from "next/navigation";
 
 export default function AdminPage() {
+  const router = useRouter();
   const { ready, profile } = useAuth();
   const [users, setUsers] = useState<AdminUserSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export default function AdminPage() {
               {users.map((u) => (
                 <tr
                   key={u.id}
-                  onClick={() => (window.location.href = `/admin/${u.id}`)}
+                  onClick={() => router.push(`/admin/${u.id}`)}
                   className="border-b border-border last:border-0 hover:bg-surface-raised/60 transition-colors cursor-pointer"
                 >
                   <td className="px-4 py-3 font-medium">

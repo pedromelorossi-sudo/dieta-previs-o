@@ -222,10 +222,59 @@ function estimateTdeeFromComponents(
 }
 
 /** limites de %BF usados para decidir o caminho — faixas de referência aproximadas, não clínicas */
+/** Faixas que definem o CICLO de longo prazo, não só a decisão do mês.
+ *
+ * ATENÇÃO — o que a literatura sustenta e o que NÃO sustenta:
+ *
+ * Uma busca no PubMed por limiares de %BF para alternar entre superávit e déficit não encontrou
+ * NENHUM estudo que estabeleça esses pontos. Iraki et al. 2019 (Sports, DOI 10.3390/sports7070154), a
+ * revisão de referência para off-season de fisiculturistas naturais, prescreve o TAMANHO do superávit
+ * (~10-20% acima da manutenção) e a TAXA de ganho (0,25-0,5% do peso/semana) — mas não define em que
+ * %BF começar ou parar. Helms et al. 2014 (DOI 10.1186/1550-2783-11-20) faz o equivalente do lado do
+ * corte (0,5-1% do peso/semana) e também não define limiar de gordura.
+ *
+ * Portanto: os números abaixo são uma DECISÃO DE DESIGN, não um valor extraído de paper. O que os
+ * ancora é indireto: (a) o objetivo declarado por Iraki et al. de "aumentar massa muscular minimizando
+ * ganho de gordura desnecessário", já que gordura acumulada no superávit alonga o corte seguinte e,
+ * com ele, o tempo em baixa disponibilidade energética; (b) o limite superior de saúde, onde ≥25% de
+ * gordura em homens e ≥35% em mulheres é o ponto de corte usado para classificar obesidade por %BF em
+ * estudos de risco cardiometabólico (Phillips et al. 2013, Obesity, DOI 10.1002/oby.20263) — bem acima
+ * de onde este ciclo opera; (c) a prática consolidada do esporte.
+ *
+ * Tratar como ponto de partida ajustável, e NÃO citar paper para justificá-los.
+ *
+ * O ciclo: entra em superávit em `bulkBelow`, acumula até `cutAbove`, e corta de volta até `bulkBelow`.
+ * Os dois pontos são reusados nos dois sentidos e é a FASE ANTERIOR que decide qual está valendo.
+ */
 const BF_THRESHOLDS: Record<Sex, { bulkBelow: number; cutAbove: number }> = {
-  masculino: { bulkBelow: 10, cutAbove: 17 },
-  feminino: { bulkBelow: 18, cutAbove: 25 },
+  masculino: { bulkBelow: 13, cutAbove: 16 },
+  feminino: { bulkBelow: 21, cutAbove: 24 },
 };
+
+export function bfThresholdsFor(sex: Sex) {
+  return BF_THRESHOLDS[sex];
+}
+
+/** FFMI — índice de massa magra ajustado pela altura. Kouri et al. 1995 (Clin J Sport Med) documenta
+ * teto de ~25 em atletas naturais; é o melhor proxy disponível de "quanto ainda dá pra crescer" sem
+ * perguntar tempo de treino (que o usuário estimaria mal). */
+export function estimateFfmi(leanMassKg: number, heightCm: number): number {
+  const heightM = heightCm / 100;
+  return leanMassKg / (heightM * heightM);
+}
+
+/** Teto de ganho de massa magra por mês, escalado pela margem que ainda existe até o teto natural.
+ * Quem está longe do teto cresce rápido; quem está perto cresce devagar, por mais superávit que coma —
+ * é isso que impede a projeção de prometer 0,9kg de músculo por mês indefinidamente.
+ * Os valores são práticos (não há tabela publicada por faixa de FFMI): ~1%/mês da massa magra para
+ * iniciante, caindo pra ~0,3% perto do teto. */
+export function monthlyLeanGainCeilingKg(leanMassKg: number, heightCm: number): number {
+  const ffmi = estimateFfmi(leanMassKg, heightCm);
+  if (ffmi < 19) return 0.9;
+  if (ffmi < 21) return 0.6;
+  if (ffmi < 23) return 0.35;
+  return 0.2;
+}
 
 export const PATH_LABEL: Record<DietPath, string> = {
   cutting: "Cutting (déficit)",
@@ -298,46 +347,145 @@ export function scoreRecoverySignals(signals: RecoverySignals): number {
   return score;
 }
 
+/** Rampa em vez de degrau: a decisão de estratégia era uma função escada em %BF (abaixo de 17%,
+ * manutenção; a partir de 17,000%, déficit de 20% — um salto de ~460kcal decidido por 0,001 ponto
+ * percentual de leitura). Como o %BF vem de leitura de foto, com ruído documentado de ±1 a 2,5 pontos
+ * percentuais (ver Protocolo de %BF), esse degrau convertia ruído de sensor em oscilação de 20% na
+ * prescrição de um mês pro outro. A rampa faz o déficit crescer proporcionalmente dentro de uma faixa
+ * ao redor do limiar, de forma que um erro de leitura pequeno produza um erro de prescrição pequeno. */
+const RAMP_HALF_WIDTH_PP = 1.0;
+
+/** Abaixo desse superávit/déficit em módulo, a fase é chamada de normocalórica — o rótulo segue o que
+ * está sendo prescrito de fato, em vez de anunciar "cutting" com 2% de déficit. */
+const PATH_LABEL_THRESHOLD = 0.05;
+
+function rampFraction(value: number, center: number, halfWidth: number): number {
+  const t = (value - (center - halfWidth)) / (2 * halfWidth);
+  return Math.max(0, Math.min(1, t));
+}
+
 /** Decide a estratégia (cutting/normocalórico/bulking) a partir do %BF atual — usada tanto no primeiro
  * ciclo quanto nos seguintes, já que a estratégia deve refletir a composição corporal de agora, não
  * só a tendência histórica de peso (essa tendência já define os macros específicos separadamente).
  * `recoveryScore` (0 no primeiro ciclo, sem ciclo anterior pra avaliar) suaviza ou zera o déficit quando
- * o ciclo anterior mostrou sinais concorrentes de deficit agressivo demais — ver scoreRecoverySignals. */
-export function classifyPathFromBf(bodyFatPercent: number, sex: Sex, recoveryScore = 0): PathClassification {
+ * o ciclo anterior mostrou sinais concorrentes de deficit agressivo demais — ver scoreRecoverySignals.
+ * `previousPath` alimenta a histerese; omitir é seguro (equivale a não ter fase anterior). */
+export function classifyPathFromBf(
+  bodyFatPercent: number,
+  sex: Sex,
+  recoveryScore = 0,
+  previousPath?: DietPath
+): PathClassification {
   const { bulkBelow, cutAbove } = BF_THRESHOLDS[sex];
 
-  if (bodyFatPercent >= cutAbove) {
+  // o ponto de entrada fica mais alto (dificulta entrar por ruído). Mesma lógica invertida no bulking.
+  // Histerese de ciclo — é o que faz a sequência FECHAR em vez de o app decidir mês a mês isolado.
+  // Quem já está em superávit continua até `cutAbove` (não para no ponto de entrada); quem já está em
+  // déficit continua até `bulkBelow`. Sem isso, alguém que começava um bulking a 12,5% saía dele dois
+  // meses depois ao cruzar 13% e ficava preso em manutenção — foi o que a projeção de 24 meses mostrou
+  // antes desta correção.
+  //
+  // As duas frações são COMPLEMENTARES dentro de uma fase, então a virada é contínua: na borda, o
+  // superávit vai afrouxando enquanto o déficit vai entrando, e o resultado atravessa o zero sem degrau.
+  let cutFraction: number;
+  let bulkFraction: number;
+
+  if (previousPath === "bulking") {
+    cutFraction = rampFraction(bodyFatPercent, cutAbove, RAMP_HALF_WIDTH_PP);
+    bulkFraction = 1 - cutFraction;
+  } else if (previousPath === "cutting") {
+    cutFraction = rampFraction(bodyFatPercent, bulkBelow, RAMP_HALF_WIDTH_PP);
+    bulkFraction = 1 - cutFraction;
+  } else {
+    // sem fase anterior: valem os pontos de ENTRADA, e existe uma faixa de manutenção entre eles
+    cutFraction = rampFraction(bodyFatPercent, cutAbove, RAMP_HALF_WIDTH_PP);
+    bulkFraction = 1 - rampFraction(bodyFatPercent, bulkBelow, RAMP_HALF_WIDTH_PP);
+  }
+
+  // O déficit NÃO tem uma intensidade só. Dois cortes muito diferentes usam o mesmo caminho de código:
+  //
+  // (a) CORTE DE RETORNO — a pessoa acabou de bater o teto do bulking e precisa voltar ao %BF de início
+  //     do próximo ciclo. É curto, e o objetivo é preservar ao máximo a massa magra que acabou de ser
+  //     construída; cortar agressivo aqui destrói justamente o que o bulking produziu.
+  // (b) CORTE PROFUNDO — a pessoa chega ao app bem acima da faixa do ciclo. Há muita gordura a perder,
+  //     o risco relativo à massa magra é menor e um déficit maior se justifica.
+  //
+  // Os NÚMEROS vêm de Garthe et al. 2011 (Int J Sport Nutr Exerc Metab, DOI 10.1123/ijsnem.21.2.97),
+  // ensaio randomizado com 24 atletas de elite, todos com 4 sessões de força/semana:
+  //   - Redução lenta:  ingestão -19±2%  ->  0,7%/semana de peso  ->  massa magra +2,1% (GANHOU magra
+  //                     enquanto perdia gordura) e 1RM subiu
+  //   - Redução rápida: ingestão -30±4%  ->  1,4%/semana de peso  ->  massa magra -0,2% (nenhum ganho),
+  //                     com perda de gordura PARECIDA
+  // Ou seja, o déficit de ~19% é o teto do que ainda permite construir músculo; a partir de ~30% a
+  // massa magra deixa de responder e não se ganha gordura perdida em troca. Carbone, McClung &
+  // Pasiakos 2019 (Adv Nutr, DOI 10.1093/advances/nmy087) confirma o mecanismo: conforme a magnitude do
+  // déficit aumenta, a capacidade da proteína alta de proteger a massa magra DIMINUI — não adianta
+  // compensar um déficit agressivo comendo mais proteína.
+  //
+  // Daí o teto de 20% aqui (logo acima do braço bem-sucedido, longe do braço que falhou) e o piso de
+  // 12% para o corte de retorno, onde preservar é todo o objetivo.
+  const MAX_DEFICIT_RETORNO = -0.12;
+  const MAX_DEFICIT_PROFUNDO = -0.2;
+  const PP_ATE_DEFICIT_CHEIO = 5; // pontos percentuais acima do teto do ciclo até o déficit máximo
+  const profundidade = Math.max(0, Math.min(1, (bodyFatPercent - cutAbove) / PP_ATE_DEFICIT_CHEIO));
+  const MAX_DEFICIT = MAX_DEFICIT_RETORNO + (MAX_DEFICIT_PROFUNDO - MAX_DEFICIT_RETORNO) * profundidade;
+  // Superávit fixo em 12%, dentro da faixa de 10-20% de Iraki et al. 2019 (Sports, DOI
+  // 10.3390/sports7070154).
+  //
+  // Vale registrar o que a evidência diz sobre NÃO subir mais que isso: Garthe et al. 2013 (Eur J Sport
+  // Sci, DOI 10.1080/17461391.2011.643923) randomizou 39 atletas de elite em 8-12 semanas de ganho com
+  // 4 sessões de força/semana. O grupo que comeu ~600kcal/dia a mais (3585 vs 2964kcal) ganhou mais
+  // peso (3,9% vs 1,5%), mas o ganho de MASSA MAGRA não diferiu entre os grupos — enquanto a massa
+  // GORDA subiu 15±4% contra 3±3%. Superávit maior comprou cinco vezes mais gordura e nenhum músculo.
+  const MAX_SURPLUS = 0.12;
+
+  const surplusDeCada = MAX_SURPLUS * bulkFraction + MAX_DEFICIT * cutFraction;
+  let surplusPercent = surplusDeCada;
+
+  const reasonCore =
+    cutFraction >= 0.999
+      ? profundidade < 0.35
+        ? `%BF (${bodyFatPercent}%) — corte de RETORNO: déficit leve (${(Math.abs(MAX_DEFICIT) * 100).toFixed(0)}%) pra voltar aos ${bulkBelow}% e recomeçar o ganho, preservando ao máximo a massa magra construída no superávit. Cortar agressivo aqui destruiria justamente o que o bulking produziu (Garthe et al. 2011).`
+        : `%BF (${bodyFatPercent}%) está bem acima do teto do ciclo (${cutAbove}%) — déficit de ${(Math.abs(MAX_DEFICIT) * 100).toFixed(0)}%, mais firme porque há bastante gordura a perder antes de a massa magra virar o fator limitante.`
+      : bulkFraction >= 0.999
+        ? `%BF (${bodyFatPercent}%) ${previousPath === "bulking" ? `está em superávit e ainda longe do teto de ${cutAbove}%` : `está abaixo de ${bulkBelow}%`} — superávit para ganho de massa magra.`
+        : cutFraction > 0 && bulkFraction > 0
+          ? `%BF (${bodyFatPercent}%) está na virada entre as fases — a prescrição atravessa de superávit para déficit de forma contínua (${(bulkFraction * 100).toFixed(0)}% superávit / ${(cutFraction * 100).toFixed(0)}% déficit), em vez de dar um salto de um mês pro outro.`
+          : cutFraction > 0
+            ? `%BF (${bodyFatPercent}%) está entrando na faixa de corte — déficit proporcional (${(cutFraction * 100).toFixed(0)}% do cheio), não um degrau, porque a leitura de foto tem ruído da ordem do próprio limiar.`
+            : bulkFraction > 0
+              ? `%BF (${bodyFatPercent}%) está entrando na faixa de superávit — superávit proporcional (${(bulkFraction * 100).toFixed(0)}% do cheio).`
+              : `%BF (${bodyFatPercent}%) está na faixa intermediária (${bulkBelow}–${cutAbove}%) — manutenção.`;
+
+  // ajuste por recuperação: mesmos limiares de antes (score >= 4 zera o déficit, >= 2 corta pela metade)
+  let recoveryNote = "";
+  if (surplusPercent < 0) {
     if (recoveryScore >= 4) {
-      return {
-        path: "normocalorico",
-        pathReason: `%BF (${bodyFatPercent}%) indicaria déficit, mas o ciclo anterior teve vários sinais concorrentes de déficit agressivo demais (carga caindo na academia, treinos pulados por cansaço, sono ruim) — ciclo de manutenção pra recuperar antes de retomar o cutting.`,
-        surplusPercent: 0,
-      };
+      surplusPercent = 0;
+      recoveryNote = " Déficit ZERADO neste ciclo: o anterior teve vários sinais concorrentes de déficit agressivo demais (carga caindo, treinos pulados por cansaço, sono ruim) — ciclo de manutenção pra recuperar antes de retomar.";
+    } else if (recoveryScore >= 2) {
+      surplusPercent *= 0.5;
+      recoveryNote = " Déficit reduzido à metade porque o ciclo anterior mostrou sinais de déficit grande demais (carga/sono/cansaço).";
     }
-    if (recoveryScore >= 2) {
-      return {
-        path: "cutting",
-        pathReason: `%BF (${bodyFatPercent}%) está acima de ${cutAbove}% — segue em déficit, mas reduzido (de -20% para -10%) porque o ciclo anterior mostrou sinais de déficit grande demais (carga/sono/cansaço).`,
-        surplusPercent: -0.1,
-      };
-    }
-    return {
-      path: "cutting",
-      pathReason: `%BF (${bodyFatPercent}%) está acima de ${cutAbove}% — priorizar déficit calórico para reduzir gordura antes de buscar mais superávit.`,
-      surplusPercent: -0.2,
-    };
   }
-  if (bodyFatPercent < bulkBelow) {
-    return {
-      path: "bulking",
-      pathReason: `%BF (${bodyFatPercent}%) está abaixo de ${bulkBelow}% — há margem para superávit calórico com foco em ganho de massa magra.`,
-      surplusPercent: 0.12,
-    };
-  }
+
+  const path: DietPath =
+    surplusPercent <= -PATH_LABEL_THRESHOLD ? "cutting" : surplusPercent >= PATH_LABEL_THRESHOLD ? "bulking" : "normocalorico";
+
+  return { path, pathReason: reasonCore + recoveryNote, surplusPercent };
+}
+
+/** Proteína e gordura por estratégia — a fonte única de verdade pros macros estruturais.
+ *
+ * Antes esses números só eram usados no PRIMEIRO ciclo; nos ciclos seguintes a proteína vinha
+ * extrapolada do histórico (`extractRules` em dietEngine.ts), que dividia a proteína calculada sobre o
+ * peso PROJETADO pelo peso MEDIDO de hoje e realimentava o resultado. Isso criava uma catraca — em
+ * corte sustentado a proteína encolhia sozinha a cada ciclo, sem ninguém ter decidido isso. Proteína e
+ * gordura são decisões de estratégia, não séries temporais a extrapolar. */
+export function macroTargetsForStrategy(path: DietPath): { proteinPerKg: number; fatPerKg: number } {
   return {
-    path: "normocalorico",
-    pathReason: `%BF (${bodyFatPercent}%) está na faixa intermediária (${bulkBelow}–${cutAbove}%) — manutenção é o ponto de partida mais seguro até definir prioridade.`,
-    surplusPercent: 0,
+    proteinPerKg: path === "cutting" ? 2.2 : path === "bulking" ? 1.9 : 2.0,
+    fatPerKg: 0.7,
   };
 }
 
@@ -397,8 +545,7 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
   const { path, pathReason, surplusPercent } = classifyPathFromBf(bodyFatPercent, sex);
 
   const targetKcal = tdee * (1 + surplusPercent);
-  const proteinPerKg = path === "cutting" ? 2.2 : path === "bulking" ? 1.9 : 2.0;
-  const fatPerKg = 0.7;
+  const { proteinPerKg, fatPerKg } = macroTargetsForStrategy(path);
   const targetProteinG = weightKg * proteinPerKg;
   const targetFatG = weightKg * fatPerKg;
   const targetCarbG = Math.max(0, (targetKcal - targetProteinG * 4 - targetFatG * 9) / 4);
@@ -425,3 +572,4 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
     targetCarbG,
   };
 }
+

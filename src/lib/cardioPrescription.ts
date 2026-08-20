@@ -13,6 +13,8 @@ export interface CardioSession {
 export interface CardioPrescription {
   sessions: CardioSession[];
   totalMinutesPerWeek: number;
+  /** gasto estimado do cardio prescrito, kcal/dia — pra ser somado ao TDEE em vez de ficar invisível */
+  estimatedKcalPerDay: number;
   reason: string;
   interferenceNote: string;
 }
@@ -25,6 +27,8 @@ export interface CardioInput {
   /** sinais de recuperação ruim do lado da dieta (ver Recuperação e Ajuste do Déficit) — cardio extra
    * não deveria ser somado em cima de um déficit que já está sendo mal tolerado */
   recoveryScore?: number;
+  /** peso corporal, só pra estimar o gasto do cardio prescrito (ver estimatedKcalPerDay) */
+  weightKg: number;
 }
 
 // O objetivo aqui não é só "gastar mais calorias" — é manter o turnover metabólico (energy flux) alto o
@@ -80,59 +84,99 @@ const HIIT_MODALITY = "Bicicleta ergométrica ou elíptico (HIIT)";
  * de força, que é a prioridade desse app. Piso geral ancorado na diretriz da OMS (Bull et al. 2020, Br J
  * Sports Med, DOI 10.1136/bjsports-2020-102955): 150-300min/semana moderado ou 75-150min vigoroso. */
 export function prescribeCardio(input: CardioInput): CardioPrescription {
-  const { strategy, strengthDaysPerWeek, recoveryScore = 0 } = input;
+  const { strategy, strengthDaysPerWeek, recoveryScore = 0, weightKg } = input;
 
   const badRecovery = recoveryScore >= 2;
   const adjustment = badRecovery && strategy === "cutting" ? 0 : STRATEGY_MINUTES_ADJUSTMENT[strategy];
-  const totalMinutesPerWeek = Math.max(90, BASE_TURNOVER_MINUTES + adjustment);
+  const targetMinutes = Math.max(90, BASE_TURNOVER_MINUTES + adjustment);
 
-  const sessions: CardioSession[] = [];
+  // HIIT entra só como complemento (1x/semana) e quando a recuperação permite — nunca é a maior parte
+  // do volume, dado o custo de recuperação mais alto por minuto.
+  const HIIT_MIN_MINUTES = 10;
+  const HIIT_MAX_MINUTES = 20;
+  const hiitMinutes =
+    !badRecovery && targetMinutes * 0.3 >= HIIT_MIN_MINUTES
+      ? Math.min(HIIT_MAX_MINUTES, Math.round(targetMinutes * 0.3))
+      : 0;
 
-  // maior parte do volume em steady-state moderado, 2-3x/semana — frequência regular é o que mantém a
-  // via de sensibilidade à insulina "ativa" (Howlett et al. 2008 mostrou o efeito durando só horas após
-  // uma sessão), então espalhar em mais dias vale mais aqui do que concentrar num dia só
-  const steadyStateSessions = totalMinutesPerWeek >= 180 ? 3 : 2;
-  const steadyStateMinutes = Math.round(totalMinutesPerWeek * 0.7 / steadyStateSessions);
-  sessions.push({
-    modality: LOW_INTERFERENCE_MODALITY,
-    frequencyPerWeek: steadyStateSessions,
-    minutesPerSession: steadyStateMinutes,
-    talkTestTarget: "frases_curtas",
-    intensityLabel: `Moderado — ${TALK_TEST_LABEL.frases_curtas}`,
-    timingNote:
-      strengthDaysPerWeek > 0
-        ? "Em dia separado do treino de força, ou depois dele (nunca antes) — não compromete a performance no treino principal."
-        : "Qualquer horário — sem treino de força concorrente pra se preocupar.",
-  });
+  // Teto de duração POR SESSÃO antes de teto de volume total. Wilson et al. 2012 (DOI
+  // 10.1519/JSC.0b013e31823a3e2d) mede correlação negativa com hipertrofia/força tanto pra frequência
+  // do aeróbico (r -0,26 a -0,35) quanto pra DURAÇÃO (r -0,29 a -0,75) — duração pesa mais. Então é
+  // preferível NÃO entregar o alvo de turnover a entregar sessões longas: o que passa do teto é cortado
+  // e declarado no `reason`, não empurrado pra dentro de sessões de 60-75min.
+  const MAX_STEADY_SESSIONS = 3;
+  const MAX_STEADY_SESSION_MINUTES = 45;
+  const MIN_STEADY_SESSION_MINUTES = 25;
 
-  // HIIT só entra como complemento (1x/semana) quando a recuperação permite — nunca é a maior parte do
-  // volume, dado o custo de recuperação mais alto por minuto
-  const hasRoomForHiit = !badRecovery && totalMinutesPerWeek - steadyStateSessions * steadyStateMinutes >= 15;
-  if (hasRoomForHiit) {
-    const hiitMinutes = totalMinutesPerWeek - steadyStateSessions * steadyStateMinutes;
+  const steadyTargetTotal = targetMinutes - hiitMinutes;
+  const steadyStateSessions = Math.max(2, Math.min(MAX_STEADY_SESSIONS, Math.round(steadyTargetTotal / 40)));
+  const steadyStateMinutes = Math.max(
+    MIN_STEADY_SESSION_MINUTES,
+    Math.min(MAX_STEADY_SESSION_MINUTES, Math.round(steadyTargetTotal / steadyStateSessions))
+  );
+  const trimmedMinutes = steadyTargetTotal - steadyStateSessions * steadyStateMinutes;
+
+  const sessions: CardioSession[] = [
+    {
+      modality: LOW_INTERFERENCE_MODALITY,
+      frequencyPerWeek: steadyStateSessions,
+      minutesPerSession: steadyStateMinutes,
+      talkTestTarget: "frases_curtas",
+      intensityLabel: `Moderado — ${TALK_TEST_LABEL.frases_curtas}`,
+      timingNote:
+        strengthDaysPerWeek > 0
+          ? "Em dia separado do treino de força, ou depois dele (nunca antes) — não compromete a performance no treino principal."
+          : "Qualquer horário — sem treino de força concorrente pra se preocupar.",
+    },
+  ];
+
+  if (hiitMinutes > 0) {
     sessions.push({
       modality: HIIT_MODALITY,
       frequencyPerWeek: 1,
-      minutesPerSession: Math.max(10, Math.min(20, hiitMinutes)),
+      minutesPerSession: hiitMinutes,
       talkTestTarget: "nao_consegue_conversar",
       intensityLabel: `Alta — ${TALK_TEST_LABEL.nao_consegue_conversar}`,
       timingNote: "Em dia separado do treino de força de perna, se possível — HIIT tem custo de recuperação mais alto por minuto que o steady-state.",
     });
   }
 
+  // Fonte única de verdade: o total declarado É a soma do que foi prescrito. Antes o total era o alvo
+  // teórico e as sessões saíam de um arredondamento com resíduo descartado, então o app anunciava
+  // 210min/semana enquanto prescrevia 167 (e 106 quando a recuperação ruim eliminava o HIIT).
+  const totalMinutesPerWeek = sessions.reduce((sum, s) => sum + s.frequencyPerWeek * s.minutesPerSession, 0);
+
+  // Gasto estimado do cardio prescrito, pra ser SOMADO ao TDEE em vez de ficar invisível: o app
+  // prescrevia 150min/semana de aeróbico e não contabilizava um minuto disso no gasto. Steady-state
+  // moderado fica em torno de 6 METs e HIIT em torno de 9 (Compendium of Physical Activities,
+  // Ainsworth et al. 2011, DOI 10.1249/MSS.0b013e31821ece12); conta-se (MET-1) porque o BMR já cobre
+  // o repouso, mesma convenção do NEAT em bodyComposition.ts.
+  const STEADY_MET = 6.0;
+  const HIIT_MET = 9.0;
+  const kcalPerMin = (met: number) => ((met - 1) * 3.5 * weightKg) / 200;
+  const estimatedKcalPerDay =
+    (steadyStateSessions * steadyStateMinutes * kcalPerMin(STEADY_MET) + hiitMinutes * kcalPerMin(HIIT_MET)) / 7;
+
+  const trimNote =
+    trimmedMinutes > 10
+      ? ` O alvo de turnover pediria ${targetMinutes}min/semana, mas foram prescritos ${totalMinutesPerWeek}min: a sessão de steady-state é limitada a ${MAX_STEADY_SESSION_MINUTES}min e a ${MAX_STEADY_SESSIONS}x/semana, porque duração de aeróbico é a variável que mais custa hipertrofia (Wilson et al. 2012) — entregar o alvo cheio sairia mais caro que não entregar.`
+      : "";
+
   const reason =
-    strategy === "cutting"
+    (strategy === "cutting"
       ? badRecovery
-        ? `Déficit já mostrando sinais de mal tolerado nesse ciclo — cardio mantido só no piso de turnover metabólico (${BASE_TURNOVER_MINUTES}min/semana), sem somar estresse extra em cima do déficit calórico.`
-        : `Cutting — cardio extra (+${STRATEGY_MINUTES_ADJUSTMENT.cutting}min/semana sobre o piso) como ferramenta auxiliar de déficit, sem depender só de cortar mais comida.`
+        ? "Déficit já mostrando sinais de mal tolerado nesse ciclo — cardio mantido só no piso de turnover metabólico, sem somar estresse extra em cima do déficit calórico."
+        : "Cutting — cardio acima do piso de turnover como ferramenta auxiliar de déficit, sem depender só de cortar mais comida."
       : strategy === "bulking"
         ? `Bulking — cardio reduzido pra não competir com o superávit calórico nem com a recuperação do treino de força, mas mantido em ${totalMinutesPerWeek}min/semana (não minimizado): frequência regular de aeróbico sustenta a sensibilidade à insulina que ajuda a direcionar as calorias extras pra síntese muscular em vez de gordura (Howlett et al. 2008).`
-        : `Normocalórico — piso padrão de turnover metabólico (${BASE_TURNOVER_MINUTES}min/semana), sem viés pra mais ou menos.`;
+        : "Normocalórico — piso padrão de turnover metabólico, sem viés pra mais ou menos.") +
+    ` Gasto estimado: ~${estimatedKcalPerDay.toFixed(0)}kcal/dia, já somados ao TDEE usado na prescrição.` +
+    trimNote;
 
   const interferenceNote =
     strengthDaysPerWeek >= 4
       ? `Treino de força em ${strengthDaysPerWeek} dias/semana — priorizada modalidade de baixo impacto (bike/elíptico/remo) em vez de corrida, que é a única modalidade com interferência significativa documentada em hipertrofia/força (Wilson et al. 2012).`
       : "Frequência de força atual deixa mais espaço pra cardio sem risco relevante de interferência, mas a modalidade de baixo impacto ainda é a escolha mais segura por padrão.";
 
-  return { sessions, totalMinutesPerWeek, reason, interferenceNote };
+  return { sessions, totalMinutesPerWeek, estimatedKcalPerDay, reason, interferenceNote };
 }

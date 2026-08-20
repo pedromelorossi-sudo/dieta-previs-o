@@ -55,45 +55,149 @@ export function scoreTrainingAdherence(signals: TrainingAdherenceSignals): numbe
   return score;
 }
 
-/** Meta de séries/semana por grupo pro mesociclo atual. Prioridade declarada (`priorityMuscles`, ex:
- * "consultoria real disse pra focar costas e braço") vence qualquer leitura de foto e vai direto pro
- * teto recuperável (MRV) — é informação mais confiável que um algoritmo lendo ângulo de câmera. Sem
- * prioridade declarada, cai na leitura visual: MAV como padrão, puxado pra cima quando a foto marca o
- * grupo "atrás dos outros", relaxado quando "destaque" (confidence "baixa" é ignorada, chute demais pra
- * virar meta de volume). `adherenceScore` > 0 (ver scoreTrainingAdherence) trava o teto em MAV mesmo pra
- * prioridade/leitura "atrás" — não adianta mirar MRV se o ciclo anterior já não foi executado direito. */
+/** Orçamento de séries efetivas por SESSÃO. É o que limita tudo: uma sessão real de musculação
+ * comporta ~20-25 séries de trabalho antes de virar duas horas de academia. Não é um número da
+ * literatura — é uma restrição de execução, e é justamente a restrição que faltava.
+ *
+ * Sem ela, `computeMuscleTargets` somava os MAVs dos 12 grupos de forma independente e devolvia 140
+ * séries/semana sem saber em quantos dias aquilo precisaria caber. O resultado era uma meta que a
+ * divisão nunca conseguia entregar (93 séries de 140, com ombro e lombar em zero) e, pior, um número
+ * exibido pro usuário que não descrevia nenhum treino existente. Priorizar todos os grupos ao mesmo
+ * tempo não é priorizar. */
+const SETS_PER_SESSION_BUDGET = 22;
+
+/** Frequência semanal de cada grupo no template de N dias — precisa ser conhecida ANTES de definir a
+ * meta, porque um grupo que aparece 1x/semana tem teto físico de
+ * (exercícios/dia × séries/exercício) séries, por mais alto que o MAV seja. */
+function frequencyByMuscleFor(daysPerWeek: number, priorityMuscles: MuscleGroup[]): Map<MuscleGroup, number> {
+  const days = Math.max(1, Math.min(6, Math.round(daysPerWeek)));
+  const template = ensurePriorityFrequency(SPLIT_TEMPLATES[days], priorityMuscles);
+  const freq = new Map<MuscleGroup, number>();
+  for (const day of template) {
+    for (const m of day.muscles) freq.set(m, (freq.get(m) ?? 0) + 1);
+  }
+  return freq;
+}
+
+/** Meta de séries/semana por grupo pro mesociclo atual — agora limitada pelo que é EXECUTÁVEL, não só
+ * pelo que seria desejável.
+ *
+ * O procedimento é: (1) todo grupo treinável começa no MEV, o mínimo pra não regredir; (2) o que sobra
+ * do orçamento semanal (`daysPerWeek × SETS_PER_SESSION_BUDGET`) é distribuído em direção ao ideal de
+ * cada grupo — MAV por padrão, MRV se for prioridade declarada, ajustado pela leitura visual —, com
+ * peso dobrado pra prioridades; (3) nada passa do teto físico da frequência daquele grupo no template.
+ *
+ * Prioridade declarada (`priorityMuscles`, ex: "a consultoria pediu foco em costas e braço") continua
+ * valendo mais que leitura de foto, mas agora disputa um orçamento finito em vez de todo mundo receber
+ * o teto ao mesmo tempo. `adherenceScore` e `recoveryScore` cortam o orçamento em vez de mexer só no
+ * teto: se o ciclo anterior não foi executado, ou se veio com sinal de recuperação ruim, o problema não
+ * é a meta de um grupo, é o volume total. */
 export function computeMuscleTargets(
   assessment: MuscleAssessmentInput[] = [],
   priorityMuscles: MuscleGroup[] = [],
-  adherenceScore = 0
+  adherenceScore = 0,
+  daysPerWeek = 3,
+  recoveryScore = 0
 ): MuscleTarget[] {
-  const lowAdherence = adherenceScore >= 1;
+  const freqByMuscle = frequencyByMuscleFor(daysPerWeek, priorityMuscles);
 
-  return VOLUME_LANDMARKS.map((landmark) => {
-    const muscleLabel = MUSCLE_GROUP_LABEL[landmark.muscle];
-    const ceiling = lowAdherence ? landmark.mav : landmark.mrv;
-    const adherenceSuffix = lowAdherence
-      ? ` Adesão baixa no ciclo anterior — teto travado no MAV (${landmark.mav}) até a execução melhorar, em vez do MRV.`
+  // Corte de orçamento por adesão e por recuperação. Antes, adesão baixa "travava o teto no MAV" — o
+  // que era no-op no caminho padrão, porque sem prioridade declarada o alvo já era o MAV.
+  const adherenceFactor = adherenceScore >= 1 ? 0.85 : 1;
+  const recoveryFactor = recoveryScore >= 4 ? 0.6 : recoveryScore >= 2 ? 0.8 : 1;
+  const budget = Math.round(
+    Math.max(1, Math.min(6, Math.round(daysPerWeek))) * SETS_PER_SESSION_BUDGET * adherenceFactor * recoveryFactor
+  );
+
+  interface Slot {
+    landmark: (typeof VOLUME_LANDMARKS)[number];
+    isPriority: boolean;
+    assessed?: MuscleAssessmentInput;
+    ceiling: number;
+    ideal: number;
+    sets: number;
+  }
+
+  const slots: Slot[] = VOLUME_LANDMARKS.map((landmark) => {
+    const isPriority = priorityMuscles.includes(landmark.muscle);
+    const assessed = assessment.find((x) => x.muscle === landmark.muscle && x.confidence !== "baixa");
+    const catalogSize = exercisesByMuscle(landmark.muscle).length;
+    const freq = freqByMuscle.get(landmark.muscle) ?? 0;
+    const maxPerDay = isPriority ? MAX_EXERCISES_PER_PRIORITY_MUSCLE_PER_DAY : MAX_EXERCISES_PER_MUSCLE_PER_DAY;
+
+    // teto físico: não adianta pedir mais séries do que cabem na frequência × exercícios × séries
+    const ceiling =
+      catalogSize === 0 || freq === 0 ? 0 : Math.min(landmark.mrv, freq * Math.min(maxPerDay, catalogSize) * MAX_SETS_PER_EXERCISE);
+
+    const adjustment = assessed ? DEVELOPMENT_ADJUSTMENT[assessed.relativeDevelopment] : 1.0;
+    const desired = isPriority ? landmark.mrv : landmark.mav * adjustment;
+    const ideal = Math.min(ceiling, Math.round(desired));
+
+    return { landmark, isPriority, assessed, ceiling, ideal, sets: Math.min(ceiling, landmark.mev) };
+  });
+
+  // distribui o que sobra do orçamento em direção ao ideal, priorizando quem foi declarado prioridade
+  let remaining = budget - slots.reduce((sum, sl) => sum + sl.sets, 0);
+  while (remaining > 0) {
+    // ordena pelo quão LONGE do ideal o grupo está (fração), não pela ordem da lista — senão o saldo do
+    // orçamento cai sempre nos primeiros grupos de VOLUME_LANDMARKS e grupos de MEV 0 (abdominal,
+    // antebraço) nunca recebiam uma série sequer
+    const hungry = slots
+      .filter((sl) => sl.sets < sl.ideal)
+      .sort((a, b) => a.sets / a.ideal - b.sets / b.ideal);
+    if (hungry.length === 0) break;
+    const totalWeight = hungry.reduce((sum, sl) => sum + (sl.isPriority ? 2 : 1), 0);
+    let gaveAny = false;
+    for (const sl of hungry) {
+      if (remaining <= 0) break;
+      const share = Math.max(1, Math.round((remaining * (sl.isPriority ? 2 : 1)) / totalWeight));
+      const give = Math.min(share, sl.ideal - sl.sets, remaining);
+      if (give <= 0) continue;
+      sl.sets += give;
+      remaining -= give;
+      gaveAny = true;
+    }
+    if (!gaveAny) break;
+  }
+
+  // se o orçamento não cobre nem os MEVs (pouquíssimos dias), corta proporcionalmente e diz isso
+  const allocated = slots.reduce((sum, sl) => sum + sl.sets, 0);
+  const overBudget = allocated > budget;
+  if (overBudget) {
+    const scale = budget / allocated;
+    for (const sl of slots) sl.sets = Math.max(0, Math.round(sl.sets * scale));
+  }
+
+  const budgetNote =
+    adherenceFactor < 1 || recoveryFactor < 1
+      ? ` Orçamento semanal reduzido${adherenceFactor < 1 ? " por adesão baixa no ciclo anterior" : ""}${
+          recoveryFactor < 1 ? `${adherenceFactor < 1 ? " e" : ""} por sinais de recuperação ruim` : ""
+        } — o ajuste é no volume total, não em um grupo isolado.`
       : "";
 
-    if (priorityMuscles.includes(landmark.muscle)) {
-      return {
-        muscle: landmark.muscle,
-        muscleLabel,
-        weeklySets: Math.min(landmark.mrv, ceiling),
-        reason: `Prioridade declarada (consultoria) — meta ${lowAdherence ? "no MAV" : "no teto recuperável (MRV)"} (${ceiling} séries/semana), exercícios desse grupo entram primeiro na sessão e a frequência semanal sobe quando possível.${adherenceSuffix}`,
-        isPriority: true,
-      };
+  return slots.map((sl) => {
+    const muscleLabel = MUSCLE_GROUP_LABEL[sl.landmark.muscle];
+    const freq = freqByMuscle.get(sl.landmark.muscle) ?? 0;
+
+    let reason: string;
+    if (sl.ceiling === 0) {
+      reason =
+        exercisesByMuscle(sl.landmark.muscle).length === 0
+          ? `Sem exercício desse grupo no catálogo — o estímulo vem indireto de outros movimentos (ex: lombar em stiff, terra e agachamento). Meta direta zerada de propósito, em vez de exibir um alvo que nenhuma sessão pode cumprir.`
+          : `Grupo não aparece na divisão de ${daysPerWeek} dias — meta zerada em vez de prometer volume que a divisão não entrega.`;
+    } else if (sl.isPriority) {
+      reason = `Prioridade declarada (consultoria) — ${sl.sets} séries/semana, com peso dobrado na disputa pelo orçamento e entrada primeiro na sessão.${
+        sl.sets < sl.landmark.mrv ? ` Abaixo do MRV (${sl.landmark.mrv}) porque ${sl.sets >= sl.ceiling ? `a frequência de ${freq}x/semana tem teto de ${sl.ceiling} séries` : "o orçamento semanal não comporta mais"}.` : ""
+      }${budgetNote}`;
+    } else if (sl.sets >= sl.landmark.mav) {
+      reason = `Meta no MAV (${sl.landmark.mav} séries/semana) — melhor custo-benefício da dose-resposta volume→hipertrofia.${budgetNote}`;
+    } else if (sl.assessed && sl.assessed.relativeDevelopment !== "proporcional") {
+      reason = `Leitura visual marcou como "${sl.assessed.relativeDevelopment === "atras_dos_outros" ? "atrás dos outros" : "destaque"}" — ${sl.sets} séries/semana dentro do orçamento de ${daysPerWeek} dias.${budgetNote}`;
+    } else {
+      reason = `${sl.sets} séries/semana: perto do mínimo produtivo (MEV ${sl.landmark.mev}), porque ${daysPerWeek} dias/semana dão um orçamento de ~${budget} séries e ele não cobre o MAV de todos os grupos. Mirar MAV em tudo exige mais dias de treino, não uma meta maior no papel.${budgetNote}`;
     }
 
-    const a = assessment.find((x) => x.muscle === landmark.muscle && x.confidence !== "baixa");
-    const adjustment = a ? DEVELOPMENT_ADJUSTMENT[a.relativeDevelopment] : 1.0;
-    const weeklySets = Math.round(Math.min(ceiling, Math.max(landmark.mev, landmark.mav * adjustment)));
-    const reason =
-      (a && a.relativeDevelopment !== "proporcional"
-        ? `Leitura visual marcou esse grupo como "${a.relativeDevelopment === "atras_dos_outros" ? "atrás dos outros" : "destaque"}" — meta ajustada do MAV padrão (${landmark.mav}) pra ${weeklySets} séries/semana.`
-        : `Meta padrão: MAV (${landmark.mav} séries/semana) — melhor custo-benefício da dose-resposta volume→hipertrofia.`) + adherenceSuffix;
-    return { muscle: landmark.muscle, muscleLabel, weeklySets, reason };
+    return { muscle: sl.landmark.muscle, muscleLabel, weeklySets: sl.sets, reason, isPriority: sl.isPriority || undefined };
   });
 }
 
@@ -120,12 +224,15 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
     { label: "Corpo inteiro B", muscles: ["peito", "costas", "ombro", "quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
   ],
   3: [
-    // ombro fica de fora do alvo explícito aqui — já recebe estímulo indireto relevante do supino/
-    // desenvolvimento como secondaryMuscle, igual o dia 1 real do educador (peito/tríceps/panturrilha)
-    // não tem exercício de ombro dedicado
-    { label: "Peito/Tríceps/Panturrilha", muscles: ["peito", "triceps", "panturrilha", "abdominal"] },
+    // Ombro entrou no dia 1. O template original replicava o print do educador (peito/tríceps/
+    // panturrilha), que não tinha exercício de ombro dedicado, sob a justificativa de "estímulo
+    // indireto do supino". Só que o app conta apenas o grupo PRIMÁRIO no volume efetivo (ver
+    // trainingVolume.ts), então na prática o ombro recebia ZERO séries por semana — e como este é o
+    // único template com 3 dias, ficava zero o ano inteiro. Panturrilha saiu do dia 1 e ficou só no dia
+    // de perna, que é onde ela já aparecia, pra o dia 1 não estourar o orçamento de séries por sessão.
+    { label: "Peito/Ombro/Tríceps", muscles: ["peito", "ombro", "triceps"] },
     { label: "Costas/Bíceps", muscles: ["costas", "biceps", "antebraco", "abdominal"] },
-    { label: "Pernas", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Pernas", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
   ],
   4: [
     { label: "Superior A", muscles: ["peito", "ombro", "triceps"] },
@@ -167,11 +274,19 @@ const MAX_EXERCISES_PER_PRIORITY_MUSCLE_PER_DAY = 3;
  * do que a meta semanal — é a frequência que precisa subir, não a sessão virar interminável).
  * `rotation` desloca o ponto de partida da lista pra variar o exercício entre a variante A e B do mesmo
  * grupo na semana (mesmo raciocínio do suggestExerciseSwap em trainingPeriodization.ts). */
-function pickExercisesForMuscle(muscle: MuscleGroup, setsNeeded: number, rotation: number, isPriority: boolean): TrainingItem[] {
+function pickExercisesForMuscle(
+  muscle: MuscleGroup,
+  setsNeeded: number,
+  rotation: number,
+  isPriority: boolean,
+  loadByExercise?: Map<string, number>
+): TrainingItem[] {
   const candidates = exercisesByMuscle(muscle);
   if (candidates.length === 0 || setsNeeded <= 0) return [];
 
   const maxExercises = isPriority ? MAX_EXERCISES_PER_PRIORITY_MUSCLE_PER_DAY : MAX_EXERCISES_PER_MUSCLE_PER_DAY;
+
+  // compostos primeiro (mais retorno por série, faz sentido com a pessoa fresca)
   const ordered = [...candidates].sort((a, b) => {
     if (a.pattern === b.pattern) return 0;
     return a.pattern === "composto" ? -1 : 1;
@@ -180,21 +295,63 @@ function pickExercisesForMuscle(muscle: MuscleGroup, setsNeeded: number, rotatio
   const rotated = [...ordered.slice(offset), ...ordered.slice(0, offset)];
 
   const numExercises = Math.max(1, Math.min(rotated.length, maxExercises, Math.ceil(setsNeeded / MAX_SETS_PER_EXERCISE)));
-  const chosen = rotated.slice(0, numExercises);
-  const base = Math.min(MAX_SETS_PER_EXERCISE, Math.floor(setsNeeded / numExercises));
-  const remainder = Math.min(numExercises, setsNeeded - base * numExercises);
 
-  return chosen.map((ex, i) => ({
-    exerciseId: ex.id,
-    blocks: [
-      {
-        reserveType: "work" as const,
-        sets: Math.min(MAX_SETS_PER_EXERCISE, base + (i < remainder ? 1 : 0)),
-        repRange: ex.pattern === "composto" ? "6-10" : "10-15",
-        loadKg: null,
-      },
-    ],
-  }));
+  // Diversidade de padrão: escolhe no máximo um exercício por família de movimento antes de aceitar um
+  // segundo da mesma família. Sem isso a ordenação "compostos primeiro" produzia Supino Inclinado 15° +
+  // Supino Inclinado 30° no peito, e duas puxadas verticais sem nenhuma remada nas costas.
+  const chosen: typeof rotated = [];
+  const usedFamilies = new Set<string>();
+  for (const ex of rotated) {
+    if (chosen.length >= numExercises) break;
+    if (usedFamilies.has(ex.movementFamily)) continue;
+    chosen.push(ex);
+    usedFamilies.add(ex.movementFamily);
+  }
+  // se as famílias disponíveis não bastarem, completa repetindo família (grupo com catálogo pequeno)
+  for (const ex of rotated) {
+    if (chosen.length >= numExercises) break;
+    if (!chosen.includes(ex)) chosen.push(ex);
+  }
+
+  const base = Math.min(MAX_SETS_PER_EXERCISE, Math.floor(setsNeeded / chosen.length));
+  const remainder = Math.min(chosen.length, setsNeeded - base * chosen.length);
+
+  return chosen.map((ex, i) => {
+    const workSets = Math.min(MAX_SETS_PER_EXERCISE, base + (i < remainder ? 1 : 0));
+    const suggestedLoad = loadByExercise?.get(ex.id) ?? null;
+    const blocks: TrainingItem["blocks"] = [];
+
+    // Aquecimento no PRIMEIRO exercício composto do grupo. O tipo `warmup` já existia no modelo de
+    // dados e no protocolo do educador (a contagem de volume efetivo em trainingVolume.ts o exclui de
+    // propósito), mas a divisão gerada nunca prescrevia nenhum — as sessões saíam com a pessoa entrando
+    // direto na série pesada. Não entra em isolado nem no segundo exercício do mesmo grupo: a
+    // articulação já está aquecida a essa altura.
+    if (i === 0 && ex.pattern === "composto") {
+      blocks.push({
+        reserveType: "warmup" as const,
+        sets: 2,
+        repRange: "8-12",
+        rirTarget: 5,
+        // ~50% e ~70% da carga de trabalho é a progressão de aproximação usual; sem carga registrada
+        // ainda, fica em aberto pra pessoa ajustar
+        loadKg: suggestedLoad != null ? Math.round(suggestedLoad * 0.5 * 2) / 2 : null,
+      });
+    }
+
+    blocks.push({
+      reserveType: "work" as const,
+      sets: workSets,
+      repRange: ex.pattern === "composto" ? "6-10" : "10-15",
+      // Composto pesado fica 1-2 reps da falha (o custo de falhar num agachamento é alto); isolado
+      // pode ir mais perto. É o alvo que a pergunta de adesão ("chegou perto da falha?") cobra.
+      rirTarget: ex.pattern === "composto" ? 2 : 1,
+      // carga sugerida a partir do histórico logado (ver suggestLoadProgression em
+      // trainingPeriodization.ts); null quando ainda não há log desse exercício
+      loadKg: suggestedLoad,
+    });
+
+    return { exerciseId: ex.id, blocks };
+  });
 }
 
 /** Garante 2ª exposição semanal pra grupo prioritário que só aparece 1x no template — treinar um grupo
@@ -222,7 +379,11 @@ function ensurePriorityFrequency(template: SplitDayTemplate[], priorityMuscles: 
  * e escolhe os exercícios do catálogo. `daysPerWeek` fora de 1-6 é limitado a esse intervalo. Grupos
  * prioritários entram primeiro em cada sessão (treinados com a pessoa fresca) e ganham uma 2ª exposição
  * semanal quando o template só previa 1x. */
-export function buildSplit(daysPerWeek: number, muscleTargets: MuscleTarget[]): TrainingSession[] {
+export function buildSplit(
+  daysPerWeek: number,
+  muscleTargets: MuscleTarget[],
+  loadByExercise?: Map<string, number>
+): TrainingSession[] {
   const days = Math.max(1, Math.min(6, Math.round(daysPerWeek)));
   const priorityMuscles = muscleTargets.filter((t) => t.isPriority).map((t) => t.muscle);
   const template = ensurePriorityFrequency(SPLIT_TEMPLATES[days], priorityMuscles);
@@ -251,7 +412,7 @@ export function buildSplit(daysPerWeek: number, muscleTargets: MuscleTarget[]): 
       const setsThisDay = Math.round(weeklySets / freq);
       const rotation = rotationByMuscle.get(muscle) ?? 0;
       rotationByMuscle.set(muscle, rotation + 1);
-      items.push(...pickExercisesForMuscle(muscle, setsThisDay, rotation, priorityByMuscle.has(muscle)));
+      items.push(...pickExercisesForMuscle(muscle, setsThisDay, rotation, priorityByMuscle.has(muscle), loadByExercise));
     }
     return { label: day.label, items };
   });
@@ -280,7 +441,12 @@ const MESOCYCLE_WEEKS = 5;
  * a 5ª semana em deload (~50% do volume) antes de reiniciar o ciclo — evita empilhar semanas seguidas
  * perto do MRV, mesmo raciocínio de "recuperação virando fator limitante" já usado em
  * trainingVolume.ts/trainingPeriodization.ts. */
-export function planTrainingPeriodization(muscleTargets: MuscleTarget[], daysPerWeek: number, weeksAhead: number): WeekVolumePlan[] {
+export function planTrainingPeriodization(
+  muscleTargets: MuscleTarget[],
+  daysPerWeek: number,
+  weeksAhead: number,
+  loadByExercise?: Map<string, number>
+): WeekVolumePlan[] {
   const plan: WeekVolumePlan[] = [];
 
   for (let w = 1; w <= weeksAhead; w++) {
@@ -296,20 +462,31 @@ export function planTrainingPeriodization(muscleTargets: MuscleTarget[], daysPer
       return { ...t, weeklySets: Math.max(0, rampedSets) };
     });
 
+    // Quando o orçamento semanal mal cobre o MEV (caso típico de 3 dias/semana), a "rampa" de volume é
+    // degenerada — sai 62/67/67/67 e a progressão de volume simplesmente não existe. Antes isso ficava
+    // escondido atrás de um texto que prometia "volume subindo progressivamente". Agora o plano diz a
+    // verdade e aponta pra onde a progressão realmente está nesse cenário: a carga (ver
+    // suggestLoadProgression em trainingPeriodization.ts).
+    const totalTarget = muscleTargets.reduce((sum, t) => sum + t.weeklySets, 0);
+    const totalMev = muscleTargets.reduce((sum, t) => sum + (t.weeklySets > 0 ? landmarkFor(t.muscle).mev : 0), 0);
+    const rampIsFlat = totalTarget <= totalMev * 1.15;
+
     const focusNote = isDeload
       ? "Semana de deload — volume reduzido de propósito (~metade) pra recuperar antes do próximo bloco de acúmulo."
-      : cyclePosition === 1
-        ? "Início do mesociclo — volume mais perto do mínimo produtivo, pra entrar aos poucos."
-        : cyclePosition >= MESOCYCLE_WEEKS - 1
-          ? "Última semana de acúmulo antes do deload — volume no pico da meta do mesociclo."
-          : "Semana de acúmulo — volume subindo progressivamente rumo à meta.";
+      : rampIsFlat
+        ? "Volume praticamente constante nesta semana: com os dias de treino disponíveis, o orçamento semanal já fica perto do mínimo produtivo e não sobra margem pra rampa de volume. A progressão deste mesociclo é de CARGA — repetir a mesma série com mais peso —, não de séries. Pra ter rampa de volume, é preciso mais dias de treino."
+        : cyclePosition === 1
+          ? "Início do mesociclo — volume mais perto do mínimo produtivo, pra entrar aos poucos."
+          : cyclePosition >= MESOCYCLE_WEEKS - 1
+            ? "Última semana de acúmulo antes do deload — volume no pico da meta do mesociclo."
+            : "Semana de acúmulo — volume subindo progressivamente rumo à meta.";
 
     plan.push({
       weekIndex: w,
       label: `Semana ${w}`,
       isDeload,
       focusNote,
-      sessions: buildSplit(daysPerWeek, rampedTargets),
+      sessions: buildSplit(daysPerWeek, rampedTargets, loadByExercise),
     });
   }
 

@@ -62,7 +62,8 @@ function volumeReadingsForWeek(logs: TrainingLog[], week: number, refDate: Date)
 
 /** Quando o volume precisa subir, sugere um exercício do mesmo primaryMuscle que a pessoa NÃO fez nas
  * últimas semanas em vez de simplesmente empilhar mais séries no mesmo exercício — variar o estímulo é
- * seguro porque frequência/distribuição importa menos que volume total pra hipertrofia (Schoenfeld, Grgic
+ * prática comum, SEM base experimental forte de que a troca em si aumente hipertrofia (o paper de
+ * frequência de Schoenfeld, Grgic
  * & Krieger 2018, J Sports Sci, DOI 10.1080/02640414.2018.1555906: com volume equalizado, 1x vs 3x+
  * por semana não muda o resultado). */
 function suggestExerciseSwap(muscle: MuscleGroup, recentLogs: TrainingLog[]): ExerciseSwapSuggestion | undefined {
@@ -79,7 +80,7 @@ function suggestExerciseSwap(muscle: MuscleGroup, recentLogs: TrainingLog[]): Ex
     toExerciseId: toExercise.id,
     reason:
       notRecentlyUsed.length > 0
-        ? `"${toExercise.name}" não apareceu nas últimas semanas — variar o estímulo é seguro aqui, frequência/distribuição importa menos que volume total (Schoenfeld, Grgic & Krieger 2018, DOI 10.1080/02640414.2018.1555906).`
+        ? `"${toExercise.name}" não apareceu nas últimas semanas — alternar exercícios do mesmo grupo é prática comum pra variar o estímulo e distribuir o desgaste articular. Não há evidência forte de que a troca em si aumente hipertrofia com volume equalizado; trate como preferência, não como prescrição.`
         : `"${toExercise.name}" pra somar volume nesse grupo — já passou por todas as opções do catálogo recentemente, repetir é a alternativa razoável.`,
   };
 }
@@ -149,4 +150,84 @@ export function recommendNextWeek(input: TrainingPeriodizationInput, refDate: Da
       ? `${consecutiveOverMrv.map((r) => r.muscleLabel).join(", ")} passaram do teto recuperável (MRV) por 2 semanas seguidas — recuperação virando o fator limitante, não o estímulo. Sugerido: 1 semana de deload (~50% do volume) antes de retomar volume normal.`
       : undefined,
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// Progressão de carga
+// ---------------------------------------------------------------------------
+
+export interface LoadSuggestion {
+  exerciseId: string;
+  lastLoadKg: number;
+  suggestedLoadKg: number;
+  sessionsAtThisLoad: number;
+  reason: string;
+}
+
+/** Incremento mínimo prático por padrão de movimento. Composto aguenta salto absoluto maior; isolado
+ * com halter/polia costuma ter passo menor no equipamento. Valores em kg, arredondados pra 0,5. */
+function loadIncrementKg(loadKg: number, pattern: "composto" | "isolado"): number {
+  const relative = loadKg * (pattern === "composto" ? 0.025 : 0.02);
+  const floorKg = pattern === "composto" ? 2.5 : 1;
+  return Math.max(floorKg, Math.round(relative * 2) / 2);
+}
+
+/** Sugere a carga do próximo treino a partir do histórico logado.
+ *
+ * Por que isto existe: o app prescrevia séries e repetições e devolvia `loadKg: null` em todo bloco —
+ * toda a progressão do sistema era de VOLUME, e a carga, que é a variável que o praticante realmente
+ * persegue, nunca era sugerida nem lida de volta. O campo existia no log e morria ali.
+ *
+ * Limitação honesta: o log guarda carga e faixa de repetições PRESCRITA, mas não as repetições
+ * efetivamente feitas. Sem isso não dá pra fazer dupla progressão de verdade ("chegou no topo da faixa,
+ * então sobe a carga"). O que dá pra fazer é o que está aqui: se a carga de um exercício está parada há
+ * 2+ sessões, sugerir o menor incremento prático; se acabou de subir, sustentar. É um empurrão
+ * conservador, não uma prescrição de carga — e a nota devolvida diz isso.
+ */
+export function suggestLoadProgression(logs: TrainingLog[], minSessionsFlat = 2): Map<string, LoadSuggestion> {
+  const byExercise = new Map<string, { date: string; loadKg: number }[]>();
+
+  for (const log of logs) {
+    for (const set of log.setsLogged) {
+      if (set.reserveType !== "work" && set.reserveType !== "topset") continue;
+      if (set.loadKg == null || set.loadKg <= 0) continue;
+      const list = byExercise.get(set.exerciseId) ?? [];
+      // uma entrada por exercício por sessão — a carga mais pesada daquele dia
+      const existing = list.find((e) => e.date === log.date);
+      if (existing) existing.loadKg = Math.max(existing.loadKg, set.loadKg);
+      else list.push({ date: log.date, loadKg: set.loadKg });
+      byExercise.set(set.exerciseId, list);
+    }
+  }
+
+  const out = new Map<string, LoadSuggestion>();
+  for (const [exerciseId, entriesRaw] of byExercise) {
+    const entries = [...entriesRaw].sort((a, b) => a.date.localeCompare(b.date));
+    const last = entries[entries.length - 1];
+    const exercise = exerciseById(exerciseId);
+    if (!last || !exercise) continue;
+
+    let sessionsAtThisLoad = 1;
+    for (let i = entries.length - 2; i >= 0; i--) {
+      if (entries[i].loadKg === last.loadKg) sessionsAtThisLoad += 1;
+      else break;
+    }
+
+    const shouldProgress = sessionsAtThisLoad >= minSessionsFlat;
+    const increment = loadIncrementKg(last.loadKg, exercise.pattern);
+    const suggestedLoadKg = shouldProgress ? last.loadKg + increment : last.loadKg;
+
+    out.set(exerciseId, {
+      exerciseId,
+      lastLoadKg: last.loadKg,
+      suggestedLoadKg,
+      sessionsAtThisLoad,
+      reason: shouldProgress
+        ? `Carga parada em ${last.loadKg}kg por ${sessionsAtThisLoad} sessões — tentar ${suggestedLoadKg}kg mantendo a faixa de repetições. Se não fechar a faixa, voltar pra ${last.loadKg}kg e insistir mais uma semana.`
+        : `Carga subiu na última sessão (${last.loadKg}kg) — sustentar antes de subir de novo, buscando mais repetições dentro da faixa.`,
+    });
+  }
+
+  return out;
 }

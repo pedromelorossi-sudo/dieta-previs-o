@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Cycle } from "@/lib/types";
@@ -98,13 +98,40 @@ interface PredictionResponse {
     label: string;
     phase: "cutting" | "normocalorico" | "bulking";
     phaseLabel: string;
-    phaseReason: string;
+    tdee: number;
     recommendedKcal: number;
     startWeightKg: number;
     endWeightKg: number;
     startBfPercent: number;
     endBfPercent: number;
+    leanMassKg: number;
   }[];
+  planoDeFases?: {
+    resumo: string;
+    premissas: string[];
+    fases: {
+      index: number;
+      phase: "cutting" | "normocalorico" | "bulking";
+      phaseLabel: string;
+      subtipoCorte?: "retorno" | "profundo";
+      bfAlvoTermino: number;
+      mesInicioEstimado: number;
+      mesFimEstimado: number;
+      duracaoMesesEstimada: number;
+      gatilhoEntrada: string;
+      gatilhoSaida: string;
+      objetivo: string;
+      pesoInicioKg: number;
+      pesoFimKg: number;
+      bfInicioPercent: number;
+      bfFimPercent: number;
+      magraInicioKg: number;
+      magraFimKg: number;
+      kcalInicio: number;
+      kcalFim: number;
+      oQuePodeMudar: string;
+    }[];
+  };
   muscleGroupAssessment?: {
     muscle: string;
     relativeDevelopment: "atras_dos_outros" | "proporcional" | "destaque";
@@ -129,6 +156,17 @@ interface PredictionResponse {
     totalCyclesSeen: number;
     note: string;
   };
+  /** frase explicando como o fator de calibração entrou no TDEE deste ciclo (null = não entrou) */
+  calibrationApplied?: string | null;
+  /** por que a calibração está indisponível — ex: a migração da tabela de auditoria não rodou */
+  calibrationUnavailableReason?: string | null;
+  /** limites de segurança que precisaram ser aplicados na prescrição (ver src/lib/safety.ts) */
+  safetyWarnings?: string[];
+  /** gasto estimado do cardio prescrito, kcal/dia */
+  cardioKcalPerDay?: number;
+  /** este ciclo vai alimentar a calibração, ou está "sujo" demais pra isso? */
+  cycleCleanForCalibration?: boolean;
+  cycleDirtyReasons?: string[];
   bfConsistency?: { consistent: boolean; note: string } | null;
   cardioPrescription?: {
     sessions: {
@@ -817,22 +855,30 @@ export default function PrevisaoIaPage() {
                   <option value="nao_acompanhou">Não acompanhei direito</option>
                 </select>
               </Field>
-              {(adherence === "comeu_mais" || adherence === "comeu_menos") && (
-                <Field label="Quantas kcal você estima que comeu, em média?">
+              {adherence !== "" && adherence !== "nao_acompanhou" && (
+                <Field
+                  label={
+                    adherence === "seguiu"
+                      ? "Média de kcal que você realmente comeu (se acompanhou)"
+                      : "Quantas kcal você estima que comeu, em média?"
+                  }
+                >
                   <input
                     type="number"
                     step="1"
                     value={actualKcal}
                     onChange={(e) => setActualKcal(e.target.value)}
                     className="input"
-                    placeholder="ex: 2600"
+                    placeholder={adherence === "seguiu" ? `ex: ${fmt(last.kcal, 0)}` : "ex: 2600"}
                   />
                 </Field>
               )}
             </div>
             <p className="text-xs text-muted mt-2">
               Isso corrige o cálculo de TDEE pra usar o que você realmente comeu, não o que foi prescrito — importa
-              porque o algoritmo retrocalcula seu gasto real a partir disso.
+              porque o algoritmo retrocalcula seu gasto real a partir disso. Vale informar mesmo respondendo
+              &ldquo;segui de perto&rdquo;: um número medido vale mais que o rótulo, e uma diferença de 10% entre
+              prescrito e comido desloca o gasto estimado em ~9%.
             </p>
 
             <p className="text-xs text-muted mt-5 mb-2">
@@ -982,6 +1028,51 @@ export default function PrevisaoIaPage() {
       </form>
 
       {result && (
+        <ResultadoPrevisao
+          result={result}
+          saved={saved}
+          dietSaved={dietSaved}
+          programSaved={programSaved}
+          programSaving={programSaving}
+          handleSavePrediction={handleSavePrediction}
+          handleSaveDiet={handleSaveDiet}
+          handleDownloadPdf={handleDownloadPdf}
+          handleGoToDietBuilder={handleGoToDietBuilder}
+          handleSaveTrainingProgram={handleSaveTrainingProgram}
+        />
+      )}
+    </div>
+  );
+}
+
+/** O bloco de resultado vivia dentro do componente principal, na mesma árvore que os 37 campos do
+ * formulário e os 40 `useState` que os controlam — cada tecla digitada re-renderizava os 85 nós de JSX
+ * e os 8 `.map()` do resultado. Extraído e memoizado, ele só re-renderiza quando o resultado (ou um dos
+ * flags de salvamento) muda de verdade. */
+const ResultadoPrevisao = memo(function ResultadoPrevisao({
+  result,
+  saved,
+  dietSaved,
+  programSaved,
+  programSaving,
+  handleSavePrediction,
+  handleSaveDiet,
+  handleDownloadPdf,
+  handleGoToDietBuilder,
+  handleSaveTrainingProgram,
+}: {
+  result: PredictionResponse;
+  saved: boolean;
+  dietSaved: boolean;
+  programSaved: boolean;
+  programSaving: boolean;
+  handleSavePrediction: () => void;
+  handleSaveDiet: () => void;
+  handleDownloadPdf: () => void;
+  handleGoToDietBuilder: () => void;
+  handleSaveTrainingProgram: () => void;
+}) {
+  return (
         <section className="space-y-6">
           <div className="card p-5 animate-fade-in-up">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
@@ -1008,14 +1099,95 @@ export default function PrevisaoIaPage() {
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.strategyReason}</p>
           </div>
 
+          {result.planoDeFases && result.planoDeFases.fases.length > 0 && (
+            <div className="card p-5 animate-fade-in-up stagger-1">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <IconTarget className="h-4 w-4" /> Roteiro de fases
+              </div>
+              <p className="text-sm mt-2 leading-relaxed">{result.planoDeFases.resumo}</p>
+              <p className="text-xs text-warn mt-2 leading-relaxed">
+                O que encerra cada fase é o <strong>percentual de gordura</strong>, não o calendário. Os meses abaixo
+                são estimativa da velocidade projetada — se você responder mais rápido ou mais devagar, os meses mudam
+                e a fase continua até o %BF chegar no alvo.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                {result.planoDeFases.fases.map((f) => {
+                  const tone =
+                    f.phase === "cutting"
+                      ? "bg-danger/15 text-danger"
+                      : f.phase === "bulking"
+                        ? "bg-accent/15 text-accent"
+                        : "bg-surface-raised text-muted";
+                  return (
+                    <details key={f.index} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+                      <summary className="cursor-pointer list-none">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-muted tabular-nums">Fase {f.index}</span>
+                          <span className={`badge ${tone}`}>
+                            {f.phaseLabel}
+                            {f.subtipoCorte === "retorno" ? " · retorno" : ""}
+                          </span>
+                          <span className="text-sm font-medium tabular-nums">
+                            {fmt(f.bfInicioPercent, 1)}% → {fmt(f.bfAlvoTermino, 0)}%BF
+                          </span>
+                          <span className="text-xs text-muted ml-auto tabular-nums whitespace-nowrap">
+                            ~{f.duracaoMesesEstimada} {f.duracaoMesesEstimada === 1 ? "mês" : "meses"} (est.)
+                          </span>
+                        </span>
+                      </summary>
+
+                      <div className="mt-3 space-y-2 border-t border-border pt-3">
+                        <p className="text-sm text-muted leading-relaxed">{f.objetivo}</p>
+                        <div className="grid gap-2 sm:grid-cols-3 text-xs tabular-nums">
+                          <span className="text-muted">
+                            Peso {fmt(f.pesoInicioKg, 1)} → {fmt(f.pesoFimKg, 1)}kg
+                          </span>
+                          <span className="text-muted">
+                            Massa magra {fmt(f.magraInicioKg, 1)} → {fmt(f.magraFimKg, 1)}kg
+                          </span>
+                          <span className="text-muted">
+                            {fmt(f.kcalInicio, 0)} → {fmt(f.kcalFim, 0)}kcal
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted leading-relaxed">
+                          <strong className="text-foreground">Começa porque:</strong> {f.gatilhoEntrada}
+                        </p>
+                        <p className="text-xs text-muted leading-relaxed">
+                          <strong className="text-foreground">Termina quando:</strong> {f.gatilhoSaida}
+                        </p>
+                        <p className="text-xs text-muted leading-relaxed">
+                          <strong className="text-foreground">O que pode mudar a rota:</strong> {f.oQuePodeMudar}
+                        </p>
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+
+              <details className="mt-4 border-t border-border pt-3">
+                <summary className="cursor-pointer text-xs uppercase tracking-wide text-muted">
+                  Premissas deste plano
+                </summary>
+                <ul className="mt-2 space-y-2">
+                  {result.planoDeFases.premissas.map((pr, i) => (
+                    <li key={i} className="text-xs text-muted leading-relaxed border-l-2 border-border pl-3">
+                      {pr}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          )}
+
           {result.monthlyPlan && result.monthlyPlan.length > 0 && (
             <div className="card p-5 animate-fade-in-up stagger-2">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
-                <IconClipboard className="h-4 w-4" /> Planejamento dos próximos meses
+                <IconClipboard className="h-4 w-4" /> Detalhamento mês a mês
               </div>
               <p className="text-xs text-muted mt-2 leading-relaxed">
-                Projeção de trabalho, mês a mês: a fase muda sozinha quando o %BF projetado cruza os limiares — não
-                é garantia, cada ciclo real com fotos recalibra a rota.
+                O mesmo roteiro acima, aberto mês a mês. O TDEE é recalculado a cada mês pela mudança de composição —
+                não é um número congelado. Cada ciclo real com fotos recalibra a rota.
               </p>
               <div className="mt-4 space-y-2">
                 {result.monthlyPlan.map((m) => {
@@ -1035,7 +1207,7 @@ export default function PrevisaoIaPage() {
                       <span className="text-sm shrink-0">{fmt(m.recommendedKcal, 0)}kcal</span>
                       <span className="text-xs text-muted ml-auto whitespace-nowrap">
                         {fmt(m.startWeightKg, 1)}→{fmt(m.endWeightKg, 1)}kg · {fmt(m.startBfPercent, 1)}→
-                        {fmt(m.endBfPercent, 1)}%BF
+                        {fmt(m.endBfPercent, 1)}%BF · magra {fmt(m.leanMassKg, 1)}kg
                       </span>
                     </div>
                   );
@@ -1139,6 +1311,33 @@ export default function PrevisaoIaPage() {
             </div>
           )}
 
+          {result.calibrationUnavailableReason && (
+            <div className="card p-5 border-warn/40 animate-fade-in-up stagger-3">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-warn">
+                ⚠ Calibração indisponível
+              </div>
+              <p className="text-sm text-muted mt-2 leading-relaxed">{result.calibrationUnavailableReason}</p>
+            </div>
+          )}
+
+          {result.safetyWarnings && result.safetyWarnings.length > 0 && (
+            <div className="card p-5 border-warn/40 animate-fade-in-up stagger-2">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-warn">
+                ⚠ Limites de segurança aplicados
+              </div>
+              <p className="text-xs text-muted mt-2">
+                A prescrição bruta do algoritmo foi ajustada antes de virar dieta. O motivo de cada ajuste:
+              </p>
+              <ul className="mt-3 space-y-2">
+                {result.safetyWarnings.map((w, i) => (
+                  <li key={i} className="text-sm text-muted leading-relaxed border-l-2 border-warn/50 pl-3">
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {result.tdeeCalibration && (
             <div className="card p-5 animate-fade-in-up stagger-3">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
@@ -1146,13 +1345,37 @@ export default function PrevisaoIaPage() {
               </div>
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.tdeeCalibration.note}</p>
               {result.tdeeCalibration.confidence !== "nenhuma" && (
-                <span
-                  className={`badge mt-2 inline-block ${
-                    result.tdeeCalibration.confidence === "alta" ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"
-                  }`}
-                >
-                  confiança {result.tdeeCalibration.confidence}
-                </span>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <span
+                    className={`badge inline-block ${
+                      result.tdeeCalibration.confidence === "alta" ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"
+                    }`}
+                  >
+                    confiança {result.tdeeCalibration.confidence}
+                  </span>
+                  {/* o número em si nunca era mostrado — só a frase e o selo */}
+                  <span className="badge inline-block bg-border/60 tabular-nums">
+                    fator {result.tdeeCalibration.factor.toFixed(3)}
+                  </span>
+                  <span className="badge inline-block bg-border/60 tabular-nums">
+                    {result.tdeeCalibration.cleanCyclesUsed}/{result.tdeeCalibration.totalCyclesSeen} ciclos limpos
+                  </span>
+                </div>
+              )}
+              {result.calibrationApplied && (
+                <p className="text-xs text-accent mt-3 border-t border-border pt-3">{result.calibrationApplied}</p>
+              )}
+              {result.cycleCleanForCalibration === false && result.cycleDirtyReasons && result.cycleDirtyReasons.length > 0 && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="text-xs text-muted">Este ciclo NÃO vai contar pra calibração:</p>
+                  <ul className="mt-1 space-y-1">
+                    {result.cycleDirtyReasons.map((r, i) => (
+                      <li key={i} className="text-xs text-muted leading-relaxed">
+                        • {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
               {result.bfConsistency && !result.bfConsistency.consistent && (
                 <p className="text-xs text-warn mt-3 border-t border-border pt-3">⚠ {result.bfConsistency.note}</p>
@@ -1296,10 +1519,9 @@ export default function PrevisaoIaPage() {
             .
           </p>
         </section>
-      )}
-    </div>
+      
   );
-}
+});
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

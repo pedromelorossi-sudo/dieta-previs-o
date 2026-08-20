@@ -14,6 +14,7 @@ import { extractRules, sortByDate } from "@/lib/dietEngine";
 import { fmt, fmtDate } from "@/lib/format";
 import { Sparkline } from "@/components/Sparkline";
 import { IconDrumstick, IconDroplet, IconFlame, IconClipboard } from "@/components/icons";
+import Link from "next/link";
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ userId: string }>();
@@ -92,9 +93,9 @@ export default function AdminUserDetailPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10 space-y-10">
       <div>
-        <a href="/admin" className="text-sm text-accent hover:underline">
+        <Link href="/admin" className="text-sm text-accent hover:underline">
           ← Todos os usuários
-        </a>
+        </Link>
         <h1 className="text-3xl font-semibold tracking-tight gradient-text mt-2">{name ?? "…"}</h1>
         <p className="text-sm text-muted mt-1">
           Histórico e fotos são somente leitura. Dietas e comentários você pode editar como admin.

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import Link from "next/link";
 
 export function UserMenu() {
   const router = useRouter();
@@ -39,46 +40,46 @@ export function UserMenu() {
           <div className="absolute right-0 top-full mt-2 w-52 card p-2 z-20">
             <div className="px-2 py-1.5 text-xs text-muted truncate">{user.email}</div>
             <div className="border-t border-border mt-1 pt-1 space-y-0.5">
-              <a
+              <Link
                 href="/fotos"
                 className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
                 Fotos de progresso
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/analise"
                 className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
                 Análise do Claude
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/perfil/questionario"
                 className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
                 Questionário de hábitos
-              </a>
+              </Link>
               <div className="border-t border-border mt-1 pt-1">
                 <span className="block px-2 py-1 text-[10px] uppercase tracking-wide text-muted">Modo manual</span>
-                <a
+                <Link
                   href="/previsao"
                   className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
                 >
                   Nova previsão (sem foto)
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/ciclos/novo"
                   className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
                 >
                   Registrar ciclo manualmente
-                </a>
+                </Link>
               </div>
               {profile?.isAdmin && (
-                <a
+                <Link
                   href="/admin"
                   className="block rounded-md px-2 py-1.5 text-sm text-accent hover:bg-surface-raised transition-colors"
                 >
                   Painel de administrador
-                </a>
+                </Link>
               )}
               <button
                 onClick={handleSignOut}

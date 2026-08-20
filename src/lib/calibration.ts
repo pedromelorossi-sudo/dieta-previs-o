@@ -113,10 +113,51 @@ export function assessTrainingCleanliness(input: TrainingCleanlinessInput): Clea
 export function checkBfConsistency(
   gainComposition: GainComposition,
   weightDeltaKg: number,
-  bfDeltaPercentPoints: number
+  bfDeltaPercentPoints: number,
+  /** peso do ciclo anterior — permite fechar o balanço de massa (gordura vs. magra) em vez de só
+   * comparar sinais. Opcional pra não quebrar quem chama sem ele. */
+  previousWeightKg?: number,
+  previousBfPercent?: number
 ): { consistent: boolean; note: string } {
   const TOLERANCE = 1.0; // pontos percentuais — ruído normal de leitura/água
 
+  // --- Balanço de massa, quando dá pra fechar ---
+  // A checagem por sinais sozinha deixava passar combinações fisicamente estranhas: um ciclo em déficit
+  // podia implicar -3,6kg de gordura E +1,0kg de massa magra ao mesmo tempo e ser marcado "consistente",
+  // porque peso caiu e %BF caiu — os sinais batiam. Decompor a variação em gordura e magra pega isso.
+  if (previousWeightKg != null && previousBfPercent != null && previousWeightKg > 0) {
+    const currentWeight = previousWeightKg + weightDeltaKg;
+    const currentBf = previousBfPercent + bfDeltaPercentPoints;
+    if (currentWeight > 0 && currentBf > 0 && currentBf < 100) {
+      const fatBefore = previousWeightKg * (previousBfPercent / 100);
+      const fatAfter = currentWeight * (currentBf / 100);
+      const leanBefore = previousWeightKg - fatBefore;
+      const leanAfter = currentWeight - fatAfter;
+      const fatDelta = fatAfter - fatBefore;
+      const leanDelta = leanAfter - leanBefore;
+
+      // Teto de ganho de massa magra em ~1 mês pra natural treinado. Iraki et al. 2019 (Sports, DOI
+      // 10.3390/sports7070154) recomenda 0,25-0,5%/semana de PESO TOTAL em bulking justamente porque
+      // acima disso o excedente vira gordura; 1,0kg/mês de magra já é generoso como teto de plausibilidade.
+      const MAX_LEAN_GAIN_KG = 1.0;
+      if (leanDelta > MAX_LEAN_GAIN_KG) {
+        return {
+          consistent: false,
+          note: `A leitura implica ganho de ${leanDelta.toFixed(1)}kg de massa magra neste ciclo, acima do que um natural treinado ganha num mês (~1kg no melhor caso). Provavelmente o %BF deste ciclo ou do anterior está subestimado — vale conferir as fotos.`,
+        };
+      }
+      // perder gordura e ganhar magra ao mesmo tempo é possível (recomposição), mas não em quantidade
+      // grande simultaneamente
+      if (fatDelta < -1.5 && leanDelta > 0.7) {
+        return {
+          consistent: false,
+          note: `A leitura implica perder ${Math.abs(fatDelta).toFixed(1)}kg de gordura e ganhar ${leanDelta.toFixed(1)}kg de massa magra no mesmo ciclo. Recomposição existe, mas não nessa magnitude simultânea — um dos dois números de %BF provavelmente está errado.`,
+        };
+      }
+    }
+  }
+
+  // --- Coerência entre a composição decidida e o sinal do %BF ---
   if (Math.abs(weightDeltaKg) < 0.3) {
     if (Math.abs(bfDeltaPercentPoints) > TOLERANCE) {
       return {
@@ -140,13 +181,30 @@ export function checkBfConsistency(
         note: "Ganho classificado como quase todo gordura, mas %BF caiu — inconsistente com o peso subindo.",
       };
     }
-  } else {
-    if (bfDeltaPercentPoints > TOLERANCE) {
-      return {
-        consistent: false,
-        note: `Peso caiu mas %BF subiu ${bfDeltaPercentPoints.toFixed(1)} pontos — só faria sentido com perda desproporcional de massa magra.`,
-      };
-    }
+    return { consistent: true, note: "Variação de %BF consistente com o peso e a composição do ganho decididos nesse ciclo." };
+  }
+
+  // --- Peso caindo: o ramo que antes ignorava gainComposition por completo ---
+  if (bfDeltaPercentPoints > TOLERANCE) {
+    return {
+      consistent: false,
+      note: `Peso caiu mas %BF subiu ${bfDeltaPercentPoints.toFixed(1)} pontos — só faria sentido com perda desproporcional de massa magra.`,
+    };
+  }
+  // "gordura" numa perda significa perder quase só gordura, o que EXIGE o %BF caindo. "musculo" numa
+  // perda significa perder quase só massa magra, o que exige o %BF SUBINDO — e o caso acima já barrou
+  // %BF subindo. As duas checagens abaixo fechavam o ramo que antes passava tudo.
+  if (gainComposition === "gordura" && bfDeltaPercentPoints > -0.2) {
+    return {
+      consistent: false,
+      note: `Perda classificada como quase toda gordura, mas o %BF ficou parado (${bfDeltaPercentPoints.toFixed(1)} pontos) — perder ${Math.abs(weightDeltaKg).toFixed(1)}kg só de gordura teria derrubado o percentual.`,
+    };
+  }
+  if (gainComposition === "musculo" && bfDeltaPercentPoints < -TOLERANCE) {
+    return {
+      consistent: false,
+      note: `Perda classificada como quase toda massa magra, mas o %BF caiu ${Math.abs(bfDeltaPercentPoints).toFixed(1)} pontos — perder magra faria o percentual de gordura subir, não cair.`,
+    };
   }
 
   return { consistent: true, note: "Variação de %BF consistente com o peso e a composição do ganho decididos nesse ciclo." };

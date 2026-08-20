@@ -87,9 +87,9 @@ create table if not exists public.cycles (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   date date not null,
-  weight_kg numeric not null,
-  body_fat_percent numeric,
-  kcal numeric not null,
+  weight_kg numeric not null check (weight_kg > 0 and weight_kg < 500),
+  body_fat_percent numeric check (body_fat_percent is null or (body_fat_percent > 0 and body_fat_percent < 70)),
+  kcal numeric not null check (kcal > 0),
   protein_g numeric not null,
   fat_g numeric not null,
   carb_g numeric not null,
@@ -403,7 +403,9 @@ drop policy if exists "prediction_audit: delete own" on public.prediction_audit;
 create policy "prediction_audit: delete own" on public.prediction_audit
   for delete using (auth.uid() = user_id);
 
-create index if not exists prediction_audit_user_date_idx on public.prediction_audit (user_id, date);
+-- Um ciclo auditado por dia por usuário. Sem isso, uma tentativa repetida (retry de rede, duplo clique)
+-- grava duas linhas do mesmo ciclo e DOBRA o peso dele na média ponderada da calibração de TDEE.
+create unique index if not exists prediction_audit_user_date_uniq on public.prediction_audit (user_id, date);
 
 -- força o PostgREST a recarregar o cache do schema com as tabelas/colunas novas
 notify pgrst, 'reload schema';
@@ -412,3 +414,28 @@ notify pgrst, 'reload schema';
 -- Depois de rodar o script inteiro, rode esta linha separadamente (troque o email):
 -- update public.profiles set is_admin = true
 --   where id = (select id from auth.users where email = 'seu-email@aqui.com');
+
+-- ---------------------------------------------------------------------------
+-- Migração incremental (rodar no SQL Editor sobre um banco que já existe)
+-- ---------------------------------------------------------------------------
+-- As restrições acima só valem para bancos criados do zero, porque as tabelas usam
+-- "create table if not exists". Para aplicar num banco existente:
+
+alter table public.cycles drop constraint if exists cycles_weight_kg_check;
+alter table public.cycles add constraint cycles_weight_kg_check check (weight_kg > 0 and weight_kg < 500);
+
+alter table public.cycles drop constraint if exists cycles_body_fat_percent_check;
+alter table public.cycles add constraint cycles_body_fat_percent_check
+  check (body_fat_percent is null or (body_fat_percent > 0 and body_fat_percent < 70));
+
+alter table public.cycles drop constraint if exists cycles_kcal_check;
+alter table public.cycles add constraint cycles_kcal_check check (kcal > 0);
+
+-- Deduplica antes de criar o índice único (mantém a linha mais recente de cada dia)
+delete from public.prediction_audit a
+  using public.prediction_audit b
+  where a.user_id = b.user_id and a.date = b.date and a.created_at < b.created_at;
+
+create unique index if not exists prediction_audit_user_date_uniq on public.prediction_audit (user_id, date);
+
+notify pgrst, 'reload schema';

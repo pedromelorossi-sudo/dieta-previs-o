@@ -92,10 +92,14 @@ export async function generateDietMeals(client: Anthropic, params: GenerateDietP
     .map((f) => `- ${f.id} | ${f.name} | ${f.category} | por 100g: ${f.kcal100}kcal, P${f.protein100}g, G${f.fat100}g, C${f.carb100}g`)
     .join("\n");
 
-  const baseContextText = `Catálogo de alimentos permitidos (use SOMENTE estes ids em foodId):
-${catalogText}
+  // O catálogo é a parte pesada e estável do prompt (~5k tokens) e era reenviado inteiro em cada uma
+  // das até 3 tentativas de montagem. Separado num bloco próprio com breakpoint de cache, ele é escrito
+  // uma vez e lido a ~10% do custo nas tentativas seguintes — e também entre requisições do mesmo
+  // usuário, já que o catálogo só muda quando as restrições/preferências mudam.
+  const catalogBlockText = `Catálogo de alimentos permitidos (use SOMENTE estes ids em foodId):
+${catalogText}`;
 
-Metas do dia (prescritas pelo algoritmo, não são sugestões): ${targetKcal.toFixed(0)}kcal, proteína ${targetProteinG.toFixed(0)}g, gordura ${targetFatG.toFixed(0)}g, carboidrato ${targetCarbG.toFixed(0)}g.
+  const baseContextText = `Metas do dia (prescritas pelo algoritmo, não são sugestões): ${targetKcal.toFixed(0)}kcal, proteína ${targetProteinG.toFixed(0)}g, gordura ${targetFatG.toFixed(0)}g, carboidrato ${targetCarbG.toFixed(0)}g.
 Número de refeições: ${mealsCount}.
 Alimentos que não podem faltar (inclua todos, em pelo menos uma refeição cada): ${validMustHave.length ? validMustHave.map((id) => getFood(id)?.name ?? id).join(", ") : "nenhum especificado"}.
 Preferência de tempo de preparo: ${cookingTime}.
@@ -135,7 +139,17 @@ Observações do usuário: ${notes || "nenhuma"}.`;
     },
   };
 
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: baseContextText }];
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content: [
+        // breakpoint DEPOIS do catálogo: tudo que vem antes (tools + system + catálogo) entra no cache;
+        // as metas do dia, que mudam a cada ciclo, ficam depois e não invalidam o prefixo
+        { type: "text", text: catalogBlockText, cache_control: { type: "ephemeral" } },
+        { type: "text", text: baseContextText },
+      ],
+    },
+  ];
 
   let bestMeals: DietMeal[] | null = null;
   let bestTotals: MacroTotals | null = null;
@@ -146,7 +160,7 @@ Observações do usuário: ${notes || "nenhuma"}.`;
       model: "claude-opus-5",
       max_tokens: 2000,
       output_config: { effort: "medium" },
-      system: SYSTEM_PROMPT,
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       tools: [toolDef],
       tool_choice: { type: "tool", name: TOOL_NAME },
       messages,

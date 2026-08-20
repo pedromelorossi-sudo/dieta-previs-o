@@ -22,7 +22,7 @@ export default function PrevisaoPage() {
   const [composition, setComposition] = useState<GainComposition>("misto");
   const [stabilityMode, setStabilityMode] = useState(false);
   const [applyProteinStep, setApplyProteinStep] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [savedResult, setSavedResult] = useState<typeof result>(null);
 
   useEffect(() => {
     if (ready && user) loadCycles().then((c) => setCycles(sortByDate(c)));
@@ -46,9 +46,10 @@ export default function PrevisaoPage() {
     });
   }, [cycles, weight, date, weeks, composition, stabilityMode, applyProteinStep]);
 
-  useEffect(() => {
-    setSaved(false);
-  }, [result]);
+  // Antes isto era um efeito que chamava setSaved(false) a cada mudança de `result` — um setState
+  // síncrono dentro de efeito, que o React 19 sinaliza porque dispara um render em cascata. "Já salvei
+  // ESTE resultado?" é estado derivado: basta guardar qual resultado foi salvo e comparar.
+  const saved = savedResult !== null && savedResult === result;
 
   async function handleSavePrediction() {
     if (!result || !weeks || !user) return;
@@ -63,7 +64,7 @@ export default function PrevisaoPage() {
       carbG: result.carbRange,
       weightKg: result.projectedWeightRange,
     });
-    setSaved(true);
+    setSavedResult(result);
   }
 
   async function handleGoToDietBuilder() {

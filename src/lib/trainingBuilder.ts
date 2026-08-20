@@ -7,6 +7,10 @@ export interface TrainingBlock {
   sets: number;
   repRange: string;
   loadKg?: number | null;
+  /** repetições em reserva alvo — quantas repetições sobrariam no tanque ao encerrar a série. O app
+   * PERGUNTA se a pessoa chegou perto da falha (é critério de "ciclo limpo" da calibração) mas nunca
+   * prescrevia o alvo; sem isso a pergunta cobra algo que não foi pedido. */
+  rirTarget?: number | null;
 }
 
 export interface TrainingItem {

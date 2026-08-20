@@ -2,12 +2,22 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { predictNextCycle, E_SCENARIOS, daysBetween } from "@/lib/dietEngine";
-import { estimateBodyComposition, classifyPathFromBf, scoreRecoverySignals, PATH_LABEL } from "@/lib/bodyComposition";
+import {
+  estimateBodyComposition,
+  classifyPathFromBf,
+  scoreRecoverySignals,
+  macroTargetsForStrategy,
+  PATH_LABEL,
+  DietPath,
+} from "@/lib/bodyComposition";
+import { applySafetyLimits } from "@/lib/safety";
 import { generateDietMeals } from "@/lib/dietGenerator";
-import { planMonths } from "@/lib/periodization";
+import { planejarFases } from "@/lib/planoDeFases";
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
 import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, VolumeStatus } from "@/lib/trainingVolume";
+import { TrainingLog, LoggedSetEntry } from "@/lib/trainingBuilder";
 import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence } from "@/lib/trainingSplitBuilder";
+import { suggestLoadProgression } from "@/lib/trainingPeriodization";
 import { assessDietCleanliness, assessTrainingCleanliness, checkBfConsistency, computeTdeeCalibration, CalibrationAuditRow } from "@/lib/calibration";
 import { prescribeCardio } from "@/lib/cardioPrescription";
 import { Cycle, GainComposition } from "@/lib/types";
@@ -175,7 +185,17 @@ const VISUAL_MUSCLE_PROTOCOL = `PROTOCOLO DE LEITURA VISUAL POR GRUPO MUSCULAR (
 
 5) CONFIANÇA: "alta" só quando o grupo aparece claramente em pelo menos um ângulo, sem sobra de roupa/sombra/pose cobrindo; "media" quando dá pra estimar mas com ressalvas (ângulo parcial, iluminação ruim); "baixa" quando é mais palpite que leitura — nesses casos ainda registre developmentNote explicando a limitação, não pule o campo.`;
 
-const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, Math.min(min, max)), Math.max(min, max));
+// O `clamp` genérico que existia aqui foi removido junto com seus dois usos: `Math.max(NaN, 3)` é NaN,
+// então ele deixava NaN passar inteiro, e uma leitura de %BF inválida virava `classifyPathFromBf(NaN)`
+// -> "normocalórico" com superávit 0 — uma prescrição de aparência normal a partir de lixo, com HTTP 200.
+
+/** O %BF é o único número que a IA de visão decide e que atravessa TODO o resto do cálculo
+ * (estratégia, macros, projeção de 6 meses). Se ele não vier como número finito, a requisição falha
+ * explicitamente em vez de produzir uma prescrição plausível a partir de nada. */
+function assertFiniteBf(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? Math.min(60, Math.max(3, n)) : null;
+}
 
 const GAIN_COMPOSITION_LABEL: Record<GainComposition, string> = Object.fromEntries(
   E_SCENARIOS.map((s) => [s.key, s.label])
@@ -345,9 +365,16 @@ export async function POST(request: Request) {
         model: "claude-opus-5",
         max_tokens: 900,
         output_config: { effort: "medium" },
-        system: `Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.
+        // prompt totalmente estático (o protocolo é uma constante) — cacheado entre requisições
+        system: [
+          {
+            type: "text",
+            text: `Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.
 
 ${VISUAL_BF_PROTOCOL}`,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         tools: [
           {
             name: BF_TOOL_NAME,
@@ -393,10 +420,18 @@ ${VISUAL_BF_PROTOCOL}`,
     }
     const bfRaw = bfBlock.input as { bfPercentVisual: number; bfConfidence: "baixa" | "media" | "alta"; bfReasoning: string; evolutionNote: string };
 
+    const bfPercentFirstCycle = assertFiniteBf(bfRaw.bfPercentVisual);
+    if (bfPercentFirstCycle == null) {
+      return NextResponse.json(
+        { error: "A leitura de %BF voltou inválida do modelo. Tente de novo — se persistir, use fotos mais nítidas ou outro ângulo." },
+        { status: 422 }
+      );
+    }
+
     const comp = estimateBodyComposition({
       weightKg: currentWeightKg,
       heightCm,
-      bodyFatPercent: clamp(bfRaw.bfPercentVisual, 3, 60),
+      bodyFatPercent: bfPercentFirstCycle,
       age,
       sex,
       activityLevel,
@@ -429,16 +464,55 @@ ${VISUAL_BF_PROTOCOL}`,
     }
     // peso 30% fórmula / 70% prática real — a fórmula é só uma média populacional (erro documentado
     // de ±10-15%), a prática relatada pelo próprio usuário é dado direto, então pesa mais
+    const FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
+    const firstCycleDaysPerWeek = exerciseFreq ? FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ[exerciseFreq] : 0;
+
+    // O primeiro ciclo não devolvia programa de treino NENHUM — a pessoa recebia dieta, cardio e
+    // projeção de 6 meses, e zero séries. Não havia razão pra isso: a divisão não depende de histórico,
+    // só dos dias/semana disponíveis (leitura visual por grupo e adesão apenas REFINAM a meta).
+    const firstCycleMuscleTargets =
+      firstCycleDaysPerWeek > 0 ? computeMuscleTargets([], prefs?.priority_muscles ?? [], 0, firstCycleDaysPerWeek, 0) : null;
+    const firstCycleProgram = firstCycleMuscleTargets ? buildSplit(firstCycleDaysPerWeek, firstCycleMuscleTargets) : null;
+    const firstCyclePeriodization = firstCycleMuscleTargets
+      ? planTrainingPeriodization(firstCycleMuscleTargets, firstCycleDaysPerWeek, 5)
+      : null;
+
+    const cardioPrescription = prescribeCardio({
+      strategy: comp.path,
+      strengthDaysPerWeek: firstCycleDaysPerWeek,
+      weightKg: currentWeightKg,
+    });
+
+    // O gasto do cardio prescrito NÃO é somado ao TDEE, de propósito. A tentação é somar — o app manda
+    // ~150min/semana de aeróbico e não contabilizava um minuto disso. Mas somar significa prescrever
+    // comida contra um esforço que ainda não aconteceu, exatamente o erro que a própria calibration.ts
+    // cita Lichtman et al. 1992 para evitar (o autorrelato superestima exercício em 51±75%). Se a pessoa
+    // não fizer o cardio, o app teria inflado o TDEE e apagado o déficit sem ninguém perceber.
+    //
+    // O gasto estimado vai na resposta (`cardioKcalPerDay`) pra ficar visível, e a partir do 2º ciclo o
+    // TDEE empírico absorve sozinho o cardio que foi REALMENTE feito — medido pela resposta do peso, não
+    // presumido pela prescrição.
     const blendedTdee = empiricalTdee != null ? comp.tdee * 0.3 + empiricalTdee * 0.7 : comp.tdee;
-    const blendedTargetKcal = blendedTdee * (1 + comp.surplusPercent);
-    const blendedTargetCarbG = Math.max(0, (blendedTargetKcal - comp.targetProteinG * 4 - comp.targetFatG * 9) / 4);
+
+    const firstCycleSafety = applySafetyLimits({
+      proposedKcal: blendedTdee * (1 + comp.surplusPercent),
+      proposedProteinG: comp.targetProteinG,
+      proposedFatG: comp.targetFatG,
+      weightKg: currentWeightKg,
+      sex,
+      strategy: comp.path,
+      tdee: blendedTdee,
+      bmr: comp.bmr,
+    });
+    const blendedTargetKcal = firstCycleSafety.kcal;
+    const blendedTargetCarbG = firstCycleSafety.carbG;
 
     let meals, dietWarnings;
     try {
       ({ meals, warnings: dietWarnings } = await generateDietMeals(client, {
         targetKcal: blendedTargetKcal,
-        targetProteinG: comp.targetProteinG,
-        targetFatG: comp.targetFatG,
+        targetProteinG: firstCycleSafety.proteinG,
+        targetFatG: firstCycleSafety.fatG,
         targetCarbG: blendedTargetCarbG,
         ...dietParamsBase,
       }));
@@ -468,27 +542,29 @@ ${VISUAL_BF_PROTOCOL}`,
         ? `TDEE calculado com peso 30% fórmula (${comp.tdee.toFixed(0)}kcal) / 70% prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
         : `TDEE calculado só pela fórmula (${comp.tdee.toFixed(0)}kcal) — informe quanto você vem comendo e como o peso responde pra deixar essa conta mais realista.`;
 
-    const monthlyPlan = planMonths({
+    // O planejamento de fases roda JÁ no primeiro ciclo — é o principal produto da primeira análise:
+    // a pessoa manda as fotos e recebe o roteiro de onde vai chegar e o que dispara cada mudança, não
+    // só a dieta do mês. 24 meses porque um ciclo completo (ganho + retorno) leva ~8 meses, então esse
+    // horizonte mostra o padrão se repetindo em vez de um pedaço solto dele.
+    const planoDeFases = planejarFases({
       currentWeightKg,
-      currentBfPercent: clamp(bfRaw.bfPercentVisual, 3, 60),
+      currentBfPercent: bfPercentFirstCycle,
+      heightCm,
       sex,
       tdee: blendedTdee,
-      monthsAhead: 6,
+      monthsAhead: 24,
     });
 
-    const FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
-    const cardioPrescription = prescribeCardio({
-      strategy: comp.path,
-      strengthDaysPerWeek: exerciseFreq ? FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ[exerciseFreq] : 0,
-    });
+
 
     return NextResponse.json({
       isFirstCycle: true,
       oneMonthProjection,
-      monthlyPlan,
+      monthlyPlan: planoDeFases.meses,
+      planoDeFases,
       cardioPrescription,
       activityLevelDisplay: comp.activityLevelDisplay,
-      bfPercentVisual: clamp(bfRaw.bfPercentVisual, 3, 60),
+      bfPercentVisual: bfPercentFirstCycle,
       bfConfidence: bfRaw.bfConfidence,
       bfReasoning: bfRaw.bfReasoning,
       evolutionNote: bfRaw.evolutionNote || null,
@@ -499,18 +575,23 @@ ${VISUAL_BF_PROTOCOL}`,
       gainCompositionLabel: null,
       gainCompositionReasoning: null,
       recommendedKcal: blendedTargetKcal,
-      recommendedProteinG: comp.targetProteinG,
-      recommendedFatG: comp.targetFatG,
+      recommendedProteinG: firstCycleSafety.proteinG,
+      recommendedFatG: firstCycleSafety.fatG,
       recommendedCarbG: blendedTargetCarbG,
       note: `${comp.pathReason} ${tdeeNote}`,
       ranges: {
         kcal: point(blendedTargetKcal),
-        protein: point(comp.targetProteinG),
-        fat: point(comp.targetFatG),
+        protein: point(firstCycleSafety.proteinG),
+        fat: point(firstCycleSafety.fatG),
         carb: point(blendedTargetCarbG),
         weight: point(currentWeightKg),
       },
       rateKgWeek: 0,
+      safetyWarnings: firstCycleSafety.warnings,
+      cardioKcalPerDay: cardioPrescription.estimatedKcalPerDay,
+      muscleTargets: firstCycleMuscleTargets ?? [],
+      suggestedTrainingProgram: firstCycleProgram,
+      trainingPeriodizationPlan: firstCyclePeriodization,
       meals,
       dietWarnings,
     });
@@ -522,7 +603,14 @@ ${VISUAL_BF_PROTOCOL}`,
   // se o usuário não seguiu de perto a prescrição do último ciclo, a ingestão real relatada substitui
   // a prescrita pro cálculo de TDEE — senão o retrocálculo assume uma adesão que pode não ter existido
   const lastCycle = history[history.length - 1];
-  if (lastCycle && lastCycleAdherence && lastCycleAdherence !== "seguiu" && lastCycleAdherence !== "nao_acompanhou" && lastCycleActualKcal) {
+  // A ingestão real relatada vale SEMPRE que for informada, inclusive quando a resposta é "segui de
+  // perto". Antes o app só a usava quando o usuário admitia não ter seguido — ou seja, confiava no
+  // rótulo "segui" para presumir adesão 1:1 e retrocalcular o TDEE em cima da prescrição. Isso é
+  // exatamente o autorrelato que a própria calibration.ts cita Lichtman et al. 1992 para desqualificar
+  // (a ingestão relatada é subestimada em 47±16%): quem come 10% a mais e responde "segui" produzia um
+  // TDEE ~9% menor, repassado direto pra prescrição seguinte. Um número informado vale mais que um
+  // rótulo, sempre.
+  if (lastCycle && lastCycleActualKcal && lastCycleActualKcal > 0 && lastCycleAdherence !== "nao_acompanhou") {
     lastCycle.actualKcal = lastCycleActualKcal;
     await supabase.from("cycles").update({ actual_kcal: lastCycleActualKcal }).eq("id", lastCycle.id);
   }
@@ -563,7 +651,9 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       model: "claude-opus-5",
       max_tokens: 2500,
       output_config: { effort: "medium" },
-      system: SYSTEM_PROMPT,
+      // SYSTEM_PROMPT só interpola constantes (VISUAL_BF_PROTOCOL, VISUAL_MUSCLE_PROTOCOL), então é
+      // byte a byte idêntico entre requisições — prefixo estável, cacheável
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       tools: [
         {
           name: VISION_TOOL_NAME,
@@ -658,16 +748,28 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     note: string;
   }[] = [];
 
+  // Logs de treino das últimas ~8 semanas — usados em DOIS lugares: o cruzamento da leitura visual com
+  // o volume real (abaixo) e a sugestão de progressão de carga (mais adiante). Antes essa consulta
+  // ficava dentro do bloco condicional do cruzamento, então sem leitura visual por grupo o app nem
+  // olhava o histórico de treino.
+  const trainingLogsSince = new Date();
+  trainingLogsSince.setDate(trainingLogsSince.getDate() - 56);
+  const { data: trainingLogRows } = await supabase
+    .from("training_logs")
+    .select("id,date,session_label,sets_logged,injury_note")
+    .eq("user_id", user.id)
+    .gte("date", trainingLogsSince.toISOString().slice(0, 10));
+
+  const trainingLogs: TrainingLog[] = (trainingLogRows ?? []).map((r) => ({
+    id: r.id as string,
+    date: r.date as string,
+    sessionLabel: (r.session_label as string) ?? "",
+    setsLogged: (r.sets_logged as LoggedSetEntry[]) ?? [],
+    injuryNote: (r.injury_note as string) ?? null,
+  }));
+
   if (vision.muscleGroupAssessment && vision.muscleGroupAssessment.length > 0) {
     try {
-      const since = new Date();
-      since.setDate(since.getDate() - 56); // ~8 semanas
-      const { data: trainingLogRows } = await supabase
-        .from("training_logs")
-        .select("date,sets_logged,injury_note")
-        .eq("user_id", user.id)
-        .gte("date", since.toISOString().slice(0, 10));
-
       if (trainingLogRows && trainingLogRows.length > 0) {
         const allSets = trainingLogRows.flatMap((r) => (r.sets_logged as LoggedSet[]) ?? []);
         const volume = weeklyVolumeByMuscle(allSets, (id) => exerciseById(id)?.primaryMuscle);
@@ -753,21 +855,63 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // perguntado; o usuário só informa quantas completou de verdade
   const weeksSinceLastCycle = lastCycle ? daysBetween(lastCycle.date, date) / 7 : 0;
   const plannedSessions = Math.round(daysPerWeek * weeksSinceLastCycle);
+  const gainCompositionEarly: GainComposition = ["musculo", "misto", "gordura"].includes(vision.gainComposition)
+    ? vision.gainComposition
+    : "misto";
+
+  const baseRecoveryScore = scoreRecoverySignals({
+    strengthTrend: lastCycleStrengthTrend,
+    missedSessionsFatigue: lastCycleMissedSessionsFatigue,
+    sleepHoursAvgLastCycle: lastCycleSleepHoursAvg,
+    sleepDisturbanceLastCycle: lastCycleSleepDisturbance,
+    daytimeFatigueLastCycle: lastCycleDaytimeFatigue,
+  });
+
+  // Perder peso perdendo MASSA MAGRA é um sinal de alarme, e antes ele fazia o oposto do esperado: a
+  // composição "músculo" num ciclo de perda derrubava o TDEE empírico (E=1800 em vez de 7700, ver
+  // E_SCENARIOS), e um TDEE menor gera uma prescrição MENOR — o app cortava mais comida justamente de
+  // quem estava perdendo músculo. O retrocálculo em si está fisiologicamente certo (1kg de tecido magro
+  // custa ~1800kcal); o que faltava era a RESPOSTA. Agora esse cenário entra como sinal de recuperação
+  // ruim, do mesmo jeito que carga caindo na barra, e suaviza o déficit em vez de aprofundá-lo
+  // (ver scoreRecoverySignals e Garthe et al. 2011: no ritmo agressivo a massa magra estagnou).
+  const losingLeanMass = lastCycle != null && currentWeightKg - lastCycle.weightKg < -0.3 && gainCompositionEarly === "musculo";
+  const recoveryScore = baseRecoveryScore + (losingLeanMass ? 2 : 0);
+
   const trainingAdherenceScore = scoreTrainingAdherence({
     completedSessions: lastCycleCompletedSessions,
     plannedSessions,
     keptExercisesAndLoads: lastCycleKeptExercisesAndLoads,
   });
   if (daysPerWeek > 0) {
-    muscleTargetsOut = computeMuscleTargets(vision.muscleGroupAssessment ?? [], prefs?.priority_muscles ?? [], trainingAdherenceScore);
-    suggestedTrainingProgram = buildSplit(daysPerWeek, muscleTargetsOut);
-    trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, daysPerWeek, 10);
+    // carga sugerida a partir do que foi realmente logado — antes todo bloco saía com loadKg: null e a
+    // única progressão do app era de volume
+    const loadByExercise = new Map<string, number>();
+    for (const [exerciseId, suggestion] of suggestLoadProgression(trainingLogs)) {
+      loadByExercise.set(exerciseId, suggestion.suggestedLoadKg);
+    }
+
+    muscleTargetsOut = computeMuscleTargets(
+      vision.muscleGroupAssessment ?? [],
+      prefs?.priority_muscles ?? [],
+      trainingAdherenceScore,
+      daysPerWeek,
+      recoveryScore
+    );
+    suggestedTrainingProgram = buildSplit(daysPerWeek, muscleTargetsOut, loadByExercise);
+    // 5 semanas = um mesociclo completo. Antes eram 10, e as semanas 6-10 saíam byte a byte idênticas
+    // às 1-5, inflando a resposta em ~20KB por requisição sem nenhuma informação nova.
+    trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, daysPerWeek, 5, loadByExercise);
   }
 
-  const bfPercentVisual = clamp(vision.bfPercentVisual, 3, 60);
-  const gainComposition: GainComposition = ["musculo", "misto", "gordura"].includes(vision.gainComposition)
-    ? vision.gainComposition
-    : "misto";
+  const bfPercentVisualRaw = assertFiniteBf(vision.bfPercentVisual);
+  if (bfPercentVisualRaw == null) {
+    return NextResponse.json(
+      { error: "A leitura de %BF voltou inválida do modelo. Tente de novo — se persistir, use fotos mais nítidas ou outro ângulo." },
+      { status: 422 }
+    );
+  }
+  const bfPercentVisual = bfPercentVisualRaw;
+  const gainComposition: GainComposition = gainCompositionEarly;
 
   // daqui pra baixo é tudo determinístico — o Claude só decidiu %BF e composição do ganho acima.
   // stabilityMode e applyProteinStep não são mais escolhas manuais — o algoritmo roda no modo padrão
@@ -788,13 +932,6 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // sinais objetivos de que o déficit do ciclo anterior foi agressivo demais (carga caindo na academia,
   // treinos pulados por cansaço, sono ruim) — não é o usuário se autoavaliando, são fatos observáveis
   // (Garthe et al. 2011; Mountjoy et al. 2023 REDs; Kenttä & Hassmén 1998 — ver scoreRecoverySignals)
-  const recoveryScore = scoreRecoverySignals({
-    strengthTrend: lastCycleStrengthTrend,
-    missedSessionsFatigue: lastCycleMissedSessionsFatigue,
-    sleepHoursAvgLastCycle: lastCycleSleepHoursAvg,
-    sleepDisturbanceLastCycle: lastCycleSleepDisturbance,
-    daytimeFatigueLastCycle: lastCycleDaytimeFatigue,
-  });
 
   // Calibração contínua: fórmula vs. realidade, só aprendendo com ciclos "limpos" (adesão real, não
   // autorrelato duvidoso) — ver src/lib/calibration.ts. Nunca deixa uma divergência virar "a fórmula
@@ -814,6 +951,9 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     keptExercisesAndLoads: lastCycleKeptExercisesAndLoads,
     effortNearFailure: lastCycleEffortNearFailure,
   });
+  // Este ciclo vai (ou não) ensinar a calibração. Antes a variável era calculada e descartada; agora
+  // volta na resposta, porque saber que um ciclo "não conta" é justamente o que faz o usuário entender
+  // por que a calibração não avança.
   const cycleCleanForCalibration = dietClean && trainingClean;
 
   // TDEE "de fórmula" calculado em paralelo só pra auditoria/calibração — a prescrição real desse ciclo
@@ -847,17 +987,25 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     confidence: "nenhuma",
     cleanCyclesUsed: 0,
     totalCyclesSeen: 0,
-    note: "Auditoria de calibração ainda não disponível nessa conta.",
+    note: "Nenhum ciclo auditado ainda — a calibração começa a partir do segundo ciclo limpo.",
   };
   let bfConsistency: { consistent: boolean; note: string } | null = null;
 
-  try {
-    const { data: auditRows } = await supabase
-      .from("prediction_audit")
-      .select("date,formula_tdee,empirical_tdee,diet_clean,training_clean")
-      .eq("user_id", user.id)
-      .order("date", { ascending: true });
+  // Este bloco NÃO usa try/catch pra detectar tabela ausente: o cliente Supabase não lança exceção em
+  // erro de Postgres, devolve `{ error }`. O código antigo desestruturava só `data` e ignorava o retorno
+  // do insert, então "tabela prediction_audit não existe" era indistinguível de "tabela vazia" — o
+  // usuário lia "Nenhum ciclo limpo ainda pra calibrar" pra sempre, sem saber que a migração não rodou.
+  let calibrationUnavailableReason: string | null = null;
 
+  const { data: auditRows, error: auditSelectError } = await supabase
+    .from("prediction_audit")
+    .select("date,formula_tdee,empirical_tdee,diet_clean,training_clean")
+    .eq("user_id", user.id)
+    .order("date", { ascending: true });
+
+  if (auditSelectError) {
+    calibrationUnavailableReason = `Não foi possível ler o histórico de auditoria (${auditSelectError.message}). A calibração contínua fica desligada até isso ser resolvido — normalmente é a migração da tabela prediction_audit que ainda não rodou no Supabase.`;
+  } else {
     const calibrationInput: CalibrationAuditRow[] = (auditRows ?? []).map((r) => ({
       date: r.date,
       formulaTdee: r.formula_tdee != null ? Number(r.formula_tdee) : null,
@@ -866,30 +1014,35 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       trainingClean: r.training_clean,
     }));
     tdeeCalibration = computeTdeeCalibration(calibrationInput);
+  }
 
-    if (lastCycle?.bodyFatPercent != null) {
-      bfConsistency = checkBfConsistency(gainComposition, currentWeightKg - lastCycle.weightKg, bfPercentVisual - lastCycle.bodyFatPercent);
-    }
+  if (lastCycle?.bodyFatPercent != null) {
+    bfConsistency = checkBfConsistency(
+      gainComposition,
+      currentWeightKg - lastCycle.weightKg,
+      bfPercentVisual - lastCycle.bodyFatPercent,
+      lastCycle.weightKg,
+      lastCycle.bodyFatPercent
+    );
+  }
 
-    // grava esse ciclo na auditoria pra alimentar a calibração dos próximos — melhor esforço, nunca
-    // quebra a previsão principal se a tabela ainda não foi migrada ou o insert falhar por qualquer motivo
-    await supabase.from("prediction_audit").insert({
-      user_id: user.id,
-      date,
-      formula_tdee: shadowFormulaComp.tdee,
-      empirical_tdee: empiricalTdeeMid,
-      bf_percent_visual: bfPercentVisual,
-      bf_confidence: vision.bfConfidence,
-      gain_composition: gainComposition,
-      weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
-      diet_clean: dietClean,
-      training_clean: trainingClean,
-      bf_consistent: bfConsistency?.consistent ?? null,
-      notes: [...dietDirtyReasons, ...trainingDirtyReasons],
-    });
-  } catch {
-    // tabela de auditoria ainda não migrada, ou qualquer erro nessa etapa acessória — não quebra a
-    // previsão principal por causa disso
+  const { error: auditInsertError } = await supabase.from("prediction_audit").insert({
+    user_id: user.id,
+    date,
+    formula_tdee: shadowFormulaComp.tdee,
+    empirical_tdee: empiricalTdeeMid,
+    bf_percent_visual: bfPercentVisual,
+    bf_confidence: vision.bfConfidence,
+    gain_composition: gainComposition,
+    weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
+    diet_clean: dietClean,
+    training_clean: trainingClean,
+    bf_consistent: bfConsistency?.consistent ?? null,
+    notes: [...dietDirtyReasons, ...trainingDirtyReasons],
+  });
+
+  if (auditInsertError && !calibrationUnavailableReason) {
+    calibrationUnavailableReason = `Este ciclo não foi gravado na auditoria (${auditInsertError.message}), então não vai contar pra calibração dos próximos.`;
   }
 
   // estratégia decidida pelo %BF atual (mesmo critério do primeiro ciclo). O kcal vem do TDEE real do
@@ -897,29 +1050,71 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // decidida acima) + o superávit/déficit da estratégia — não da extrapolação pura da tendência histórica,
   // que só continuaria a direção que o histórico já vinha seguindo e não "desligaria" sozinha. O déficit
   // em si é suavizado/zerado automaticamente se recoveryScore indicar que o ciclo anterior foi pesado demais.
+  // A fase do ciclo anterior alimenta a histerese de classifyPathFromBf — sem ela, alguém parado em
+  // cima do limiar de %BF alterna de fase todo ciclo só pelo ruído da leitura de foto.
+  const previousPath: DietPath | undefined =
+    lastCycle?.bodyFatPercent != null ? classifyPathFromBf(lastCycle.bodyFatPercent, sex).path : undefined;
   const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(
     bfPercentVisual,
     sex,
-    recoveryScore
+    recoveryScore,
+    previousPath
   );
 
-  const cardioPrescription = prescribeCardio({ strategy, strengthDaysPerWeek: daysPerWeek, recoveryScore });
+  const cardioPrescription = prescribeCardio({ strategy, strengthDaysPerWeek: daysPerWeek, recoveryScore, weightKg: currentWeightKg });
 
-  const kcalStrategyRange = {
-    min: result.tdeeRange.min * (1 + strategySurplusPercent),
-    max: result.tdeeRange.max * (1 + strategySurplusPercent),
+  // O fator de calibração deixa de ser decorativo. Ele mede o quanto a FÓRMULA erra pra essa pessoa,
+  // aprendido só de ciclos limpos (ver calibration.ts). O TDEE empírico segue como fonte principal — é
+  // mais preciso quando há histórico —, mas com poucos pares utilizáveis o empírico fica ruidoso, e aí a
+  // fórmula já corrigida pelo fator pessoal é um segundo estimador com erro conhecido. Nesse caso os
+  // dois são combinados, com peso proporcional à confiança da calibração. Com histórico farto, o
+  // empírico manda sozinho, como antes.
+  const calibratedFormulaTdee = shadowFormulaComp.tdee * tdeeCalibration.factor;
+  const CALIBRATION_BLEND_WEIGHT: Record<typeof tdeeCalibration.confidence, number> = {
+    nenhuma: 0,
+    baixa: 0.15,
+    media: 0.25,
+    alta: 0.35,
   };
-  const recommendedKcal = (kcalStrategyRange.min + kcalStrategyRange.max) / 2;
-  const recommendedProteinG = (result.proteinRange.min + result.proteinRange.max) / 2;
-  const recommendedFatG = (result.fatRange.min + result.fatRange.max) / 2;
+  const sparseHistory = history.length < 4;
+  const calibrationWeight = sparseHistory ? CALIBRATION_BLEND_WEIGHT[tdeeCalibration.confidence] : 0;
+  const blendTdee = (v: number) => v * (1 - calibrationWeight) + calibratedFormulaTdee * calibrationWeight;
+  const tdeeRangeUsed = { min: blendTdee(result.tdeeRange.min), max: blendTdee(result.tdeeRange.max) };
+  const calibrationApplied =
+    calibrationWeight > 0
+      ? `Histórico ainda curto (${history.length} ciclos): o TDEE deste ciclo é ${((1 - calibrationWeight) * 100).toFixed(0)}% retrocálculo do seu histórico + ${(calibrationWeight * 100).toFixed(0)}% fórmula já corrigida pelo seu fator pessoal (${tdeeCalibration.factor.toFixed(3)}).`
+      : null;
 
-  // carboidrato é resíduo de kcal - proteína - gordura, a partir do novo kcal (não do kcalRange antigo
-  // baseado em extrapolação), senão fica inconsistente com o kcal recomendado de fato
-  const carbStrategyRange = {
-    min: Math.max(0, (kcalStrategyRange.min - result.proteinRange.max * 4 - result.fatRange.max * 9) / 4),
-    max: Math.max(0, (kcalStrategyRange.max - result.proteinRange.min * 4 - result.fatRange.min * 9) / 4),
-  };
-  const recommendedCarbG = (carbStrategyRange.min + carbStrategyRange.max) / 2;
+  // Proteína e gordura vêm da ESTRATÉGIA, não mais extrapoladas do histórico. A extrapolação criava uma
+  // catraca: a proteína era calculada sobre o peso PROJETADO e depois relida contra o peso MEDIDO de
+  // hoje, então em corte sustentado o g/kg encolhia sozinho a cada ciclo, sem ninguém ter decidido isso.
+  const { proteinPerKg, fatPerKg } = macroTargetsForStrategy(strategy);
+  const tdeeUsedMid = (tdeeRangeUsed.min + tdeeRangeUsed.max) / 2;
+
+  const safety = applySafetyLimits({
+    proposedKcal: tdeeUsedMid * (1 + strategySurplusPercent),
+    proposedProteinG: currentWeightKg * proteinPerKg,
+    proposedFatG: currentWeightKg * fatPerKg,
+    weightKg: currentWeightKg,
+    sex,
+    strategy,
+    tdee: tdeeUsedMid,
+    bmr: shadowFormulaComp.bmr,
+    previousKcal: lastCycle?.kcal ?? null,
+  });
+
+  const recommendedKcal = safety.kcal;
+  const recommendedProteinG = safety.proteinG;
+  const recommendedFatG = safety.fatG;
+  const recommendedCarbG = safety.carbG;
+
+  // As faixas viraram ponto: com os macros vindo da estratégia e o kcal passando pelos guarda-corpos,
+  // a incerteza real está no TDEE (já exposta em tdeeCalibration/rateKgWeek), não numa faixa de macro
+  // que dava a impressão de precisão que não existia.
+  const kcalStrategyRange = { min: recommendedKcal, max: recommendedKcal };
+  const carbStrategyRange = { min: recommendedCarbG, max: recommendedCarbG };
+  const proteinRangeOut = { min: recommendedProteinG, max: recommendedProteinG };
+  const fatRangeOut = { min: recommendedFatG, max: recommendedFatG };
 
   let meals, dietWarnings;
   try {
@@ -937,7 +1132,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // projeção fixa de 4 semanas a partir do kcal REALMENTE recomendado (já ajustado pela estratégia),
   // não da taxa histórica bruta — senão a projeção contradiz a estratégia decidida (ex: mostrar ganho
   // de peso com a etiqueta "cutting" só porque o histórico vinha subindo antes do ajuste)
-  const tdeeMid = (result.tdeeRange.min + result.tdeeRange.max) / 2;
+  const tdeeMid = tdeeUsedMid;
   const projectedSurplusPercent = tdeeMid > 0 ? recommendedKcal / tdeeMid - 1 : 0;
   const oneMonthE = strategy === "cutting" ? 7700 : strategy === "bulking" ? 5250 : 7700;
   const projectedRateKgWeek = (tdeeMid * projectedSurplusPercent * 7) / oneMonthE;
@@ -948,13 +1143,15 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     note: `Com o kcal recomendado (${recommendedKcal.toFixed(0)}kcal, ${PATH_LABEL[strategy]}) frente à manutenção estimada (~${tdeeMid.toFixed(0)}kcal), projeção de peso em 4 semanas: ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg.`,
   };
 
-  const monthlyPlan = planMonths({
+  const planoDeFases = planejarFases({
     currentWeightKg,
     currentBfPercent: bfPercentVisual,
+    heightCm,
     sex,
     tdee: tdeeMid,
-    monthsAhead: 6,
+    monthsAhead: 24,
     recoveryScore,
+    initialPath: strategy,
   });
 
   return NextResponse.json({
@@ -977,14 +1174,15 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     note: `${strategyReason} ${vision.gainCompositionReasoning}`,
     ranges: {
       kcal: kcalStrategyRange,
-      protein: result.proteinRange,
-      fat: result.fatRange,
+      protein: proteinRangeOut,
+      fat: fatRangeOut,
       carb: carbStrategyRange,
       weight: result.projectedWeightRange,
     },
     rateKgWeek: result.rateKgWeek,
     recoveryScore,
-    monthlyPlan,
+    monthlyPlan: planoDeFases.meses,
+    planoDeFases,
     muscleGroupAssessment: vision.muscleGroupAssessment ?? [],
     muscleCrossCheck,
     muscleTargets: muscleTargetsOut ?? [],
@@ -994,6 +1192,17 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     plannedSessions,
     cardioPrescription,
     tdeeCalibration,
+    calibrationApplied,
+    calibrationUnavailableReason,
+    cycleCleanForCalibration,
+    cycleDirtyReasons: [...dietDirtyReasons, ...trainingDirtyReasons],
+    safetyWarnings: losingLeanMass
+      ? [
+          "A leitura deste ciclo indica perda de peso às custas de massa magra, não de gordura. O déficit foi suavizado automaticamente — perder no ritmo agressivo faz a massa magra estagnar ou cair (Garthe et al. 2011). Se isso se repetir no próximo ciclo, o caminho é subir as calorias, não cortar mais.",
+          ...safety.warnings,
+        ]
+      : safety.warnings,
+    cardioKcalPerDay: cardioPrescription.estimatedKcalPerDay,
     bfConsistency,
     meals,
     dietWarnings,

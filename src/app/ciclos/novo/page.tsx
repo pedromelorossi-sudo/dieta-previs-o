@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { addCycle, loadCycles } from "@/lib/storage";
+import { addCycle } from "@/lib/storage";
 import { Cycle } from "@/lib/types";
 import { fmt, fmtDate, fmtSigned } from "@/lib/format";
 import { clearLastPrediction, loadLastPrediction, LoggedPrediction } from "@/lib/predictionsLog";
 import { IconCheck, IconClipboard } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
+import Link from "next/link";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -149,9 +150,9 @@ export default function NovoCicloPage() {
             <Comparison pending={pending} actual={savedCycle} onDismiss={handleDismissPrediction} />
           )}
 
-          <a href="/" className="inline-block text-sm text-accent hover:underline">
+          <Link href="/" className="inline-block text-sm text-accent hover:underline">
             Ver histórico atualizado →
-          </a>
+          </Link>
         </div>
       )}
     </div>

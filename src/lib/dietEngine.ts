@@ -11,14 +11,22 @@ export function sortByDate(cycles: Cycle[]): Cycle[] {
 }
 
 export function daysBetween(dateA: string, dateB: string): number {
+  return Math.abs(signedDaysBetween(dateA, dateB));
+}
+
+/** Versão COM sinal — positiva quando dateB é posterior a dateA. Onde a direção do tempo importa (taxa
+ * de variação de peso, ordenação de pares no retrocálculo de TDEE), usar `daysBetween` produzia lixo
+ * silencioso: um ciclo registrado com data anterior ao último invertia a direção da taxa e gerava uma
+ * prescrição plausível o bastante pra não disparar nenhuma validação. */
+export function signedDaysBetween(dateA: string, dateB: string): number {
   const a = new Date(dateA).getTime();
   const b = new Date(dateB).getTime();
-  return Math.abs(b - a) / (1000 * 60 * 60 * 24);
+  return (b - a) / (1000 * 60 * 60 * 24);
 }
 
 /** Passo 1 — taxa de variação de peso, kg/semana */
 export function weeklyRate(currentWeightKg: number, currentDate: string, prev: Cycle): number {
-  const days = daysBetween(prev.date, currentDate);
+  const days = signedDaysBetween(prev.date, currentDate);
   if (days <= 0) return 0;
   return (currentWeightKg - prev.weightKg) / (days / 7);
 }
@@ -66,6 +74,9 @@ export function estimateEmpiricalTdeeSeries(
       intakeKcal: lastHistoryCycle.actualKcal ?? lastHistoryCycle.kcal,
     });
   }
+  // o ponto sintético era anexado no fim sem reordenar — com uma data anterior ao último ciclo isso
+  // produzia um par com intervalo negativo, que o Math.abs de daysBetween escondia
+  points.sort((a, b) => a.date.localeCompare(b.date));
 
   let weightedMinSum = 0;
   let weightedMaxSum = 0;
@@ -75,7 +86,7 @@ export function estimateEmpiricalTdeeSeries(
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
     const curr = points[i];
-    const days = daysBetween(prev.date, curr.date);
+    const days = signedDaysBetween(prev.date, curr.date);
     if (days < 5) continue;
 
     const rate = (curr.weightKg - prev.weightKg) / (days / 7);
