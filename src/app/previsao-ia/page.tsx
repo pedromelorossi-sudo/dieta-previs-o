@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { Cycle } from "@/lib/types";
 import { loadCycles, addCycle, deleteCycle } from "@/lib/storage";
@@ -564,8 +565,8 @@ export default function PrevisaoIaPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
-      <div className="animate-fade-in-up">
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">
           {isFirstCycle ? "Começar: informações e fotos" : "Novo ciclo: fotos e previsão"}
         </h1>
         <p className="text-sm text-muted mt-2">
@@ -575,9 +576,9 @@ export default function PrevisaoIaPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="card p-6 space-y-6 animate-fade-in-up stagger-1">
+      <form onSubmit={handleSubmit} className="card p-6 space-y-6">
         <div>
-          <span className="block text-xs text-muted mb-2">1. Informações básicas</span>
+          <Etapa numero="1" titulo={"Informações básicas"} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Sexo biológico">
               <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} className="input">
@@ -682,7 +683,7 @@ export default function PrevisaoIaPage() {
         </div>
 
         <div>
-          <span className="block text-xs text-muted mb-2">2. Gasto fora do treino (NEAT)</span>
+          <Etapa numero="2" titulo={"Gasto fora do treino (NEAT)"} />
           <p className="text-xs text-muted mb-3">
             Em lean bulk e cutting a margem sobre o gasto total é estreita — o NEAT (gasto fora do treino formal)
             costuma ser o maior ponto cego, então quanto mais preciso aqui, mais confiável o resto do cálculo.
@@ -785,7 +786,7 @@ export default function PrevisaoIaPage() {
         </div>
 
         <div>
-          <span className="block text-xs text-muted mb-2">3. Outro esporte ou atividade física fora da academia</span>
+          <Etapa numero="3" titulo={"Outro esporte ou atividade física fora da academia"} />
           <Field label="Além do treino principal, você pratica algum outro esporte ou atividade física regular?">
             <select value={hasOtherSport} onChange={(e) => setHasOtherSport(e.target.value as HasOtherSport)} className="input">
               <option value="" disabled>
@@ -860,7 +861,7 @@ export default function PrevisaoIaPage() {
         </div>
 
         <div>
-          <span className="block text-xs text-muted mb-2">4. Fotos (frente obrigatória, o resto ajuda a precisão)</span>
+          <Etapa numero="4" titulo={"Fotos (frente obrigatória, o resto ajuda a precisão)"} />
           <div className="grid gap-4 sm:grid-cols-4">
             {ANGLES.map(({ key, label, required }) => (
               <div key={key}>
@@ -894,7 +895,7 @@ export default function PrevisaoIaPage() {
 
         {mostrarPerguntasDeAdesao && last && (
           <div>
-            <span className="block text-xs text-muted mb-2">5. Parâmetros da previsão</span>
+            <Etapa numero="5" titulo={"Parâmetros da previsão"} />
             <Field label="Semanas até a próxima consulta">
               <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
             </Field>
@@ -1090,7 +1091,7 @@ export default function PrevisaoIaPage() {
 
         {!isFirstCycle && last && !ultimoFoiPrescricao && (
           <div>
-            <span className="block text-xs text-muted mb-2">5. Parâmetros da previsão</span>
+            <Etapa numero="5" titulo={"Parâmetros da previsão"} />
             <Field label="Semanas até a próxima consulta">
               <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
             </Field>
@@ -1158,7 +1159,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 }) {
   return (
         <section className="space-y-6">
-          <div className="card p-5 animate-fade-in-up">
+          <div className="card p-5">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
               <IconScale className="h-4 w-4" /> %BF estimado por IA
             </div>
@@ -1175,7 +1176,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
             )}
           </div>
 
-          <div className="card p-5 border-accent/30 animate-fade-in-up stagger-1">
+          <div className="card p-5 border-accent/30">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
               <IconTarget className="h-4 w-4" /> Estratégia decidida
             </div>
@@ -1184,7 +1185,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           </div>
 
           {result.confrontoDoPlano && (
-            <div className={`card p-5 animate-fade-in-up stagger-1 ${result.confrontoDoPlano.dentroDoPlano ? "" : "border-warn/40"}`}>
+            <div className={`card p-5 ${result.confrontoDoPlano.dentroDoPlano ? "" : "border-warn/40"}`}>
               <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${result.confrontoDoPlano.dentroDoPlano ? "text-accent" : "text-warn"}`}>
                 {result.confrontoDoPlano.dentroDoPlano ? "✓" : "⚠"} O plano anterior vs. o que aconteceu
               </div>
@@ -1203,7 +1204,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.volumeAdherence && result.volumeAdherence.perMuscle.length > 0 && (
-            <div className="card p-5 animate-fade-in-up stagger-2">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconTarget className="h-4 w-4" /> Volume prescrito vs. executado
               </div>
@@ -1231,7 +1232,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.planoDeFases && result.planoDeFases.fases.length > 0 && (
-            <div className="card p-5 animate-fade-in-up stagger-1">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconTarget className="h-4 w-4" /> Roteiro de fases
               </div>
@@ -1312,7 +1313,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.monthlyPlan && result.monthlyPlan.length > 0 && (
-            <div className="card p-5 animate-fade-in-up stagger-2">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconClipboard className="h-4 w-4" /> Detalhamento mês a mês
               </div>
@@ -1348,7 +1349,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.suggestedTrainingProgram && result.suggestedTrainingProgram.length > 0 && (
-            <div className="card p-5 animate-fade-in-up stagger-2">
+            <div className="card p-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                   <IconDumbbell className="h-4 w-4" /> Divisão de treino sugerida
@@ -1476,7 +1477,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.trainingPeriodizationPlan && result.trainingPeriodizationPlan.length > 0 && (
-            <div className="card p-5 animate-fade-in-up stagger-3">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconDumbbell className="h-4 w-4" /> Periodização de treino
               </div>
@@ -1502,7 +1503,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.cardioPrescription && (
-            <div className="card p-5 animate-fade-in-up stagger-3">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconTrend className="h-4 w-4" /> Cardio — turnover metabólico
               </div>
@@ -1527,7 +1528,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.calibrationUnavailableReason && (
-            <div className="card p-5 border-warn/40 animate-fade-in-up stagger-3">
+            <div className="card p-5 border-warn/40">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-warn">
                 ⚠ Calibração indisponível
               </div>
@@ -1536,7 +1537,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.safetyWarnings && result.safetyWarnings.length > 0 && (
-            <div className="card p-5 border-warn/40 animate-fade-in-up stagger-2">
+            <div className="card p-5 border-warn/40">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-warn">
                 ⚠ Limites de segurança aplicados
               </div>
@@ -1554,7 +1555,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.tdeeCalibration && (
-            <div className="card p-5 animate-fade-in-up stagger-3">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconCheck className="h-4 w-4" /> Calibração contínua da fórmula
               </div>
@@ -1599,7 +1600,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.evolutionNote && (
-            <div className="card p-5 animate-fade-in-up stagger-2">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconTarget className="h-4 w-4" /> Evolução muscular
               </div>
@@ -1608,7 +1609,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           {result.gainCompositionLabel && (
-            <div className="card p-5 animate-fade-in-up stagger-3">
+            <div className="card p-5">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
                 <IconDrumstick className="h-4 w-4" /> Composição do ganho (decidida pela IA)
               </div>
@@ -1617,7 +1618,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
             </div>
           )}
 
-          <div className="card p-5 animate-fade-in-up stagger-4">
+          <div className="card p-5">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
               <IconScale className="h-4 w-4" /> Projeção de 1 mês seguindo essa dieta
             </div>
@@ -1628,7 +1629,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.oneMonthProjection.note}</p>
           </div>
 
-          <div className="card-glow p-6 animate-fade-in-up stagger-5">
+          <div className="card p-6">
             <h2 className="text-sm font-semibold mb-5 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
@@ -1645,7 +1646,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           </div>
 
           {result.meals.length > 0 && (
-            <div className="card p-6 animate-fade-in-up stagger-6">
+            <div className="card p-6">
               <h2 className="text-sm font-semibold mb-1 flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
                   <IconClipboard className="h-3.5 w-3.5" />
@@ -1654,9 +1655,9 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
               </h2>
               <p className="text-xs text-muted mb-4">
                 Já distribuída nas refeições pra bater as metas acima. Ajuste manualmente em{" "}
-                <a href="/dieta/novo" className="text-accent hover:underline">
+                <Link href="/dieta/novo" className="text-accent hover:underline">
                   Montar dieta
-                </a>{" "}
+                </Link>{" "}
                 se quiser trocar algo.
               </p>
 
@@ -1728,15 +1729,30 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
               ? "Faixa vem da sua composição corporal estimada; a IA só leu o %BF na foto."
               : "A faixa vem do seu algoritmo (mesma matemática de sempre); a IA só escolhe o ponto dentro dela usando as fotos como evidência."}{" "}
             A foto de frente foi salva em{" "}
-            <a href="/fotos" className="text-accent hover:underline">
+            <Link href="/fotos" className="text-accent hover:underline">
               Fotos de progresso
-            </a>
+            </Link>
             .
           </p>
         </section>
       
   );
 });
+
+/** Rótulo de etapa — macroestrutura Narrative Workflow (ver design.md).
+ *
+ * O formulário já era numerado ("1. Informações básicas…"); isto formaliza a numeração que existia
+ * como um rótulo de estágio de verdade: número em mono, título ao lado, régua abaixo separando as
+ * etapas. A macroestrutura pede "large numbered stage labels" e "thick numbered rule between stages",
+ * e o processo aqui é uma sequência real — a pessoa preenche 1, depois 2, depois 3. */
+function Etapa({ numero, titulo }: { numero: string; titulo: string }) {
+  return (
+    <div className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
+      <span className="font-mono text-2xl font-semibold leading-none tabular-nums text-accent">{numero}</span>
+      <span className="text-sm font-medium tracking-tight">{titulo}</span>
+    </div>
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
