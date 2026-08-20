@@ -1,0 +1,38 @@
+/* Hallmark · tokens do Degrau · genre: modern-minimal · dark-only
+ *
+ * Cópia portátil dos tokens. A fonte que o Next carrega continua sendo
+ * src/app/globals.css — este arquivo existe para exportar o sistema, não
+ * para substituir nada. Ver design.md na raiz.
+ */
+
+:root {
+  /* superfícies — preservadas do projeto, anteriores ao Hallmark */
+  --color-background: #0b0c0d;
+  --color-surface: #141618;
+  --color-surface-raised: #191c1f;
+  --color-border: #2a2d31;
+
+  /* tinta */
+  --color-foreground: #eef0f2;
+  --color-muted: #93989f;
+
+  /* acento — teto de ~5% do viewport, ver design.md */
+  --color-accent: #eab308;
+  --color-accent-strong: #ca8a04;
+  --color-accent-contrast: #221a00;
+
+  /* estado */
+  --color-warn: #fb923c;
+  --color-danger: #f87171;
+
+  /* tipografia */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* movimento — nunca o `ease` padrão do browser */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+}
