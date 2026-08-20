@@ -279,7 +279,7 @@ export default function TreinoPage() {
           {rows.map((row) => {
             const exercise = exerciseById(row.exerciseId);
             return (
-              <div key={row.id} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+              <div key={row.id} className="rounded-md border border-border bg-surface-raised/40 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={row.exerciseId}

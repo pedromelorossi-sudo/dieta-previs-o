@@ -59,9 +59,9 @@ export function TotalCard({
         {hasTarget && <span className="text-muted font-normal text-xs"> / {fmt(target, decimals)}{suffix}</span>}
       </div>
       {hasTarget && (
-        <div className="mt-1.5 h-1 rounded-full bg-surface-raised overflow-hidden">
+        <div className="mt-1.5 h-1 rounded-[2px] bg-background border border-rule-2 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-[width] duration-500 ease-out ${close ? "bg-accent animate-glow-pulse" : "bg-warn"}`}
+            className={`h-full transition-[width] duration-500 ease-out ${close ? "bg-accent animate-glow-pulse" : "bg-warn"}`}
             style={{ width: `${Math.min(100, pct * 100)}%` }}
           />
         </div>
@@ -129,7 +129,7 @@ export function MealCard({
           const subsKey = `${meal.id}:${item.id}`;
           const subs = food ? findSubstitutes(item.foodId, item.quantityG, foods) : [];
           return (
-            <div key={item.id} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+            <div key={item.id} className="rounded-md border border-border bg-surface-raised/40 p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={item.foodId}

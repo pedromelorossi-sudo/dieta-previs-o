@@ -1,17 +1,48 @@
 @import "tailwindcss";
 
+/* ============================================================================
+ * Degrau — tema "instrumento"
+ * Construído do zero em 2026-08-20 (Hallmark, rota custom · custom-theme.md § B).
+ *
+ * A tese: este app é um mostrador, não uma página. O usuário abre para ler um
+ * número que ele mesmo produziu com o próprio corpo. Então o fundo é chapado e
+ * escuro, a régua é fina, o raio é curto, e a cor existe em um lugar só — o dado
+ * que está sendo apontado agora.
+ *
+ * Ancoragem OKLCH: o papel é quase-preto levemente frio (hue 254, croma 0.012 —
+ * um azul que não se lê como cor, só como temperatura). O acento sai em ciano
+ * frio (hue 205) porque um azul 254 saturado é exatamente `blue-500`, o acento
+ * mais default da web. Ciano de traço de osciloscópio não é: ele acende contra
+ * o papel frio em vez de se dissolver nele.
+ * ==========================================================================*/
+
 :root {
-  --background: #0b0c0d;
-  --surface: #141618;
-  --surface-raised: #191c1f;
-  --border: #2a2d31;
-  --foreground: #eef0f2;
-  --muted: #93989f;
-  --accent: #eab308;
-  --accent-strong: #ca8a04;
-  --accent-contrast: #221a00;
-  --warn: #fb923c;
-  --danger: #f87171;
+  /* superfícies — três degraus, nunca mais que isso */
+  --background: oklch(14% 0.012 254);
+  --surface: oklch(17.5% 0.014 254);
+  --surface-raised: oklch(21% 0.015 254);
+
+  /* réguas — `--rule-2` é a divisória interna, quase invisível;
+     `--border` é a que delimita um painel */
+  --border: oklch(29% 0.012 254);
+  --rule-2: oklch(24% 0.011 254);
+
+  /* tinta — 94% para o texto principal (papel < 50% pede tinta 88–96%) */
+  --foreground: oklch(94% 0.008 254);
+  --foreground-2: oklch(88% 0.008 254);
+  --muted: oklch(62% 0.013 254);
+  --neutral: oklch(46% 0.012 254);
+
+  /* acento — L 76% está acima de 50, então a tinta SOBRE o acento é escura */
+  --accent: oklch(76% 0.145 205);
+  --accent-strong: oklch(69% 0.155 205);
+  --accent-contrast: oklch(18% 0.03 220);
+  --focus: oklch(80% 0.15 205);
+
+  /* estados — únicos matizes fora do 254, e é de propósito:
+     alerta e erro precisam ser lidos como "não sou o acento" */
+  --warn: oklch(76% 0.14 75);
+  --danger: oklch(66% 0.17 22);
 }
 
 @theme inline {
@@ -19,34 +50,48 @@
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-border: var(--border);
+  --color-rule-2: var(--rule-2);
   --color-foreground: var(--foreground);
+  --color-foreground-2: var(--foreground-2);
   --color-muted: var(--muted);
+  --color-neutral: var(--neutral);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono-tech);
 }
 
 html {
   color-scheme: dark;
 }
 
-/* Hallmark: os dois radial-gradient que ficavam aqui eram o "aurora-blob background" —
-   um dos tells mais reconhecíveis de interface gerada por IA. Ocupavam a tela inteira,
-   não carregavam nenhuma informação, e faziam o âmbar aparecer em ~40% do viewport,
-   contra o limite de ~5% que design.md estabelece para o acento. Fundo chapado agora:
-   o dado é o que deve chamar atenção. */
+/* Fundo chapado. Os dois radial-gradient que ficavam aqui eram o "aurora-blob",
+   um dos tells mais reconhecíveis de interface gerada por IA: ocupavam a tela
+   inteira e não carregavam nenhum dado. */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.55;
 }
 
-/* Numeração tabular em toda tabela e em todo texto mono. design.md: "coluna de
-   número que dança entre as linhas é um erro de leitura, não de estética". Aplicar
-   no elemento cobre as tabelas do app inteiro sem depender de lembrar em cada uma. */
+/* Título em grotesk. O `-0.02em` fecha o texto o suficiente para parecer
+   gravado na chapa, sem chegar no aperto que atrapalha leitura. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* Numeração tabular em toda tabela e em todo texto mono: coluna de número que
+   dança entre as linhas é erro de leitura, não de estética. */
 table,
 .font-mono,
 code,
@@ -54,8 +99,18 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* Sem overflow horizontal em nenhuma largura. `clip` e não `hidden`: `hidden` cria
-   contexto de scroll e quebra `position: sticky` nos filhos. */
+/* Rótulo de painel — a assinatura do tema. Mono, caixa alta, pequeno e afastado.
+   É o que diz "isto é uma leitura" antes mesmo de o número aparecer. */
+.meta {
+  font-family: var(--font-mono-tech), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Sem overflow horizontal em nenhuma largura. `clip` e não `hidden`: `hidden`
+   cria contexto de scroll e quebra `position: sticky` nos filhos. */
 html,
 body {
   overflow-x: clip;
@@ -66,13 +121,13 @@ body {
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-fast: 120ms;
-  --dur-base: 180ms;
+  --dur-fast: 110ms;
+  --dur-base: 160ms;
 }
 
 /* O anel de foco aparece instantaneamente — nunca animado. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -94,7 +149,7 @@ input[type="text"] {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--accent) 35%, transparent);
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
   color: var(--foreground);
 }
 
@@ -102,46 +157,53 @@ input[type="text"] {
   scrollbar-color: var(--border) transparent;
 }
 
+/* ===== painéis =====
+ * Raio 6px, borda de fio, fundo chapado. Sem `backdrop-filter`: vidro fosco
+ * pressupõe que existe algo interessante atrás, e aqui não existe — atrás só
+ * tem fundo. Sem `translateY` no hover: o painel é uma chapa parafusada, não
+ * um cartão flutuando. O hover só acende a borda. */
 .card {
-  border-radius: 1rem;
-  border: 1px solid var(--border);
-  background: color-mix(in oklab, var(--surface) 92%, transparent);
-  backdrop-filter: blur(6px);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  border-radius: 6px;
+  border: 1px solid var(--rule-2);
+  background: var(--surface);
+  transition: border-color var(--dur-base) var(--ease-out);
 }
 .card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 40px -22px color-mix(in oklab, var(--accent) 45%, transparent);
-  border-color: color-mix(in oklab, var(--accent) 25%, var(--border));
+  border-color: var(--border);
 }
 
+/* ===== botões =====
+ * Preenchimento chapado, sem gradiente e sem glow. O feedback de clique é
+ * 1px de afundamento — o gesto físico de um botão de painel. */
 .btn-primary {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  border-radius: 0.65rem;
-  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
   color: var(--accent-contrast);
   font-weight: 600;
   font-size: 0.875rem;
-  padding: 0.6rem 1.1rem;
-  box-shadow: 0 8px 20px -8px color-mix(in oklab, var(--accent) 70%, transparent);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  letter-spacing: -0.005em;
+  padding: 0.5rem 1rem;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
 .btn-primary:hover {
-  filter: brightness(1.08);
-  transform: translateY(-2px) scale(1.015);
-  box-shadow: 0 14px 30px -10px color-mix(in oklab, var(--accent) 85%, transparent);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 .btn-primary:active {
-  transform: translateY(0) scale(0.98);
-  transition-duration: 0.05s;
+  transform: translateY(1px);
 }
 .btn-primary:disabled {
-  opacity: 0.5;
-  filter: none;
+  background: var(--surface-raised);
+  border-color: var(--rule-2);
+  color: var(--neutral);
   transform: none;
-  box-shadow: none;
   cursor: not-allowed;
 }
 
@@ -149,83 +211,123 @@ input[type="text"] {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  border-radius: 0.65rem;
+  border-radius: 6px;
   border: 1px solid var(--border);
-  background: color-mix(in oklab, var(--surface-raised) 90%, transparent);
+  background: transparent;
+  color: var(--foreground-2);
   font-weight: 500;
   font-size: 0.875rem;
-  padding: 0.6rem 1.1rem;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  padding: 0.5rem 1rem;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .btn-secondary:hover {
   background: var(--surface-raised);
-  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
-  transform: translateY(-2px);
-  box-shadow: 0 10px 22px -14px color-mix(in oklab, var(--accent) 50%, transparent);
+  border-color: var(--neutral);
+  color: var(--foreground);
 }
 .btn-secondary:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(1px);
+}
+.btn-secondary:disabled {
+  color: var(--neutral);
+  border-color: var(--rule-2);
+  background: transparent;
+  transform: none;
+  cursor: not-allowed;
 }
 
+/* ===== etiqueta =====
+ * Retangular, não pílula. Pílula é da escola macia; num painel a etiqueta é
+ * uma placa de identificação, e placa tem canto. Mono porque quase toda
+ * etiqueta aqui carrega um valor ou uma sigla de fase. */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  border-radius: 999px;
-  padding: 0.15rem 0.55rem;
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  transition: transform 0.15s ease;
+  border-radius: 3px;
+  border: 1px solid var(--rule-2);
+  padding: 0.1rem 0.4rem;
+  font-family: var(--font-mono-tech), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
 }
 
+/* ===== campos =====
+ * Fundo mais escuro que o painel: o campo é um poço onde se digita, não um
+ * relevo. Foco troca a borda para o acento e acende um anel fino de 2px. */
 .input {
   width: 100%;
-  border-radius: 0.65rem;
+  border-radius: 6px;
   border: 1px solid var(--border);
-  background: color-mix(in oklab, var(--surface-raised) 92%, transparent);
+  background: var(--background);
   color: var(--foreground);
-  padding: 0.6rem 0.8rem;
+  padding: 0.5rem 0.7rem;
   font-size: 0.875rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.input:hover:not(:focus) {
+  border-color: var(--neutral);
 }
 .input:focus {
   outline: none;
-  border-color: color-mix(in oklab, var(--accent) 60%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 22%, transparent);
 }
 .input::placeholder {
-  color: color-mix(in oklab, var(--muted) 70%, transparent);
+  color: var(--neutral);
+}
+.input:disabled {
+  color: var(--neutral);
+  background: var(--surface);
+  cursor: not-allowed;
 }
 
+/* ===== carregando =====
+ * Pulso de opacidade, não varredura diagonal. A varredura imita "brilho
+ * atravessando vidro" — de novo o vocabulário macio. O painel só pisca. */
 .skeleton {
-  border-radius: 0.75rem;
-  background: linear-gradient(90deg, var(--surface), var(--surface-raised), var(--surface));
-  background-size: 200% 100%;
-  animation: shimmer 1.6s ease-in-out infinite;
-  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  border: 1px solid var(--rule-2);
+  animation: panelPulse 1.6s var(--ease-in-out) infinite;
 }
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* ===== animações de entrada, reutilizáveis nas páginas ===== */
-@keyframes glowPulse {
-  0%, 100% { box-shadow: 0 8px 20px -8px color-mix(in oklab, var(--accent) 70%, transparent); }
-  50% { box-shadow: 0 10px 30px -6px color-mix(in oklab, var(--accent) 95%, transparent); }
-}
-@keyframes spinSlow {
-  to { transform: rotate(360deg); }
-}
-
-.animate-glow-pulse { animation: glowPulse 2.2s ease-in-out infinite; }
-.animate-spin-slow { animation: spinSlow 3s linear infinite; }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+@keyframes panelPulse {
+  0%,
+  100% {
+    opacity: 1;
   }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes spinSlow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin-slow {
+  animation: spinSlow 3s linear infinite;
+}
+
+/* `.animate-glow-pulse` sobrevive como pulso de borda, sem halo. O halo era
+   sombra colorida de 30px — a mesma família visual do gradiente que saiu. */
+@keyframes borderPulse {
+  0%,
+  100% {
+    border-color: var(--border);
+  }
+  50% {
+    border-color: var(--accent);
+  }
+}
+.animate-glow-pulse {
+  animation: borderPulse 2s var(--ease-in-out) infinite;
 }

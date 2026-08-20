@@ -866,7 +866,7 @@ export default function PrevisaoIaPage() {
             {ANGLES.map(({ key, label, required }) => (
               <div key={key}>
                 <label className="block cursor-pointer">
-                  <div className="h-28 w-full rounded-lg border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden transition-colors duration-150 hover:border-accent/50 hover:bg-surface-raised/70">
+                  <div className="h-28 w-full rounded-md border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden transition-colors duration-150 hover:border-accent/50 hover:bg-surface-raised/70">
                     {previews[key] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={previews[key]} alt={label} className="h-full w-full object-cover" />
@@ -1216,9 +1216,9 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                   .map((m) => (
                     <div key={m.muscle} className="flex items-center gap-3 text-xs">
                       <span className="w-32 shrink-0 text-muted">{m.muscleLabel}</span>
-                      <div className="flex-1 h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                      <div className="flex-1 h-1.5 rounded-[2px] bg-background border border-rule-2 overflow-hidden">
                         <div
-                          className={`h-full rounded-full ${m.ratio >= 0.9 ? "bg-accent" : m.ratio >= 0.6 ? "bg-warn" : "bg-danger"}`}
+                          className={`h-full ${m.ratio >= 0.9 ? "bg-accent" : m.ratio >= 0.6 ? "bg-warn" : "bg-danger"}`}
                           style={{ width: `${Math.min(100, m.ratio * 100)}%` }}
                         />
                       </div>
@@ -1252,7 +1252,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                         ? "bg-accent/15 text-accent"
                         : "bg-surface-raised text-muted";
                   return (
-                    <details key={f.index} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+                    <details key={f.index} className="rounded-md border border-border bg-surface-raised/40 p-3">
                       <summary className="cursor-pointer list-none">
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="text-xs text-muted tabular-nums">Fase {f.index}</span>
@@ -1332,7 +1332,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                   return (
                     <div
                       key={m.monthIndex}
-                      className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-raised/40 p-3"
+                      className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-raised/40 p-3"
                     >
                       <span className="text-xs text-muted w-14 shrink-0">{m.label}</span>
                       <span className={`badge ${tone} shrink-0`}>{m.phaseLabel}</span>
@@ -1394,7 +1394,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                   const grupos = [...new Set(session.items.map((it) => exerciseById(it.exerciseId)?.primaryMuscle).filter(Boolean))];
 
                   return (
-                    <div key={i} className="rounded-xl border border-border overflow-hidden">
+                    <div key={i} className="rounded-md border border-border overflow-hidden">
                       <div className="bg-surface-raised/70 px-4 py-3 border-b border-border">
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                           <span className="text-sm font-semibold">
@@ -1489,7 +1489,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                 {result.trainingPeriodizationPlan.map((w) => (
                   <div
                     key={w.weekIndex}
-                    className={`flex items-center gap-3 rounded-lg border p-3 ${
+                    className={`flex items-center gap-3 rounded-md border p-3 ${
                       w.isDeload ? "border-warn/30 bg-warn/5" : "border-border bg-surface-raised/40"
                     }`}
                   >
@@ -1510,7 +1510,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.cardioPrescription.reason}</p>
               <div className="mt-4 space-y-2">
                 {result.cardioPrescription.sessions.map((s, i) => (
-                  <div key={i} className="rounded-lg border border-border bg-surface-raised/40 p-3">
+                  <div key={i} className="rounded-md border border-border bg-surface-raised/40 p-3">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium">{s.modality}</span>
                       <span className="text-muted">
@@ -1673,7 +1673,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                 {result.meals.map((meal) => {
                   const totals = mealTotals(meal);
                   return (
-                    <div key={meal.id} className="rounded-lg border border-border bg-surface-raised/40 p-4">
+                    <div key={meal.id} className="rounded-md border border-border bg-surface-raised/40 p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold">{meal.name}</span>
                         <span className="text-xs text-muted">

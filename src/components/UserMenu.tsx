@@ -25,9 +25,9 @@ export function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised/60 px-3 py-1.5 text-sm hover:border-accent/30 transition-colors"
+        className="flex items-center gap-2 rounded-md border border-border bg-surface-raised/60 px-3 py-1.5 text-sm hover:border-neutral transition-colors"
       >
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/20 text-accent text-[10px] font-semibold">
+        <span className="flex h-5 w-5 items-center justify-center rounded-[3px] bg-accent/20 text-accent text-[10px] font-semibold">
           {label.slice(0, 1).toUpperCase()}
         </span>
         {label}

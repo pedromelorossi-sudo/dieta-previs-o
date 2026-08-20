@@ -46,28 +46,63 @@ forma; variam só nos arquétipos de componente.
 - **Páginas de listagem** (`/fotos`, `/treino`, `/admin`) — **13 Index-First.**
   A página É a lista. Sem herói, sem narrativa.
 
-## Tema — preservado, não substituído
+## Tema — "instrumento", construído do zero
 
-A paleta e a fonte do projeto são **anteriores** ao Hallmark e ficam como estão.
-Trocá-las seria refazer a marca, não o design. O que muda é a aplicação delas.
+> **Substituição de 2026-08-20.** A primeira versão desta seção se chamava
+> *"preservado, não substituído"* e mantinha o âmbar `#eab308` sobre `#0b0c0d`
+> com Geist. Isso era correto para o verbo `hallmark redesign`, cuja regra é
+> preservar a marca — e foi por isso que a primeira passada entregou uma versão
+> mais arrumada do mesmo site, não um site repaginado. Pedro pediu design do
+> zero; a rota *custom* do Hallmark (`custom-theme.md` § B) foi executada e a
+> paleta abaixo é nova por inteiro. O âmbar não existe mais no projeto.
 
-- `--background` `#0b0c0d` · `--surface` `#141618` · `--surface-raised` `#191c1f`
-- `--border` `#2a2d31` · `--foreground` `#eef0f2` · `--muted` `#93989f`
-- `--accent` `#eab308` (âmbar) · `--accent-strong` `#ca8a04` · `--accent-contrast` `#221a00`
-- `--warn` `#fb923c` · `--danger` `#f87171`
+A tese do tema: **este app é um mostrador, não uma página.** O usuário abre para
+ler um número que ele mesmo produziu com o próprio corpo. Daí o fundo chapado, a
+régua de um fio, o raio curto de 6px e a cor concentrada em um lugar só.
+
+Paleta em OKLCH (a construção, não só os valores — para poder estender depois):
+
+- Papel quase-preto frio, três degraus e nunca mais que isso:
+  `--background` `oklch(14% 0.012 254)` · `--surface` `oklch(17.5% 0.014 254)` ·
+  `--surface-raised` `oklch(21% 0.015 254)`
+- Réguas em dois pesos: `--border` `oklch(29% 0.012 254)` delimita painel,
+  `--rule-2` `oklch(24% 0.011 254)` divide por dentro
+- Tinta: `--foreground` `oklch(94% 0.008 254)` · `--foreground-2` `oklch(88%…)` ·
+  `--muted` `oklch(62% 0.013 254)` · `--neutral` `oklch(46% 0.012 254)`
+- Acento em **ciano frio**: `--accent` `oklch(76% 0.145 205)` ·
+  `--accent-strong` `oklch(69% 0.155 205)` · `--focus` `oklch(80% 0.15 205)`.
+  Como a claridade passa de 50%, a tinta **sobre** o acento é escura:
+  `--accent-contrast` `oklch(18% 0.03 220)`
+- Estados: `--warn` `oklch(76% 0.14 75)` · `--danger` `oklch(66% 0.17 22)` — os
+  únicos matizes fora da família fria, de propósito: alerta e erro precisam ser
+  lidos como *"não sou o acento"*
+
+**Por que ciano e não azul.** A primeira tentativa usou `oklch(66% 0.18 254)` —
+o mesmo matiz frio do papel, com 15× a croma. Renderizado, aquilo é
+essencialmente `blue-500` clareado: o acento mais default da web, exatamente o
+que uma paleta feita à mão não deveria produzir. O ciano de 205° acende contra o
+papel frio em vez de se dissolver nele, e carrega o vocabulário certo — traço de
+osciloscópio, não botão de SaaS.
 
 **Dark-only** por decisão do projeto (`color-scheme: dark`). Não há tema claro, e
 o design não deve fingir que há.
 
-**Disciplina do acento:** âmbar em no máximo ~5% do viewport. Ele marca a ação
+**Disciplina do acento:** ciano em no máximo ~5% do viewport. Ele marca a ação
 primária e o dado que está sendo destacado agora — nada mais. Acento em tudo é o
 mesmo que acento em nada.
 
 ## Tipografia
 
-- **Display:** Geist Sans 600, `letter-spacing: -0.025em`
-- **Corpo:** Geist Sans 400 — mesma família (disciplina de fonte única do gênero)
-- **Números e códigos:** Geist Mono, `font-variant-numeric: tabular-nums`
+Três famílias, o teto da disciplina 2+1: display + corpo + a mono, que existe por
+função (alinhar coluna de número) e não por estilo.
+
+- **Display:** Space Grotesk 600, `letter-spacing: -0.02em` — grotesk de traço
+  técnico, aplicada em `h1`–`h4` pelo elemento, não por classe
+- **Corpo:** Inter 400, `0.9375rem` / `1.55` — a sans que some e deixa ler
+- **Números e códigos:** JetBrains Mono, `font-variant-numeric: tabular-nums`
+- **`.meta`** é a assinatura do tema: mono, caixa alta, `0.6875rem`,
+  `letter-spacing: 0.08em`, cor `--muted`. É o rótulo que diz *"isto é uma
+  leitura"* antes de o número aparecer. Todo painel e todo campo usa.
 - **Todo número que o usuário compara entre linhas usa tabular-nums.** Peso, kcal,
   macro, data, séries. Coluna de número que dança entre as linhas é um erro de
   leitura, não de estética.
@@ -98,16 +133,23 @@ O projeto não tem biblioteca de motion instalada e **não deve ganhar uma.**
 
 ## Voz dos botões
 
-- **Primário:** preenchido em âmbar, texto `--accent-contrast`, raio 8px. Um por
-  tela. O verbo diz exatamente o que acontece ("Gerar previsão", não "Continuar").
+- **Primário:** preenchido chapado em ciano, texto `--accent-contrast`, raio 6px.
+  **Sem gradiente e sem glow** — o feedback de clique é 1px de afundamento, o
+  gesto físico de um botão de painel. Um por tela. O verbo diz exatamente o que
+  acontece ("Gerar previsão", não "Continuar").
 - **Secundário:** contornado, borda `--border`, fundo transparente.
 - **Destrutivo:** texto em `--danger`, sem preenchimento.
 - Nunca quebrar em duas linhas em nenhuma largura.
 
 ## O que as páginas DEVEM compartilhar
 
-- A fonte Geist e a paleta acima.
-- O acento âmbar e seu limite de ~5%.
+- O trio Space Grotesk / Inter / JetBrains Mono e a paleta acima.
+- O acento ciano e seu limite de ~5%.
+- **Raio de 6px em tudo que tem borda.** Painel, botão, campo e sub-painel
+  compartilham o mesmo canto; etiqueta usa 3px e chip de identidade 3px. Não há
+  `rounded-lg`/`xl` no projeto — foram todos normalizados.
+- **Medidor de ponta reta, nunca pílula.** Barra de progresso em pílula parece
+  indicador de app; ponta reta parece leitura de escala.
 - `tabular-nums` em toda coluna numérica.
 - A regra de que **todo número exibido tem procedência**: veio de medição, de
   cálculo ou de projeção, e a tela diz qual. Este app existe para não mentir sobre
@@ -121,7 +163,7 @@ refeita:
 
 | tell | ocorrências | onde |
 |---|---|---|
-| Aurora-blob background (radial-gradient) | 2 | `globals.css` no `body` |
+| Aurora-blob background (radial-gradient) | 2 | `globals.css` no `body` — **removido** |
 | Reveal em scroll em tudo (`animate-fade-in-up`) | 35 | espalhado |
 | Grade de 3 colunas de feature (`sm:grid-cols-3`) | 7 | espalhado |
 | Emoji como ícone (⚠ ✓ →) | 13 | espalhado |
@@ -147,3 +189,31 @@ composta quando carrega.
 `tokens.css` na raiz carrega os tokens em formato portátil. O `globals.css`
 continua sendo a fonte que o Next carrega — `tokens.css` é cópia para exportação,
 não substitui nada.
+
+## Estado dos anti-padrões (2026-08-20, após a reconstrução)
+
+Todos os tells da tabela acima foram eliminados, e a reconstrução fechou mais
+três que a auditoria original não tinha nomeado:
+
+| tell | onde estava | o que ficou |
+|---|---|---|
+| Gradiente em preenchimento | botão primário, marca no header, marca do login/cadastro | preenchimento chapado |
+| `backdrop-filter: blur` no `.card` | `globals.css` | fundo opaco — vidro fosco pressupõe algo atrás, e atrás só tem fundo |
+| `translateY(-3px)` + sombra colorida no hover do `.card` | `globals.css` | o hover só acende a borda; o painel é chapa parafusada, não cartão flutuando |
+| Varredura diagonal no `.skeleton` | `globals.css` | pulso de opacidade |
+| Halo de 30px no `.animate-glow-pulse` | `globals.css` | pulso de borda |
+| `text-[#06231a]` (hex cru de um tema verde antigo) | `login`, `cadastro` | `var(--accent-contrast)` |
+
+**Regra herdada da limpeza:** nenhuma cor e nenhuma `font-family` no projeto pode
+ser valor cru. Tudo passa por token nomeado. Se um valor novo for preciso, ele
+sobe para o bloco `:root` com nome antes de ser usado.
+
+## Armadilha conhecida
+
+`NavLink` posiciona o traço da aba ativa com um deslocamento medido em pixels
+(`-bottom-[15px]`), porque ele precisa cair exatamente sobre a régua inferior do
+header. **Esse número depende da densidade do header** (`py-3` e a marca de
+24px). Já quebrou uma vez: ao apertar o header de `py-4` para `py-3`, o valor
+antigo de `-21px` passou a flutuar longe da régua. Se mexer na altura do header,
+meça de novo no browser em vez de deduzir — a conta envolve a centragem do texto
+contra a marca, não só o padding.

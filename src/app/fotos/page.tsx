@@ -109,7 +109,7 @@ export default function FotosPage() {
 
         {preview && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Prévia da foto" className="h-40 w-40 object-cover rounded-lg border border-border" />
+          <img src={preview} alt="Prévia da foto" className="h-40 w-40 object-cover rounded-md border border-border" />
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">

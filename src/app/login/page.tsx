@@ -31,12 +31,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-strong text-[#06231a]">
+        <div className="flex flex-col items-start gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[5px] bg-accent text-[color:var(--accent-contrast)]">
             <IconFlame className="h-5 w-5" />
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight">Entrar</h1>
-          <p className="text-sm text-muted">Acesse sua conta para ver seu histórico e dietas</p>
+          <div className="space-y-1">
+            <p className="meta">Degrau</p>
+            <h1 className="text-2xl">Entrar</h1>
+            <p className="text-sm text-muted">Acesse sua conta para ver seu histórico e dietas</p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="card p-6 space-y-4">
@@ -73,7 +76,7 @@ export default function LoginPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-xs text-muted mb-1.5">{label}</span>
+      <span className="meta block mb-1.5">{label}</span>
       {children}
     </label>
   );

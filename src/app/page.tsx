@@ -1,7 +1,7 @@
 "use client";
 
 /* Hallmark · macrostructure: Stat-Led · genre: modern-minimal · tone: technical
- * theme: projeto (preservado — âmbar #eab308 sobre #0b0c0d, Geist) · enrichment: none
+ * theme: instrumento (ciano oklch(76% .145 205) sobre papel frio) · enrichment: none
  * reveal: number-tick no número do herói apenas · nav: existente (layout.tsx)
  * sistema travado em design.md na raiz
  */

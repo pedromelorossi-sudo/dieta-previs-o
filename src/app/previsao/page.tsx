@@ -153,7 +153,7 @@ export default function PrevisaoPage() {
           </Field>
         </div>
 
-        <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
+        <label className="flex items-start gap-3 rounded-md border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
           <input
             type="checkbox"
             checked={stabilityMode}
@@ -169,7 +169,7 @@ export default function PrevisaoPage() {
           </span>
         </label>
 
-        <label className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
+        <label className="flex items-start gap-3 rounded-md border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
           <input
             type="checkbox"
             checked={applyProteinStep}

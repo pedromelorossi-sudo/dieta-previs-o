@@ -10,10 +10,13 @@ export function NavLink({ href, children }: { href: string; children: ReactNode 
   return (
     <Link
       href={href}
-      className={`relative transition-colors ${active ? "text-foreground" : "text-muted hover:text-foreground"}`}
+      className={`relative shrink-0 whitespace-nowrap transition-colors ${active ? "text-foreground" : "text-muted hover:text-foreground"}`}
     >
       {children}
-      {active && <span className="absolute -bottom-[21px] left-0 right-0 h-[2px] rounded-full bg-accent" />}
+      {/* -15px medido no browser: distancia da base do link ate a regua inferior
+          do header (py-3 + centragem contra a marca de 24px). Se a densidade do
+          header mudar, esse numero muda junto. */}
+      {active && <span className="absolute -bottom-[15px] left-0 right-0 h-[2px] bg-accent" />}
     </Link>
   );
 }

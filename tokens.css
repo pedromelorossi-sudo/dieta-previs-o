@@ -1,38 +1,52 @@
-/* Hallmark · tokens do Degrau · genre: modern-minimal · dark-only
+/* Hallmark · tokens do Degrau · tema "instrumento" · dark-only
  *
  * Cópia portátil dos tokens. A fonte que o Next carrega continua sendo
  * src/app/globals.css — este arquivo existe para exportar o sistema, não
  * para substituir nada. Ver design.md na raiz.
+ *
+ * Reconstruído do zero em 2026-08-20 (rota custom do Hallmark). A versão
+ * anterior exportava a paleta âmbar, que não existe mais no projeto.
  */
 
 :root {
-  /* superfícies — preservadas do projeto, anteriores ao Hallmark */
-  --color-background: #0b0c0d;
-  --color-surface: #141618;
-  --color-surface-raised: #191c1f;
-  --color-border: #2a2d31;
+  /* --- papel: quase-preto frio, três degraus --- */
+  --background: oklch(14% 0.012 254);
+  --surface: oklch(17.5% 0.014 254);
+  --surface-raised: oklch(21% 0.015 254);
 
-  /* tinta */
-  --color-foreground: #eef0f2;
-  --color-muted: #93989f;
+  /* --- réguas: `border` delimita painel, `rule-2` divide por dentro --- */
+  --border: oklch(29% 0.012 254);
+  --rule-2: oklch(24% 0.011 254);
 
-  /* acento — teto de ~5% do viewport, ver design.md */
-  --color-accent: #eab308;
-  --color-accent-strong: #ca8a04;
-  --color-accent-contrast: #221a00;
+  /* --- tinta --- */
+  --foreground: oklch(94% 0.008 254);
+  --foreground-2: oklch(88% 0.008 254);
+  --muted: oklch(62% 0.013 254);
+  --neutral: oklch(46% 0.012 254);
 
-  /* estado */
-  --color-warn: #fb923c;
-  --color-danger: #f87171;
+  /* --- acento ciano frio; L > 50 exige tinta escura por cima --- */
+  --accent: oklch(76% 0.145 205);
+  --accent-strong: oklch(69% 0.155 205);
+  --accent-contrast: oklch(18% 0.03 220);
+  --focus: oklch(80% 0.15 205);
 
-  /* tipografia */
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* --- estados: únicos matizes quentes, para não serem lidos como acento --- */
+  --warn: oklch(76% 0.14 75);
+  --danger: oklch(66% 0.17 22);
 
-  /* movimento — nunca o `ease` padrão do browser */
+  /* --- tipografia --- */
+  --font-display: "Space Grotesk";
+  --font-body: "Inter";
+  --font-mono-tech: "JetBrains Mono";
+
+  /* --- movimento --- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-fast: 120ms;
-  --dur-base: 180ms;
+  --dur-fast: 110ms;
+  --dur-base: 160ms;
+
+  /* --- forma: um raio para tudo que tem borda --- */
+  --radius: 6px;
+  --radius-chip: 3px;
 }
