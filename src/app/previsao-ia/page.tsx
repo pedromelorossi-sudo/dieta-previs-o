@@ -315,6 +315,15 @@ export default function PrevisaoIaPage() {
   const last = cycles && cycles.length ? cycles[cycles.length - 1] : null;
   const isFirstCycle = cycles !== null && cycles.length === 0;
 
+  // As perguntas de adesão só fazem sentido se o app REALMENTE prescreveu algo pra seguir. Um ciclo
+  // vindo da calculadora rápida (/estimar) é um número de referência, não um plano — perguntar "você
+  // seguiu de perto as X kcal prescritas?" sobre ele convida a uma resposta inventada, e resposta
+  // inventada contamina o retrocálculo de TDEE (é exatamente o autorrelato que calibration.ts cita
+  // Lichtman et al. 1992 pra desqualificar). Ciclos sem origem registrada são anteriores a essa
+  // coluna: mantêm o comportamento antigo e continuam perguntando.
+  const ultimoFoiPrescricao = last != null && last.origin !== "estimativa";
+  const mostrarPerguntasDeAdesao = !isFirstCycle && last != null && ultimoFoiPrescricao;
+
   const canSubmit = useMemo(() => {
     return (
       !!files.frente &&
@@ -468,6 +477,7 @@ export default function PrevisaoIaPage() {
         fatG: data.recommendedFatG,
         carbG: data.recommendedCarbG,
         isPrediction: true,
+        origin: "ia",
         muscleAssessment: data.muscleGroupAssessment?.length ? data.muscleGroupAssessment : null,
       });
       setCycles(sortByDate(await loadCycles()));
@@ -882,7 +892,7 @@ export default function PrevisaoIaPage() {
           </div>
         </div>
 
-        {!isFirstCycle && last && (
+        {mostrarPerguntasDeAdesao && last && (
           <div>
             <span className="block text-xs text-muted mb-2">5. Parâmetros da previsão</span>
             <Field label="Semanas até a próxima consulta">
@@ -1077,6 +1087,21 @@ export default function PrevisaoIaPage() {
         )}
 
         {error && <p className="text-xs text-danger">{error}</p>}
+
+        {!isFirstCycle && last && !ultimoFoiPrescricao && (
+          <div>
+            <span className="block text-xs text-muted mb-2">5. Parâmetros da previsão</span>
+            <Field label="Semanas até a próxima consulta">
+              <input type="number" step="1" min="1" value={weeks} onChange={(e) => setWeeks(e.target.value)} className="input" />
+            </Field>
+            <p className="text-xs text-muted mt-3 leading-relaxed">
+              As perguntas de adesão não aparecem desta vez: seu último registro veio da calculadora
+              rápida, que é um número de referência e não um plano que você recebeu pra seguir. A partir
+              do próximo ciclo — já com a prescrição desta análise — elas voltam, e é a partir delas que
+              o algoritmo aprende o quanto a fórmula erra pra você.
+            </p>
+          </div>
+        )}
 
         <button type="submit" disabled={!canSubmit || loading} className="btn-primary">
           {loading && (

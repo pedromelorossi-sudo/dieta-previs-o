@@ -19,6 +19,10 @@ export interface Cycle {
   isPrediction?: boolean;
   /** what the person actually ate on average, when different from `kcal` (adherence wasn't 1:1) */
   actualKcal?: number | null;
+  /** de onde veio este ciclo — define se faz sentido perguntar adesão no ciclo seguinte. Ver a nota
+   * em schema.sql: `isPrediction` não serve, porque o fluxo de IA e a calculadora rápida marcam os
+   * dois como true. `undefined` = linha anterior à coluna, tratada como prescrição. */
+  origin?: "ia" | "consultoria" | "estimativa" | null;
   /** leitura visual por grupo muscular desse ciclo (da análise de foto) — usada pra montar a evolução
    * por grupo ao longo do tempo (ver muscleEvolution.ts) */
   muscleAssessment?: CycleMuscleAssessment[] | null;

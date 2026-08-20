@@ -106,6 +106,15 @@ alter table public.cycles add column if not exists actual_kcal numeric;
 -- junto do ciclo pra dar pra montar a evolução por grupo ao longo do tempo (ver muscleEvolution.ts)
 alter table public.cycles add column if not exists muscle_assessment jsonb;
 
+-- De onde veio o ciclo. Existe porque as perguntas de adesão ("você seguiu de perto as X kcal
+-- prescritas?") só fazem sentido se o app REALMENTE prescreveu algo pra pessoa seguir:
+--   'ia'          -> fluxo de fotos + previsão; prescrição de verdade, pergunta adesão
+--   'consultoria' -> prescrição real registrada à mão; pergunta adesão
+--   'estimativa'  -> calculadora rápida em /estimar; é um número de referência, não um plano
+--   null          -> linha anterior a esta coluna; assume o comportamento antigo (pergunta)
+-- `is_prediction` não serve pra isso: tanto o fluxo de IA quanto a calculadora marcam true.
+alter table public.cycles add column if not exists origin text;
+
 alter table public.cycles enable row level security;
 
 drop policy if exists "cycles: all own" on public.cycles;

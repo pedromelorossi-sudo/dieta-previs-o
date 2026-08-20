@@ -69,6 +69,7 @@ export default function EstimarPage() {
       fatG: result.targetFatG,
       carbG: result.targetCarbG,
       isPrediction: true,
+      origin: "estimativa",
     };
     await addCycle(cycle);
     setSavedCycle(true);

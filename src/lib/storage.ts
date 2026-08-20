@@ -13,6 +13,7 @@ interface CycleRow {
   is_prediction: boolean;
   actual_kcal: number | null;
   muscle_assessment: CycleMuscleAssessment[] | null;
+  origin: "ia" | "consultoria" | "estimativa" | null;
 }
 
 function rowToCycle(row: CycleRow): Cycle {
@@ -28,6 +29,7 @@ function rowToCycle(row: CycleRow): Cycle {
     isPrediction: row.is_prediction,
     actualKcal: row.actual_kcal != null ? Number(row.actual_kcal) : null,
     muscleAssessment: row.muscle_assessment ?? null,
+    origin: row.origin ?? null,
   };
 }
 
@@ -58,6 +60,7 @@ export async function addCycle(cycle: Cycle): Promise<void> {
     is_prediction: cycle.isPrediction ?? false,
     actual_kcal: cycle.actualKcal ?? null,
     muscle_assessment: cycle.muscleAssessment ?? null,
+    origin: cycle.origin ?? null,
   });
   if (error) throw error;
 }

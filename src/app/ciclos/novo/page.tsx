@@ -50,6 +50,7 @@ export default function NovoCicloPage() {
       proteinG: p,
       fatG: f,
       carbG: carb,
+      origin: "consultoria",
     };
     await addCycle(cycle);
     setSavedCycle(cycle);
