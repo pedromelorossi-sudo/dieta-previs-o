@@ -96,6 +96,11 @@ interface RequestBody {
   lastCycleEffortNearFailure?: "sim" | "nao";
   /** sessões de cardio realmente completadas desde o último ciclo */
   lastCycleCardioSessions?: number;
+  /** dias de treino de força por semana — escolha explícita do usuário, padrão 5. Sobrepõe a faixa
+   * derivada de `exerciseFreq`, que só distingue "3-4" de "5+" e não serve pra montar a divisão. */
+  trainingDaysPerWeek?: number;
+  /** dias de cardio por semana, contando o HIIT — padrão 5 */
+  cardioDaysPerWeek?: number;
 }
 
 interface CycleRow {
@@ -318,6 +323,8 @@ export async function POST(request: Request) {
     lastCycleAlcoholDosesPerWeek,
     lastCycleEffortNearFailure,
     lastCycleCardioSessions,
+    trainingDaysPerWeek,
+    cardioDaysPerWeek,
   } = body;
 
   if (!photos || photos.length === 0 || !photos.some((p) => p.angle === "frente")) {
@@ -468,7 +475,12 @@ ${VISUAL_BF_PROTOCOL}`,
     // peso 30% fórmula / 70% prática real — a fórmula é só uma média populacional (erro documentado
     // de ±10-15%), a prática relatada pelo próprio usuário é dado direto, então pesa mais
     const FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
-    const firstCycleDaysPerWeek = exerciseFreq ? FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ[exerciseFreq] : 0;
+    const firstCycleDaysPerWeek =
+      trainingDaysPerWeek != null && trainingDaysPerWeek > 0
+        ? Math.max(1, Math.min(6, Math.round(trainingDaysPerWeek)))
+        : exerciseFreq
+          ? FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ[exerciseFreq]
+          : 0;
 
     // O primeiro ciclo não devolvia programa de treino NENHUM — a pessoa recebia dieta, cardio e
     // projeção de 6 meses, e zero séries. Não havia razão pra isso: a divisão não depende de histórico,
@@ -484,6 +496,7 @@ ${VISUAL_BF_PROTOCOL}`,
       strategy: comp.path,
       strengthDaysPerWeek: firstCycleDaysPerWeek,
       weightKg: currentWeightKg,
+      cardioDaysPerWeek,
     });
 
     // O gasto do cardio prescrito NÃO é somado ao TDEE, de propósito. A tentação é somar — o app manda
@@ -908,7 +921,14 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // preferências (ex: "consultoria pediu foco em costas e braço"), que valem mais que a leitura da foto.
   // Não depende da foto ter dado uma leitura de grupo — sem ela, cai no MAV padrão + prioridades.
   const DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
-  const daysPerWeek = exerciseFreq ? DAYS_PER_WEEK_BY_FREQ[exerciseFreq] : 0;
+  // A escolha explícita do usuário vence a faixa: "5+" não diz se são 5 ou 6 dias, e a divisão precisa
+  // do número exato pra dimensionar o orçamento de séries (ver computeMuscleTargets).
+  const daysPerWeek =
+    trainingDaysPerWeek != null && trainingDaysPerWeek > 0
+      ? Math.max(1, Math.min(6, Math.round(trainingDaysPerWeek)))
+      : exerciseFreq
+        ? DAYS_PER_WEEK_BY_FREQ[exerciseFreq]
+        : 0;
   let suggestedTrainingProgram: ReturnType<typeof buildSplit> | null = null;
   let trainingPeriodizationPlan: ReturnType<typeof planTrainingPeriodization> | null = null;
   let muscleTargetsOut: ReturnType<typeof computeMuscleTargets> | null = null;
@@ -1101,7 +1121,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     vision.bfConfidence
   );
 
-  const cardioPrescription = prescribeCardio({ strategy, strengthDaysPerWeek: daysPerWeek, recoveryScore, weightKg: currentWeightKg });
+  const cardioPrescription = prescribeCardio({ strategy, strengthDaysPerWeek: daysPerWeek, recoveryScore, weightKg: currentWeightKg, cardioDaysPerWeek });
 
   // O fator de calibração deixa de ser decorativo. Ele mede o quanto a FÓRMULA erra pra essa pessoa,
   // aprendido só de ciclos limpos (ver calibration.ts). O TDEE empírico segue como fonte principal — é

@@ -29,6 +29,12 @@ export interface CardioInput {
   recoveryScore?: number;
   /** peso corporal, só pra estimar o gasto do cardio prescrito (ver estimatedKcalPerDay) */
   weightKg: number;
+  /** quantos dias de cardio por semana a pessoa quer fazer, contando o HIIT. Padrão 5. O volume total
+   * em minutos não muda com isso — é o mesmo alvo de turnover dividido em mais ou menos sessões, o que
+   * encurta cada uma. Espalhar em mais dias tem justificativa: Howlett et al. 2008 mostrou que o efeito
+   * de uma sessão sobre a sensibilidade à insulina dura horas, não dias, então frequência mantém a via
+   * ativa melhor que concentrar o mesmo volume. */
+  cardioDaysPerWeek?: number;
 }
 
 // O objetivo aqui não é só "gastar mais calorias" — é manter o turnover metabólico (energy flux) alto o
@@ -65,6 +71,9 @@ const STRATEGY_MINUTES_ADJUSTMENT: Record<DietPath, number> = {
 // Por isso o app prioriza modalidades de baixo impacto (bike/elíptico/remo) sobre corrida como padrão, e
 // mantém duração por sessão moderada em vez de sessões muito longas — o objetivo é manter o turnover
 // metabólico alto sem pagar o preço de interferência que a corrida especificamente mostrou ter.
+/** Padrão de dias de cardio por semana, alterável pelo usuário. */
+export const DEFAULT_CARDIO_DAYS = 5;
+
 const LOW_INTERFERENCE_MODALITY = "Bicicleta ergométrica, elíptico ou remo (baixo impacto)";
 const HIIT_MODALITY = "Bicicleta ergométrica ou elíptico (HIIT)";
 
@@ -84,7 +93,7 @@ const HIIT_MODALITY = "Bicicleta ergométrica ou elíptico (HIIT)";
  * de força, que é a prioridade desse app. Piso geral ancorado na diretriz da OMS (Bull et al. 2020, Br J
  * Sports Med, DOI 10.1136/bjsports-2020-102955): 150-300min/semana moderado ou 75-150min vigoroso. */
 export function prescribeCardio(input: CardioInput): CardioPrescription {
-  const { strategy, strengthDaysPerWeek, recoveryScore = 0, weightKg } = input;
+  const { strategy, strengthDaysPerWeek, recoveryScore = 0, weightKg, cardioDaysPerWeek = DEFAULT_CARDIO_DAYS } = input;
 
   const badRecovery = recoveryScore >= 2;
   const adjustment = badRecovery && strategy === "cutting" ? 0 : STRATEGY_MINUTES_ADJUSTMENT[strategy];
@@ -104,12 +113,14 @@ export function prescribeCardio(input: CardioInput): CardioPrescription {
   // do aeróbico (r -0,26 a -0,35) quanto pra DURAÇÃO (r -0,29 a -0,75) — duração pesa mais. Então é
   // preferível NÃO entregar o alvo de turnover a entregar sessões longas: o que passa do teto é cortado
   // e declarado no `reason`, não empurrado pra dentro de sessões de 60-75min.
-  const MAX_STEADY_SESSIONS = 3;
   const MAX_STEADY_SESSION_MINUTES = 45;
-  const MIN_STEADY_SESSION_MINUTES = 25;
+  const MIN_STEADY_SESSION_MINUTES = 15;
 
   const steadyTargetTotal = targetMinutes - hiitMinutes;
-  const steadyStateSessions = Math.max(2, Math.min(MAX_STEADY_SESSIONS, Math.round(steadyTargetTotal / 40)));
+  // a frequência é escolha da pessoa (padrão 5 dias, contando o HIIT); o volume total é que vem da
+  // estratégia. Mais dias = sessões mais curtas, não mais minutos.
+  const diasPedidos = Math.max(2, Math.min(7, Math.round(cardioDaysPerWeek)));
+  const steadyStateSessions = Math.max(1, diasPedidos - (hiitMinutes > 0 ? 1 : 0));
   const steadyStateMinutes = Math.max(
     MIN_STEADY_SESSION_MINUTES,
     Math.min(MAX_STEADY_SESSION_MINUTES, Math.round(steadyTargetTotal / steadyStateSessions))
@@ -159,7 +170,7 @@ export function prescribeCardio(input: CardioInput): CardioPrescription {
 
   const trimNote =
     trimmedMinutes > 10
-      ? ` O alvo de turnover pediria ${targetMinutes}min/semana, mas foram prescritos ${totalMinutesPerWeek}min: a sessão de steady-state é limitada a ${MAX_STEADY_SESSION_MINUTES}min e a ${MAX_STEADY_SESSIONS}x/semana, porque duração de aeróbico é a variável que mais custa hipertrofia (Wilson et al. 2012) — entregar o alvo cheio sairia mais caro que não entregar.`
+      ? ` O alvo de turnover pediria ${targetMinutes}min/semana, mas foram prescritos ${totalMinutesPerWeek}min: a sessão de steady-state é limitada a ${MAX_STEADY_SESSION_MINUTES}min, porque duração de aeróbico é a variável que mais custa hipertrofia (Wilson et al. 2012) — entregar o alvo cheio numa sessão longa sairia mais caro que não entregar. Aumentar os dias de cardio recupera o volume sem alongar a sessão.`
       : "";
 
   const reason =

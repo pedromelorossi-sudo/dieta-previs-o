@@ -117,13 +117,13 @@ export default function QuestionarioPage() {
               ))}
             </select>
           </Field>
-          <Field label="Refeições por dia">
+          <Field label="Refeições por dia (padrão 5)">
             <input
               type="number"
               min={2}
-              max={6}
+              max={8}
               value={prefs.mealsPerDay}
-              onChange={(e) => update("mealsPerDay", parseInt(e.target.value) || 3)}
+              onChange={(e) => update("mealsPerDay", parseInt(e.target.value) || 5)}
               className="input"
             />
           </Field>

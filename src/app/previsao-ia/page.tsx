@@ -275,6 +275,10 @@ export default function PrevisaoIaPage() {
   >("");
   const [effortNearFailure, setEffortNearFailure] = useState<"" | "sim" | "nao">("");
   const [cardioSessions, setCardioSessions] = useState("");
+  // Padrão 5 para treino e cardio, alterável. A faixa de `exerciseFreq` ("5+") não distingue 5 de 6
+  // dias, e a divisão precisa do número exato pra dimensionar o orçamento de séries.
+  const [trainingDaysPerWeek, setTrainingDaysPerWeek] = useState("5");
+  const [cardioDaysPerWeek, setCardioDaysPerWeek] = useState("5");
 
   // adesão detalhada — fatos contáveis, não autoavaliação, usados só pra decidir se esse ciclo é
   // confiável o bastante pra calibrar a fórmula (ver calibration.ts e Lichtman et al. 1992: autorrelato
@@ -416,6 +420,8 @@ export default function PrevisaoIaPage() {
           lastCycleKeptExercisesAndLoads: keptExercisesAndLoads || undefined,
           lastCycleEffortNearFailure: effortNearFailure || undefined,
           lastCycleCardioSessions: cardioSessions ? parseInt(cardioSessions, 10) : undefined,
+          trainingDaysPerWeek: trainingDaysPerWeek ? parseInt(trainingDaysPerWeek, 10) : undefined,
+          cardioDaysPerWeek: cardioDaysPerWeek ? parseInt(cardioDaysPerWeek, 10) : undefined,
           lastCycleDaysFollowedPerWeek: daysFollowedPerWeek ? parseFloat(daysFollowedPerWeek) : undefined,
           lastCycleTrackingMethod: trackingMethod || undefined,
           lastCycleWeighInConsistent: weighInConsistent ? weighInConsistent === "sim" : undefined,
@@ -583,7 +589,7 @@ export default function PrevisaoIaPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 mt-4">
-            <Field label="Quantos dias por semana você treina?">
+            <Field label="Com que frequência você treina hoje? (usado no cálculo de gasto)">
               <select value={exerciseFreq} onChange={(e) => setExerciseFreq(e.target.value as ExerciseFreq)} className="input">
                 <option value="" disabled>
                   Selecione…
@@ -591,6 +597,30 @@ export default function PrevisaoIaPage() {
                 {(Object.keys(EXERCISE_FREQ_LABEL) as ExerciseFreq[]).map((f) => (
                   <option key={f} value={f}>
                     {EXERCISE_FREQ_LABEL[f]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {exerciseFreq && exerciseFreq !== "0" && (
+              <Field label="Quantos dias de TREINO montar na divisão?">
+                <select
+                  value={trainingDaysPerWeek}
+                  onChange={(e) => setTrainingDaysPerWeek(e.target.value)}
+                  className="input"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((d) => (
+                    <option key={d} value={String(d)}>
+                      {d} {d === 1 ? "dia" : "dias"} por semana{d === 5 ? " (padrão)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            <Field label="Quantos dias de CARDIO por semana?">
+              <select value={cardioDaysPerWeek} onChange={(e) => setCardioDaysPerWeek(e.target.value)} className="input">
+                {[2, 3, 4, 5, 6, 7].map((d) => (
+                  <option key={d} value={String(d)}>
+                    {d} dias por semana{d === 5 ? " (padrão)" : ""}
                   </option>
                 ))}
               </select>

@@ -29,7 +29,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   age: null,
   dietGoal: "manutencao",
   activityLevel: "moderado",
-  mealsPerDay: 4,
+  mealsPerDay: 5,
   cookingTime: "medio",
   restrictions: [],
   dislikedFoodIds: [],
