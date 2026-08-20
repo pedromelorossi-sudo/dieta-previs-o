@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { IconFlame } from "@/components/icons";
@@ -34,7 +35,7 @@ export default function LoginPage() {
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-strong text-[#06231a]">
             <IconFlame className="h-5 w-5" />
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight gradient-text">Entrar</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Entrar</h1>
           <p className="text-sm text-muted">Acesse sua conta para ver seu histórico e dietas</p>
         </div>
 
@@ -60,9 +61,9 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-muted">
           Não tem conta?{" "}
-          <a href="/cadastro" className="text-accent hover:underline">
+          <Link href="/cadastro" className="text-accent hover:underline">
             Criar conta
-          </a>
+          </Link>
         </p>
       </div>
     </div>

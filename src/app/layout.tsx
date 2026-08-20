@@ -36,10 +36,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <SupabaseNotConfigured />
         ) : (
           <AuthProvider>
-            <header className="border-b border-border/70 sticky top-0 z-10 backdrop-blur-md bg-background/70">
+            <header className="sticky top-0 z-10 border-b border-border bg-background">
               <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between gap-4">
                 <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight shrink-0 group">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent-strong text-[color:var(--accent-contrast)] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 animate-pop-in">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent-strong text-[color:var(--accent-contrast)] transition-opacity duration-150 group-hover:opacity-80">
                     <IconPhysique className="h-4 w-4" />
                   </span>
                   <span className="hidden sm:inline">Degrau</span>

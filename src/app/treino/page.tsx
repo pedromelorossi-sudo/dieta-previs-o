@@ -155,27 +155,27 @@ export default function TreinoPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10 space-y-8">
-      <div className="animate-fade-in-up">
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Treino</h1>
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">Treino</h1>
         <p className="text-sm text-muted mt-2">
           Log de sessões, volume semanal por grupo muscular (MEV/MAV/MRV) e recomendação pra próxima semana.
         </p>
       </div>
 
       {loadError && (
-        <div className="card border-warn/30 bg-warn/5 p-4 text-sm text-warn animate-fade-in-up">
+        <div className="card border-warn/30 bg-warn/5 p-4 text-sm text-warn">
           {loadError} — se as tabelas de treino ainda não foram criadas no Supabase, rode a migração antes de usar esta
           página.
         </div>
       )}
 
       {recommendation?.deloadSuggested && (
-        <div className="card border-danger/30 bg-danger/5 p-4 text-sm text-danger animate-fade-in-up">
+        <div className="card border-danger/30 bg-danger/5 p-4 text-sm text-danger">
           {recommendation.deloadReason}
         </div>
       )}
 
-      <section className="animate-fade-in-up stagger-1">
+      <section>
         <h2 className="text-lg font-semibold tracking-tight mb-1">Volume da semana por grupo</h2>
         <p className="text-sm text-muted mb-4">Últimos 7 dias, contando só séries Work e Top set.</p>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -208,7 +208,7 @@ export default function TreinoPage() {
       </section>
 
       {muscleEvolution.length > 0 && (
-        <section className="animate-fade-in-up stagger-2">
+        <section>
           <h2 className="text-lg font-semibold tracking-tight mb-1">Evolução por grupo muscular</h2>
           <p className="text-sm text-muted mb-4">
             A partir da leitura visual das fotos em cada ciclo — só compara leituras com confiança media/alta, um
@@ -246,7 +246,7 @@ export default function TreinoPage() {
         </section>
       )}
 
-      <section className="card p-6 space-y-5 animate-fade-in-up stagger-3">
+      <section className="card p-6 space-y-5">
         <div>
           <h2 className="text-lg font-semibold tracking-tight mb-1">Registrar sessão</h2>
           <p className="text-sm text-muted">O que você fez de verdade — carga real, não o planejado.</p>

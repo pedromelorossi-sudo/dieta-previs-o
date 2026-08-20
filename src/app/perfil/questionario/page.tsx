@@ -86,7 +86,7 @@ export default function QuestionarioPage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Questionário de hábitos</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Questionário de hábitos</h1>
         <p className="text-sm text-muted mt-2">
           Personaliza o montador de dieta de {profile?.name ?? "este perfil"} — filtra alimentos por restrição e
           ajusta o número de refeições sugerido.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Food, FOODS } from "@/lib/foods";
 import { Diet, DietMeal, MEAL_PRESETS, dietTotals } from "@/lib/dietBuilder";
 import { upsertDiet } from "@/lib/dietStorage";
@@ -150,8 +151,8 @@ export default function NovaDietaPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10 space-y-8">
-      <div className="animate-fade-in-up">
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Montar dieta</h1>
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">Montar dieta</h1>
         <p className="text-sm text-muted mt-2">
           Escolha os alimentos por refeição, veja as substituições equivalentes e gere o PDF do plano.
         </p>
@@ -176,9 +177,9 @@ export default function NovaDietaPage() {
               )}
             </>
           )}
-          <a href="/perfil/questionario" className="text-accent hover:underline ml-1">
+          <Link href="/perfil/questionario" className="text-accent hover:underline ml-1">
             editar
-          </a>
+          </Link>
         </div>
       )}
 

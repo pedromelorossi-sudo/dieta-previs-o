@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { IconFlame } from "@/components/icons";
@@ -46,9 +47,9 @@ export default function CadastroPage() {
             Enviamos um link de confirmação para <span className="text-foreground">{email}</span>. Clique nele para
             ativar sua conta e depois volte para fazer login.
           </p>
-          <a href="/login" className="inline-block mt-2 text-sm text-accent hover:underline">
+          <Link href="/login" className="inline-block mt-2 text-sm text-accent hover:underline">
             Ir para o login
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -61,7 +62,7 @@ export default function CadastroPage() {
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-strong text-[#06231a]">
             <IconFlame className="h-5 w-5" />
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight gradient-text">Criar conta</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Criar conta</h1>
           <p className="text-sm text-muted">Cada pessoa tem seu próprio histórico e dieta</p>
         </div>
 
@@ -91,9 +92,9 @@ export default function CadastroPage() {
 
         <p className="text-center text-sm text-muted">
           Já tem conta?{" "}
-          <a href="/login" className="text-accent hover:underline">
+          <Link href="/login" className="text-accent hover:underline">
             Entrar
-          </a>
+          </Link>
         </p>
       </div>
     </div>

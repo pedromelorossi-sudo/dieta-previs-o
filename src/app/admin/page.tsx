@@ -35,7 +35,7 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Painel de administrador</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Painel de administrador</h1>
         <p className="text-sm text-muted mt-2">
           Evolução de todos os usuários — visão somente leitura, ninguém além de você tem acesso aos dados dos
           outros.

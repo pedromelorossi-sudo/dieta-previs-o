@@ -866,7 +866,7 @@ export default function PrevisaoIaPage() {
             {ANGLES.map(({ key, label, required }) => (
               <div key={key}>
                 <label className="block cursor-pointer">
-                  <div className="h-28 w-full rounded-lg border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden hover:border-accent/40 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200">
+                  <div className="h-28 w-full rounded-lg border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden transition-colors duration-150 hover:border-accent/50 hover:bg-surface-raised/70">
                     {previews[key] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={previews[key]} alt={label} className="h-full w-full object-cover" />

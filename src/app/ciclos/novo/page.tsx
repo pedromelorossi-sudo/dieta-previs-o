@@ -65,7 +65,7 @@ export default function NovoCicloPage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Registrar ciclo real</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Registrar ciclo real</h1>
         <p className="text-sm text-muted mt-2">
           Quando a prescrição real da consultoria chegar, registre aqui para atualizar o histórico e as regras.
         </p>

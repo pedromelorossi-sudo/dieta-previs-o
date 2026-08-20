@@ -83,7 +83,7 @@ export default function EstimarPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Estimar dieta inicial</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Estimar dieta inicial</h1>
         <p className="text-sm text-muted mt-2">
           Sem histórico de ciclos? Estime um ponto de partida a partir do peso, altura e %BF — o algoritmo decide
           entre cutting, normocalórico ou bulking e sugere os macros.
@@ -140,7 +140,7 @@ export default function EstimarPage() {
             <StatCard label="TDEE estimado" value={`${fmt(result.tdee, 0)} kcal`} hint="gasto total diário" />
           </div>
 
-          <div className="card-glow p-6">
+          <div className="card p-6">
             <div className="flex items-center gap-2 mb-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
@@ -194,7 +194,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint: 
   return (
     <div className="card p-4">
       <div className="text-xs text-muted">{label}</div>
-      <div className="mt-1.5 text-lg font-semibold tracking-tight">{value}</div>
+      <div className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums">{value}</div>
       <div className="mt-1 text-[10px] text-muted">{hint}</div>
     </div>
   );
@@ -207,7 +207,7 @@ function MacroStat({ icon, label, value, sub }: { icon: React.ReactNode; label: 
         <span className="text-accent">{icon}</span>
         {label}
       </div>
-      <div className="mt-1.5 font-semibold text-lg">{value}</div>
+      <div className="mt-1.5 font-semibold text-lg tabular-nums">{value}</div>
       <div className="text-[11px] text-muted mt-0.5">{sub}</div>
     </div>
   );

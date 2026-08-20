@@ -84,7 +84,7 @@ export default function FotosPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10 space-y-10">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Fotos de progresso</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Fotos de progresso</h1>
         <p className="text-sm text-muted mt-2">
           Anexe uma foto por data para comparar sua evolução visualmente. O %BF é calculado pelo método da Marinha
           dos EUA a partir de medidas de circunferência — não por análise da imagem.

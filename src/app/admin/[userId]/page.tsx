@@ -96,7 +96,7 @@ export default function AdminUserDetailPage() {
         <Link href="/admin" className="text-sm text-accent hover:underline">
           ← Todos os usuários
         </Link>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text mt-2">{name ?? "…"}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight mt-2">{name ?? "…"}</h1>
         <p className="text-sm text-muted mt-1">
           Histórico e fotos são somente leitura. Dietas e comentários você pode editar como admin.
         </p>

@@ -32,7 +32,7 @@ export default function AnalisePage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Análise do Claude</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Análise do Claude</h1>
         <p className="text-sm text-muted mt-2">
           Passa seu histórico de ciclos, última previsão, preferências e fotos de progresso para o Claude avaliar —
           o julgamento qualitativo que o algoritmo, por si só, não tem: adesão, tendência, consistência entre
@@ -58,7 +58,7 @@ export default function AnalisePage() {
       )}
 
       {analysis && (
-        <div className="card-glow p-6">
+        <div className="card p-6">
           <div className="flex items-center gap-2 mb-4">
             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
               <IconFlame className="h-3.5 w-3.5" />

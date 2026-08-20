@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cycle, GainComposition } from "@/lib/types";
 import { loadCycles } from "@/lib/storage";
@@ -86,13 +87,13 @@ export default function PrevisaoPage() {
       <div className="mx-auto max-w-3xl px-6 py-16">
         <p className="text-muted">
           Nenhum ciclo no histórico ainda.{" "}
-          <a href="/previsao-ia" className="text-accent hover:underline">
+          <Link href="/previsao-ia" className="text-accent hover:underline">
             Estime uma dieta inicial
-          </a>{" "}
+          </Link>{" "}
           pelo peso, altura e %BF, ou{" "}
-          <a href="/ciclos/novo" className="text-accent hover:underline">
+          <Link href="/ciclos/novo" className="text-accent hover:underline">
             registre o primeiro ciclo
-          </a>{" "}
+          </Link>{" "}
           antes de gerar uma previsão baseada em histórico.
         </p>
       </div>
@@ -102,7 +103,7 @@ export default function PrevisaoPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text">Nova previsão</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Nova previsão</h1>
         <p className="text-sm text-muted mt-2">
           Baseado no último ciclo registrado ({fmtDate(last.date)}: {fmt(last.weightKg)} kg,{" "}
           {fmt(last.kcal, 0)} kcal).
@@ -221,7 +222,7 @@ export default function PrevisaoPage() {
             />
           </div>
 
-          <div className="card-glow p-6">
+          <div className="card p-6">
             <h2 className="text-sm font-semibold mb-5 flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
@@ -258,9 +259,9 @@ export default function PrevisaoPage() {
             </button>
             <p className="text-xs text-muted leading-relaxed">
               Anota a previsão antes da consulta real, para comparar depois em{" "}
-              <a href="/ciclos/novo" className="text-accent hover:underline">
+              <Link href="/ciclos/novo" className="text-accent hover:underline">
                 Registrar ciclo
-              </a>
+              </Link>
               .
             </p>
           </div>
@@ -317,7 +318,7 @@ function MacroCard({
         <span className="text-accent">{icon}</span>
         {label}
       </div>
-      <div className="mt-1.5 font-semibold text-lg">
+      <div className="mt-1.5 font-semibold text-lg tabular-nums">
         {fmt(range.min, decimals)}–{fmt(range.max, decimals)}
         <span className="text-muted font-normal text-xs"> {suffix}</span>
       </div>

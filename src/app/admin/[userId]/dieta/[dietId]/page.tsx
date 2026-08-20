@@ -97,7 +97,7 @@ export default function AdminEditDietPage() {
         <a href={`/admin/${params.userId}`} className="text-sm text-accent hover:underline">
           ← Voltar pro usuário
         </a>
-        <h1 className="text-3xl font-semibold tracking-tight gradient-text mt-2">Editando: {diet.name}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight mt-2">Editando: {diet.name}</h1>
         <p className="text-sm text-muted mt-1">Como administrador, as mudanças aqui afetam a dieta real do usuário.</p>
       </div>
 

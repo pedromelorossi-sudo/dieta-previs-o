@@ -31,11 +31,18 @@ forma; variam só nos arquétipos de componente.
   Escolhida porque o conteúdo real da tela *é* um número: kcal do ciclo, peso,
   %BF. Regra da macroestrutura: a figura nunca aparece sozinha — vem sempre
   emparelhada com uma linha em palavras que a completa.
-- **Páginas de formulário** (`/previsao-ia`, `/perfil/questionario`,
-  `/ciclos/novo`, `/estimar`) — **14 Narrative Workflow.** Etapas numeradas
-  contando o processo em ordem. Não é imposição: o formulário de previsão já é
-  numerado ("1. Fotos… 5. Parâmetros"), então a macroestrutura formaliza uma
-  estrutura que o app já tinha.
+- **Páginas de sequência** (`/previsao-ia`) — **14 Narrative Workflow.** Etapas
+  numeradas contando o processo em ordem. Não é imposição: o formulário de
+  previsão já era numerado ("1. Informações básicas… 5. Parâmetros"), então a
+  macroestrutura formaliza uma estrutura que o app já tinha.
+
+  > **Correção de 2026-08-20.** A primeira versão deste arquivo colocava
+  > `/ciclos/novo`, `/estimar`, `/dieta/novo` e `/perfil/questionario` nesta
+  > família. Ao abrir os arquivos, nenhum deles tem sequência: são formulários de
+  > **um momento só** — a pessoa preenche e envia. A própria macroestrutura avisa
+  > *"avoid for tools that work in one moment; Narrative Workflow needs a real
+  > sequence"*. Numerá-los seria inventar um processo que não existe. Eles ficam
+  > sem macroestrutura própria e seguem apenas as regras compartilhadas abaixo.
 - **Páginas de listagem** (`/fotos`, `/treino`, `/admin`) — **13 Index-First.**
   A página É a lista. Sem herói, sem narrativa.
 
