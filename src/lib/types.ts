@@ -11,6 +11,11 @@ export interface Cycle {
   date: string; // ISO yyyy-mm-dd
   weightKg: number;
   bodyFatPercent: number | null;
+  /** %BF vindo de exame (DEXA, bioimpedância…). Quando existe, foi ELE que
+   * entrou no cálculo do ciclo — `bodyFatPercent` guarda o valor usado, este
+   * guarda a procedência. */
+  bfMedidoPercent?: number | null;
+  bfMedidoMetodo?: string | null;
   kcal: number;
   proteinG: number;
   fatG: number;

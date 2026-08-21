@@ -69,6 +69,11 @@ interface RequestBody {
   otherSportMinutesPerSession?: number;
   otherSportTalkTest?: TalkTestIntensity;
   currentWeightKg: number;
+  /** %BF medido em exame (DEXA, bioimpedância, adipometria…). Quando presente,
+   * é ELE que entra no cálculo — mas o Claude continua estimando pela foto, e as
+   * duas leituras são confrontadas para aferir a estimativa visual. */
+  bfMedidoPercent?: number;
+  bfMedidoMetodo?: MetodoMedicaoBf;
   date: string;
   weeksToNextConsult: number;
   currentIntakeKcal?: number;
@@ -261,6 +266,8 @@ function evolutionImageBlock(prev: PreviousPhoto | null): Anthropic.ContentBlock
     { type: "image", source: { type: "base64", media_type: prev.mediaType as "image/jpeg", data: prev.base64 } },
   ];
 }
+
+import { aferirLeituraVisual, analisarTendencia, type MetodoMedicaoBf } from "@/lib/bfMedido";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -664,7 +671,7 @@ ${VISUAL_BF_PROTOCOL}`,
 
   const { data: auditRows, error: auditSelectError } = await supabase
     .from("prediction_audit")
-    .select("date,formula_tdee,empirical_tdee,diet_clean,training_clean,bf_percent_visual,bf_reasoning,evolution_note,plano_projetado")
+    .select("date,formula_tdee,empirical_tdee,diet_clean,training_clean,bf_percent_visual,bf_reasoning,evolution_note,plano_projetado,bf_medido_percent,bf_medido_metodo,bf_erro_pp")
     .eq("user_id", user.id)
     .order("date", { ascending: true });
 
@@ -1016,7 +1023,37 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       { status: 422 }
     );
   }
-  const bfPercentVisual = bfPercentVisualRaw;
+  /* O valor MEDIDO manda no cálculo; o estimado vira aferição.
+   *
+   * A ordem importa: a estimativa visual é feita ANTES e sem conhecer o exame —
+   * se o Claude soubesse do valor medido, a comparação não valeria nada, porque
+   * ele tenderia a concordar. O prompt de visão não recebe `bfMedidoPercent`. */
+  const bfMedido = assertFiniteBf(body.bfMedidoPercent ?? null);
+  const metodoMedicao = body.bfMedidoMetodo ?? null;
+  const afericao =
+    bfMedido != null && metodoMedicao != null
+      ? aferirLeituraVisual(bfPercentVisualRaw, bfMedido, metodoMedicao)
+      : null;
+
+  const bfPercentVisual = bfMedido ?? bfPercentVisualRaw;
+
+  /* Tendência histórica da leitura visual: só as auditorias que TÊM exame
+     entram, mais a aferição deste ciclo. Dois pontos já começam a separar viés
+     de acaso — um só, não. */
+  const afericoesAnteriores = (auditRows ?? [])
+    .filter((r) => r.bf_medido_percent != null && r.bf_percent_visual != null && r.bf_erro_pp != null)
+    .map((r) => ({
+      data: r.date as string,
+      estimado: Number(r.bf_percent_visual),
+      medido: Number(r.bf_medido_percent),
+      metodo: (r.bf_medido_metodo ?? "outro") as MetodoMedicaoBf,
+      erroPp: Number(r.bf_erro_pp),
+    }));
+  const tendenciaBfVisual = analisarTendencia(
+    afericao
+      ? [...afericoesAnteriores, { data: date, estimado: afericao.estimado, medido: afericao.medido, metodo: afericao.metodo, erroPp: afericao.erroPp }]
+      : afericoesAnteriores
+  );
   const gainComposition: GainComposition = gainCompositionEarly;
 
   // daqui pra baixo é tudo determinístico — o Claude só decidiu %BF e composição do ganho acima.
@@ -1241,8 +1278,17 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     date,
     formula_tdee: shadowFormulaComp.tdee,
     empirical_tdee: empiricalTdeeMid,
-    bf_percent_visual: bfPercentVisual,
+    /* SEMPRE a estimativa da foto, nunca o valor medido.
+     *
+     * `bfPercentVisual` passa a valer o MEDIDO quando existe exame — usar essa
+     * variável aqui gravaria o valor de referência na coluna que existe para
+     * auditar a estimativa, e a aferição passaria a comparar o exame consigo
+     * mesmo, mostrando erro zero para sempre. */
+    bf_percent_visual: bfPercentVisualRaw,
     bf_confidence: vision.bfConfidence,
+    bf_medido_percent: bfMedido,
+    bf_medido_metodo: metodoMedicao,
+    bf_erro_pp: afericao?.erroPp ?? null,
     gain_composition: gainComposition,
     weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
     diet_clean: dietClean,
@@ -1278,6 +1324,11 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     bfPercentVisual,
     bfConfidence: vision.bfConfidence,
     bfReasoning: vision.bfReasoning,
+    /* Aferição da leitura visual contra o exame, quando houve exame. `null`
+       quando não houve — a tela decide se mostra o bloco de comparação. */
+    afericaoBf: afericao,
+    /* Tendência acumulada: com dois ou mais exames, distingue viés de ruído. */
+    tendenciaBf: tendenciaBfVisual,
     evolutionNote: vision.evolutionNote || null,
     recommendedKcal,
     recommendedProteinG,

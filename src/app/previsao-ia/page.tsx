@@ -76,6 +76,15 @@ interface PredictionResponse {
   bfPercentVisual: number;
   bfConfidence: "baixa" | "media" | "alta";
   bfReasoning: string;
+  afericaoBf: {
+    estimado: number;
+    medido: number;
+    metodo: MetodoMedicaoBf;
+    erroPp: number;
+    dentroDaMargem: boolean;
+    veredito: string;
+  } | null;
+  tendenciaBf: { n: number; viesPp: number; erroMedioAbsPp: number; diagnostico: string } | null;
   evolutionNote: string | null;
   strategy: "cutting" | "normocalorico" | "bulking";
   strategyLabel: string;
@@ -209,6 +218,8 @@ interface PredictionResponse {
 
 import { ReadingPage, PageHero, FormRow } from "@/components/apple";
 
+import { METODO_MEDICAO_LABEL, ERRO_TIPICO_PP, type MetodoMedicaoBf } from "@/lib/bfMedido";
+
 export default function PrevisaoIaPage() {
   const router = useRouter();
   const { ready, user } = useAuth();
@@ -302,6 +313,10 @@ export default function PrevisaoIaPage() {
 
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState(todayISO());
+  /* %BF medido por exame — opcional. Vazio quer dizer "não fiz", e aí o app
+     segue estimando por foto como sempre fez. */
+  const [bfMedidoMetodo, setBfMedidoMetodo] = useState<MetodoMedicaoBf | "">("");
+  const [bfMedidoPercent, setBfMedidoPercent] = useState("");
   const [weeks, setWeeks] = useState("4");
 
   const [loading, setLoading] = useState(false);
@@ -426,6 +441,11 @@ export default function PrevisaoIaPage() {
             hasOtherSport === "sim" && otherSportMinutesPerSession ? parseFloat(otherSportMinutesPerSession) : undefined,
           otherSportTalkTest: hasOtherSport === "sim" ? otherSportTalkTest || undefined : undefined,
           currentWeightKg: parseFloat(weight),
+          // só envia quando os DOIS estão preenchidos — método sem número, ou
+          // número sem método, não permite aferir nada
+          ...(bfMedidoMetodo && bfMedidoPercent
+            ? { bfMedidoMetodo, bfMedidoPercent: parseFloat(bfMedidoPercent) }
+            : {}),
           date,
           weeksToNextConsult: parseFloat(weeks),
           currentIntakeKcal: currentIntakeKcal ? parseFloat(currentIntakeKcal) : undefined,
@@ -607,6 +627,45 @@ export default function PrevisaoIaPage() {
             <Field label="Data da pesagem">
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
             </Field>
+          </div>
+
+          {/* %BF MEDIDO POR EXAME.
+              Opcional. Quando preenchido, é ele que entra no cálculo — mas o
+              Claude continua estimando pela foto e as duas leituras são
+              confrontadas, para saber se a estimativa visual está calibrada. */}
+          <div className="panel mt-4">
+            <FormRow
+              label="Fez exame de composição corporal?"
+              hint="Opcional. Com exame, o cálculo usa o valor medido — e a estimativa por foto vira aferição."
+            >
+              <select
+                value={bfMedidoMetodo}
+                onChange={(e) => setBfMedidoMetodo(e.target.value as MetodoMedicaoBf | "")}
+                className="input"
+              >
+                <option value="">Não fiz</option>
+                {(Object.keys(METODO_MEDICAO_LABEL) as MetodoMedicaoBf[]).map((m) => (
+                  <option key={m} value={m}>
+                    {METODO_MEDICAO_LABEL[m]}
+                  </option>
+                ))}
+              </select>
+            </FormRow>
+            {bfMedidoMetodo && (
+              <FormRow
+                label="Gordura corporal medida"
+                hint={`Percentual do exame. Margem típica do método: ~${ERRO_TIPICO_PP[bfMedidoMetodo]} pontos.`}
+              >
+                <input
+                  type="number"
+                  step="0.1"
+                  value={bfMedidoPercent}
+                  onChange={(e) => setBfMedidoPercent(e.target.value)}
+                  className="input"
+                  placeholder="14.2"
+                />
+              </FormRow>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 mt-4">
@@ -1177,6 +1236,35 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
               <span className="ml-2 text-xs font-normal text-muted">confiança {result.bfConfidence}</span>
             </div>
             <p className="text-sm text-muted mt-2 leading-relaxed">{result.bfReasoning}</p>
+
+            {/* AFERIÇÃO. Aparece só quando houve exame. O ponto do bloco não é
+                mostrar quem "ganhou", e sim registrar se a estimativa por foto
+                está calibrada — por isso o veredito fala de margem do método, e
+                a tendência separa viés de ruído. */}
+            {result.afericaoBf && (
+              <div className="mt-4 rounded-[12px] bg-surface-raised p-4">
+                <p className="text-[15px] font-semibold">Estimativa por foto × exame</p>
+                <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[14px] tabular-nums">
+                  <span>
+                    <span className="text-neutral">Estimado:</span> {fmt(result.afericaoBf.estimado, 1)}%
+                  </span>
+                  <span>
+                    <span className="text-neutral">{METODO_MEDICAO_LABEL[result.afericaoBf.metodo]}:</span>{" "}
+                    {fmt(result.afericaoBf.medido, 1)}%
+                  </span>
+                  <span className={result.afericaoBf.dentroDaMargem ? "text-accent" : "text-warn"}>
+                    {result.afericaoBf.erroPp > 0 ? "+" : ""}
+                    {fmt(result.afericaoBf.erroPp, 1)} p.p.
+                  </span>
+                </div>
+                <p className="mt-2 text-[13.5px] leading-relaxed text-muted">{result.afericaoBf.veredito}</p>
+                {result.tendenciaBf && result.tendenciaBf.n > 1 && (
+                  <p className="mt-2 border-t border-border pt-2 text-[13.5px] leading-relaxed text-muted">
+                    {result.tendenciaBf.diagnostico}
+                  </p>
+                )}
+              </div>
+            )}
             {result.activityLevelDisplay && (
               <p className="text-xs text-muted mt-3 border-t border-border pt-3">
                 Nível de atividade calculado a partir do seu gasto real (NEAT + treino):{" "}

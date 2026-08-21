@@ -6,6 +6,8 @@ interface CycleRow {
   date: string;
   weight_kg: number;
   body_fat_percent: number | null;
+  bf_medido_percent: number | null;
+  bf_medido_metodo: string | null;
   kcal: number;
   protein_g: number;
   fat_g: number;
@@ -22,6 +24,8 @@ function rowToCycle(row: CycleRow): Cycle {
     date: row.date,
     weightKg: Number(row.weight_kg),
     bodyFatPercent: row.body_fat_percent != null ? Number(row.body_fat_percent) : null,
+    bfMedidoPercent: row.bf_medido_percent != null ? Number(row.bf_medido_percent) : null,
+    bfMedidoMetodo: row.bf_medido_metodo ?? null,
     kcal: Number(row.kcal),
     proteinG: Number(row.protein_g),
     fatG: Number(row.fat_g),
@@ -53,6 +57,8 @@ export async function addCycle(cycle: Cycle): Promise<void> {
     date: cycle.date,
     weight_kg: cycle.weightKg,
     body_fat_percent: cycle.bodyFatPercent,
+    bf_medido_percent: cycle.bfMedidoPercent ?? null,
+    bf_medido_metodo: cycle.bfMedidoMetodo ?? null,
     kcal: cycle.kcal,
     protein_g: cycle.proteinG,
     fat_g: cycle.fatG,

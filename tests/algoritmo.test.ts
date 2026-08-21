@@ -12,6 +12,7 @@ import { compareVolumeToTarget, VOLUME_LANDMARKS, landmarkFor } from "../src/lib
 import { confrontarPlano } from "../src/lib/planoDeFases";
 import { suggestLoadProgression } from "../src/lib/trainingPeriodization";
 import { exerciseById } from "../src/lib/exerciseLibrary";
+import { aferirLeituraVisual, analisarTendencia } from "../src/lib/bfMedido";
 import { computeTdeeCalibration } from "../src/lib/calibration";
 import type { Cycle } from "../src/lib/types";
 
@@ -617,4 +618,67 @@ test("PPL: ponto fraco recebe MAIS exercícios do que o mesmo grupo sem priorida
     contaBiceps(comPrioridade) > contaBiceps(base),
     `prioridade deveria somar exercícios de bíceps (sem: ${contaBiceps(base)}, com: ${contaBiceps(comPrioridade)})`
   );
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * %BF MEDIDO POR EXAME — e a aferição da leitura visual contra ele
+ * Pedido de 2026-08-21: se a pessoa tem exame, usa o valor medido; mas a IA
+ * continua estimando, e as duas leituras são confrontadas para saber se a
+ * estimativa visual está calibrada.
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+test("BF: erro dentro da imprecisão do método não é tratado como contradição", () => {
+  // DEXA tem ~1,5 p.p. de erro típico; 1 p.p. de diferença está dentro disso
+  const a = aferirLeituraVisual(15, 14, "dexa");
+  assert.equal(a.erroPp, 1);
+  assert.ok(a.dentroDaMargem, "1 p.p. deveria caber na margem do DEXA");
+  assert.match(a.veredito, /não se contradizem/);
+});
+
+test("BF: erro acima da margem do método é sinalizado", () => {
+  const a = aferirLeituraVisual(20, 14, "dexa");
+  assert.equal(a.erroPp, 6);
+  assert.ok(!a.dentroDaMargem);
+  assert.match(a.veredito, /acima da margem típica/);
+});
+
+test("BF: a margem depende do método — bioimpedância tolera mais que DEXA", () => {
+  const comDexa = aferirLeituraVisual(18, 14, "dexa");
+  const comBio = aferirLeituraVisual(18, 14, "bioimpedancia");
+  assert.ok(!comDexa.dentroDaMargem, "4 p.p. estoura a margem do DEXA");
+  assert.ok(comBio.dentroDaMargem, "4 p.p. cabe na margem da bioimpedância");
+});
+
+test("BF: o sinal do erro distingue superestimar de subestimar", () => {
+  assert.match(aferirLeituraVisual(20, 14, "dexa").veredito, /superestimou/);
+  assert.match(aferirLeituraVisual(10, 14, "dexa").veredito, /subestimou/);
+});
+
+test("BF: um exame só não afirma viés", () => {
+  const t = analisarTendencia([{ data: "2026-01-01", estimado: 18, medido: 14, metodo: "dexa", erroPp: 4 }]);
+  assert.equal(t?.n, 1);
+  assert.match(t!.diagnostico, /não distingue viés de acaso/);
+});
+
+test("BF: erros que se cancelam são lidos como ruído, não viés", () => {
+  const t = analisarTendencia([
+    { data: "2026-01-01", estimado: 16, medido: 14, metodo: "dexa", erroPp: 2 },
+    { data: "2026-03-01", estimado: 13, medido: 15, metodo: "dexa", erroPp: -2 },
+    { data: "2026-05-01", estimado: 15, medido: 15, metodo: "dexa", erroPp: 0 },
+  ]);
+  assert.equal(t?.viesPp, 0);
+  assert.match(t!.diagnostico, /Sem viés aparente/);
+  // dispersão continua sendo reportada mesmo sem viés
+  assert.ok(t!.erroMedioAbsPp > 0, "erro absoluto médio não pode sumir quando o viés zera");
+});
+
+test("BF: erro sempre no mesmo sentido é diagnosticado como viés corrigível", () => {
+  const t = analisarTendencia([
+    { data: "2026-01-01", estimado: 18, medido: 14, metodo: "dexa", erroPp: 4 },
+    { data: "2026-03-01", estimado: 17, medido: 14, metodo: "dexa", erroPp: 3 },
+    { data: "2026-05-01", estimado: 19, medido: 15, metodo: "dexa", erroPp: 4 },
+  ]);
+  assert.ok(t!.viesPp > 3, `viés deveria ser ~3,7, veio ${t!.viesPp}`);
+  assert.match(t!.diagnostico, /erra consistentemente para cima/);
+  assert.match(t!.diagnostico, /corrigível/);
 });

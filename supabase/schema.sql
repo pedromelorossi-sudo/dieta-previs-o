@@ -564,3 +564,28 @@ create policy "profiles: update own or admin" on public.profiles
   for update using (auth.uid() = id or public.is_admin());
 
 notify pgrst, 'reload schema';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- %BF MEDIDO POR EXAME  (2026-08-21)
+--
+-- Quem fez DEXA, bioimpedância ou adipometria tem um número melhor que a
+-- estimativa por foto, e usar a estimativa nesse caso é jogar informação fora.
+-- Mas o Claude CONTINUA estimando mesmo assim, e as duas leituras ficam
+-- gravadas lado a lado: cada exame vira um ponto de aferição da leitura visual,
+-- do mesmo jeito que `prediction_audit` já confronta TDEE previsto × realizado.
+--
+-- Sem guardar as duas, não há como saber se a estimativa por foto tem viés
+-- (corrigível) ou só ruído (não corrigível).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+alter table public.cycles add column if not exists bf_medido_percent numeric
+  check (bf_medido_percent is null or (bf_medido_percent > 0 and bf_medido_percent < 70));
+alter table public.cycles add column if not exists bf_medido_metodo text
+  check (bf_medido_metodo is null or bf_medido_metodo in ('dexa','bioimpedancia','adipometria','ultrassom','outro'));
+
+alter table public.prediction_audit add column if not exists bf_medido_percent numeric;
+alter table public.prediction_audit add column if not exists bf_medido_metodo text;
+-- erro com SINAL (estimado − medido): o sinal é o que distingue viés de ruído
+alter table public.prediction_audit add column if not exists bf_erro_pp numeric;
+
+notify pgrst, 'reload schema';
