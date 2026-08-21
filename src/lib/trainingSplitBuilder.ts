@@ -577,7 +577,11 @@ const MAX_AXIAIS_PESADOS_POR_SESSAO = 1;
  * resolve de verdade: mais dias de treino. */
 const MAX_SETS_PER_MUSCLE_PER_SESSION = 8;
 
-const MAX_SETS_PER_EXERCISE = 5;
+/* Quatro, não cinco. Consolidar as séries em menos exercícios (para a sessão não
+ * virar dez estações) reintroduziu blocos de 5× — e cinco séries seguidas do
+ * mesmo movimento a RIR 1 são limitadas por fadiga local, não por estímulo. Com
+ * o teto em 4 as duas coisas convivem: sessão enxuta E bloco treinável. */
+const MAX_SETS_PER_EXERCISE = 4;
 const MAX_EXERCISES_PER_MUSCLE_PER_DAY = 2;
 const MAX_EXERCISES_PER_PRIORITY_MUSCLE_PER_DAY = 3;
 
@@ -660,7 +664,29 @@ function pickExercisesForMuscle(
    * por estímulo. Três é o valor que o próprio comentário da prioridade já
    * defendia — não havia razão para o resto ficar em cinco. */
   const alvoSeriesPorExercicio = 3;
-  const numExercises = Math.max(1, Math.min(rotated.length, maxExercises, Math.ceil(setsNeeded / alvoSeriesPorExercicio)));
+  /* CONSOLIDA quem não é ponto fraco, ESPALHA quem é.
+   *
+   * Com `ceil` para todos, um grupo com 4 séries no dia virava dois exercícios
+   * de 2 — e uma sessão com 5 grupos saía com 9-10 estações para 21 séries,
+   * 2,3 por exercício. Tempo de montagem e deslocamento dominava o treino, e
+   * duas séries de um movimento não constroem quase nada.
+   *
+   * `floor` consolida: 4 séries viram um exercício de 4, 6 viram dois de 3. O
+   * ponto fraco continua no `ceil`, porque para ele mais ângulos É o objetivo —
+   * é a mesma assimetria que faz a prioridade valer alguma coisa. */
+  const numExercises = Math.max(
+    1,
+    Math.min(
+      rotated.length,
+      maxExercises,
+      /* Ponto fraco divide por 3 (mais exercícios, mais ângulos); o resto
+       * divide por 4 (menos estações, blocos maiores). `ceil` nos dois, senão
+       * um grupo com 5 séries no dia caía num bloco único de 5. */
+      isPriority
+        ? Math.ceil(setsNeeded / alvoSeriesPorExercicio)
+        : Math.ceil(setsNeeded / MAX_SETS_PER_EXERCISE)
+    )
+  );
 
   // Diversidade de padrão: escolhe no máximo um exercício por família de movimento antes de aceitar um
   // segundo da mesma família. Sem isso a ordenação "compostos primeiro" produzia Supino Inclinado 15° +
