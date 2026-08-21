@@ -1139,7 +1139,24 @@ export function buildSplit(
       }
       items.push(...novos);
     }
-    return { label: day.label, items };
+
+    /* COMPOSTO ANTES DE ISOLADO, dentro da sessão.
+     *
+     * A ordenação por prioridade acontece por GRUPO, e isso colocava a elevação
+     * lateral (isolado de ombro, o ponto fraco) antes do supino inclinado
+     * (composto de peito) — pré-fatigando o deltóide exatamente para o supino.
+     * A regra de treinar o ponto fraco fresco continua valendo; ela só passa a
+     * valer DENTRO da classe de movimento. O composto do grupo prioritário
+     * segue abrindo a sessão; o isolado dele espera todos os compostos.
+     *
+     * `sort` estável: a ordem de prioridade entre grupos é preservada dentro de
+     * cada classe. */
+    const ordenados = items
+      .map((it, ordem) => ({ it, ordem, isolado: exerciseById(it.exerciseId)?.pattern === "isolado" ? 1 : 0 }))
+      .sort((a, b) => a.isolado - b.isolado || a.ordem - b.ordem)
+      .map((x) => x.it);
+
+    return { label: day.label, items: ordenados };
   });
 }
 

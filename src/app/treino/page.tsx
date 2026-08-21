@@ -45,6 +45,7 @@ function newRow(): DraftRow {
 }
 
 import { GridPage, PageHero, SectionHeading, Panel, FormRow } from "@/components/apple";
+import { ProgramaDaSemana } from "@/components/ProgramaDaSemana";
 
 export default function TreinoPage() {
   const { ready, user } = useAuth();
@@ -183,54 +184,10 @@ export default function TreinoPage() {
       {/* ── O PROGRAMA ──
           Primeira coisa da página, porque é o que a pessoa abre para consultar
           antes de treinar. Antes disto a página começava por contagem de séries
-          por grupamento — informação de auditoria, não de execução. */}
-      {programa && programa.sessions.length > 0 && (
-        <section>
-          <SectionHeading
-            title="Seu programa"
-            desc="Divisão por padrão de movimento. Cada exercício vem com séries, faixa de repetição e quantas repetições deixar na reserva (RIR)."
-          />
-          <div className="space-y-4">
-            {programa.sessions.map((sessao, i) => (
-              <div key={`${sessao.label}-${i}`} className="panel">
-                <div className="panel-row flex items-baseline justify-between gap-4">
-                  <h3 className="text-[17px] font-semibold tracking-[-0.01em]">{sessao.label}</h3>
-                  <span className="shrink-0 text-[13px] tabular-nums text-neutral">
-                    {sessao.items.reduce(
-                      (n, it) => n + it.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset").reduce((k, b) => k + b.sets, 0),
-                      0
-                    )}{" "}
-                    séries efetivas
-                  </span>
-                </div>
-                {sessao.items.map((item, j) => {
-                  const ex = exerciseById(item.exerciseId);
-                  return (
-                    <div key={`${item.exerciseId}-${j}`} className="panel-row">
-                      <div className="flex items-baseline justify-between gap-4">
-                        <span className="text-[15px] font-medium">{ex?.name ?? item.exerciseId}</span>
-                        {ex && (
-                          <span className="shrink-0 text-[13px] text-neutral">{MUSCLE_GROUP_LABEL[ex.primaryMuscle]}</span>
-                        )}
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] tabular-nums text-muted">
-                        {item.blocks.map((b, k) => (
-                          <span key={k}>
-                            <span className="text-neutral">{RESERVE_LABEL[b.reserveType]}</span>{" "}
-                            {b.sets}×{b.repRange}
-                            {b.rirTarget != null && <span className="text-neutral"> · RIR {b.rirTarget}</span>}
-                            {b.loadKg != null && <span className="text-foreground"> · {b.loadKg} kg</span>}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+          por grupamento — informação de auditoria, não de execução.
+          A renderização vive em `ProgramaDaSemana` para poder ser exercitada
+          fora desta página, que exige sessão e dados no Supabase. */}
+      {programa && <ProgramaDaSemana sessions={programa.sessions} />}
 
       {loadError && (
         <Panel>
