@@ -273,12 +273,18 @@ test("T-1: mais dias de treino nunca entregam menos volume", () => {
   }
 });
 
-test("T-2: nenhum grupo treinável fica com zero séries na divisão de 3 dias", () => {
+test("T-2: nenhum grupo com MEV > 0 fica com zero séries na divisão de 3 dias", () => {
   const alvos = computeMuscleTargets([], [], 0, 3, 0);
-  const semExercicio = new Set(["lombar"]); // sem exercício primário no catálogo, por design
+  // Grupos com MEV 0 (antebraço, abdominal, lombar) são opcionais POR DEFINIÇÃO:
+  // "mínimo efetivo zero" quer dizer que o estímulo indireto de outros
+  // movimentos já basta. Exigir volume direto deles contradiz a tabela de
+  // landmarks — e foi o que fazia o antebraço receber MAIS séries que um bíceps
+  // marcado como prioridade, porque começava em fração 0 do ideal e ia sempre
+  // na frente da fila de distribuição.
   for (const alvo of alvos) {
-    if (semExercicio.has(alvo.muscle)) continue;
-    assert.ok(alvo.weeklySets > 0, `${alvo.muscle} ficou com zero séries`);
+    const lm = VOLUME_LANDMARKS.find((l) => l.muscle === alvo.muscle)!;
+    if (lm.mev === 0) continue;
+    assert.ok(alvo.weeklySets > 0, `${alvo.muscle} (MEV ${lm.mev}) ficou com zero séries`);
   }
 });
 

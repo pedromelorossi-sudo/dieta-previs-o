@@ -11,6 +11,8 @@ import {
   computeMuscleTargets,
   buildSplit,
   planTrainingPeriodization,
+  ajusteDeFadigaPara,
+  diasEfetivosPara,
   type MuscleAssessmentInput,
 } from "../src/lib/trainingSplitBuilder";
 import { exerciseById, MUSCLE_GROUP_LABEL, type MuscleGroup } from "../src/lib/exerciseLibrary";
@@ -95,7 +97,17 @@ function imprimeCenario(c: Cenario) {
   }
   console.log(`Sinal de adesão: ${c.adesao} · Sinal de recuperação: ${c.recuperacao}`);
 
-  const alvos = computeMuscleTargets(c.leitura, c.prioridade, c.adesao, c.recuperacao === 0 ? c.dias : c.dias, c.recuperacao);
+  /* Mesmo caminho da rota: recuperação ruim concentra a semana em menos
+     sessões e afasta a prescrição da falha. */
+  const diasEfetivos = diasEfetivosPara(c.dias, c.recuperacao);
+  const fadiga = ajusteDeFadigaPara(c.recuperacao);
+  if (diasEfetivos !== c.dias) {
+    console.log(`\n⚠ Recuperação ruim: a semana foi concentrada de ${c.dias} para ${diasEfetivos} sessões.`);
+  }
+  if (fadiga.rirExtra > 0) {
+    console.log(`⚠ RIR aumentado em ${fadiga.rirExtra} ponto(s)${fadiga.semCargaAxialPesada ? ", e sem agachamento/terra com barra" : ""}.`);
+  }
+  const alvos = computeMuscleTargets(c.leitura, c.prioridade, c.adesao, diasEfetivos, c.recuperacao);
 
   console.log("\n" + linha());
   console.log("META DE VOLUME SEMANAL POR GRUPO (séries efetivas)");
@@ -125,13 +137,13 @@ function imprimeCenario(c: Cenario) {
     );
   }
   const total = alvos.reduce((n, t) => n + t.weeklySets, 0);
-  console.log(`\nTotal semanal: ${total} séries efetivas em ${c.dias} dias (${(total / c.dias).toFixed(1)}/sessão)`);
+  console.log(`\nTotal semanal: ${total} séries efetivas em ${diasEfetivos} dias (${(total / diasEfetivos).toFixed(1)}/sessão)`);
 
   console.log("\n" + linha());
   console.log("PROGRAMA DA SEMANA");
   console.log(linha());
 
-  const sessoes = buildSplit(c.dias, alvos);
+  const sessoes = buildSplit(diasEfetivos, alvos, undefined, fadiga);
   const seriesPorGrupo = new Map<MuscleGroup, number>();
   const exerciciosPorGrupo = new Map<MuscleGroup, Set<string>>();
 

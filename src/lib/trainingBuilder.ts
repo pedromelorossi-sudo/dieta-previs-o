@@ -11,6 +11,11 @@ export interface TrainingBlock {
    * PERGUNTA se a pessoa chegou perto da falha (é critério de "ciclo limpo" da calibração) mas nunca
    * prescrevia o alvo; sem isso a pergunta cobra algo que não foi pedido. */
   rirTarget?: number | null;
+  /** descanso alvo entre séries, em segundos. Existe porque "3×6-10 RIR2" sem
+   * intervalo não é prescrição: a mesma linha vira 9 minutos ou 4 minutos de
+   * sessão dependendo de quem lê, e era o que impedia o próprio teto de séries
+   * por sessão de significar alguma coisa em tempo de academia. */
+  restSeconds?: number | null;
 }
 
 export interface TrainingItem {

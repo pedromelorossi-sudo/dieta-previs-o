@@ -2,6 +2,7 @@ export type MuscleGroup =
   | "peito"
   | "costas"
   | "ombro"
+  | "deltoide_posterior"
   | "biceps"
   | "triceps"
   | "antebraco"
@@ -16,6 +17,7 @@ export const MUSCLE_GROUP_LABEL: Record<MuscleGroup, string> = {
   peito: "Peito",
   costas: "Costas",
   ombro: "Ombro",
+  deltoide_posterior: "Deltoide posterior",
   biceps: "Bíceps",
   triceps: "Tríceps",
   antebraco: "Antebraço",
@@ -64,15 +66,20 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "desenvolvimento-halteres-75", name: "Desenvolvimento com Halteres (75°)", primaryMuscle: "ombro", secondaryMuscles: ["triceps"], pattern: "composto", movementFamily: "desenvolvimento", equipment: "halteres" },
   { id: "elevacao-lateral-halteres", name: "Elevação Lateral com Halteres", primaryMuscle: "ombro", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-lateral", equipment: "halteres" },
   { id: "elevacao-lateral-unilateral-polia-90", name: "Elevação Lateral Unilateral na Polia (90°)", primaryMuscle: "ombro", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-lateral", equipment: "polia", unilateral: true },
-  { id: "crucifixo-inverso-maquina", name: "Crucifixo Inverso Máquina", primaryMuscle: "ombro", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "deltoide-posterior", equipment: "maquina" },
-  { id: "peck-deck-invertido-pronado", name: "Peck Deck Invertido Pegada Pronada", primaryMuscle: "ombro", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "deltoide-posterior", equipment: "maquina" },
+  { id: "crucifixo-inverso-maquina", name: "Crucifixo Inverso Máquina", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "deltoide-posterior", equipment: "maquina" },
+  { id: "peck-deck-invertido-pronado", name: "Peck Deck Invertido Pegada Pronada", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "deltoide-posterior", equipment: "maquina" },
 
   // tríceps
   { id: "triceps-polia-barra-w", name: "Tríceps na Polia Barra W", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-polia", equipment: "polia" },
   { id: "triceps-frances-polia-corda", name: "Tríceps Francês na Polia com Corda", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-overhead", equipment: "polia" },
   { id: "triceps-unilateral-polia-alta-pronada", name: "Tríceps Unilateral na Polia Alta (Pegada Pronada)", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-polia", equipment: "polia", unilateral: true },
   { id: "triceps-frances-halter", name: "Tríceps Francês com Halter", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-acima-cabeca", equipment: "halteres" },
-  { id: "mergulho-banco", name: "Mergulho no Banco", primaryMuscle: "triceps", secondaryMuscles: ["peito", "ombro"], pattern: "composto", movementFamily: "mergulho", equipment: "peso-corporal" },
+  { id: "mergulho-banco", name: "Mergulho no Banco", primaryMuscle: "triceps", secondaryMuscles: ["peito", "ombro"], pattern: "isolado", movementFamily: "mergulho", equipment: "peso-corporal" },
+  // Supino fechado é o composto de tríceps que faltava. Sem ele, o único
+  // "composto" do grupo era o mergulho no banco, e a ordenação composto-primeiro
+  // o prescrevia com 5 séries de 6-10 a RIR 2 — extensão + rotação interna
+  // máxima de ombro sob carga, a pior posição de cápsula anterior da musculação.
+  { id: "supino-fechado-barra", name: "Supino Fechado com Barra", primaryMuscle: "triceps", secondaryMuscles: ["peito", "ombro"], pattern: "composto", movementFamily: "supino-fechado", equipment: "barra" },
 
   // costas
   { id: "puxada-aberta-barra-reta", name: "Puxada Aberta Barra Reta", primaryMuscle: "costas", secondaryMuscles: ["biceps"], pattern: "composto", movementFamily: "puxada-vertical", equipment: "polia" },
@@ -113,6 +120,14 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "panturrilha-unilateral-halter", name: "Panturrilha Unilateral com Halter", primaryMuscle: "panturrilha", secondaryMuscles: [], pattern: "isolado", movementFamily: "panturrilha-unilateral", equipment: "halteres", unilateral: true },
 
   // abdominal
+  // deltoide posterior — separado de "ombro" porque "ombro atrasado" num
+  // fisiculturista quase nunca é anterior: o anterior já recebe ~16 séries
+  // indiretas por semana de todo supino e desenvolvimento. Tratar os três como
+  // um bucket só fazia o algoritmo reforçar justamente a cabeça saturada.
+  { id: "face-pull-polia", name: "Face Pull na Polia", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "face-pull", equipment: "polia" },
+  { id: "rotacao-externa-polia", name: "Rotação Externa na Polia", primaryMuscle: "deltoide_posterior", secondaryMuscles: [], pattern: "isolado", movementFamily: "rotacao-externa", equipment: "polia" },
+  { id: "remada-alta-cotovelo-aberto", name: "Remada Alta com Cotovelo Aberto", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["ombro"], pattern: "composto", movementFamily: "remada-alta", equipment: "halteres" },
+
   { id: "abdominal-banco-declinado", name: "Abdominal no Banco Declinado", primaryMuscle: "abdominal", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-tronco", equipment: "banco" },
   { id: "abdominal-reto-solo", name: "Abdominal Reto Solo", primaryMuscle: "abdominal", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-tronco", equipment: "solo" },
   { id: "abdominal-prancha-isometrica", name: "Abdominal Prancha Isométrica", primaryMuscle: "abdominal", secondaryMuscles: ["lombar"], pattern: "isolado", movementFamily: "isometria-core", equipment: "solo" },
@@ -122,7 +137,12 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   // lombar — o grupo aparecia nos templates Pull e Lower e o catálogo não tinha
   // NENHUM exercício com ele como primário, então a prescrição saía vazia
   { id: "extensao-lombar-banco-45", name: "Extensão Lombar no Banco 45°", primaryMuscle: "lombar", secondaryMuscles: ["gluteo", "posterior_coxa"], pattern: "isolado", movementFamily: "extensao-lombar", equipment: "banco" },
-  { id: "good-morning-barra", name: "Good Morning com Barra", primaryMuscle: "lombar", secondaryMuscles: ["posterior_coxa", "gluteo"], pattern: "composto", movementFamily: "quadril-dominante-barra", equipment: "barra" },
+  // Good Morning saiu do catálogo automático. Ele era o único composto de lombar,
+  // então a ordenação composto-primeiro o escolhia SEMPRE — e como `lombar` é o
+  // último grupo do array do Pull, ele caía depois de puxada, remada e 6 séries
+  // de rosca, com os eretores já cozinhados. Barra alta + flexão de quadril
+  // carregada + coluna pré-fatigada é a pior relação estímulo/risco do catálogo.
+  // Lombar direto agora é só a extensão no banco, que é o movimento seguro.
 ];
 
 export function exerciseById(id: string): Exercise | undefined {

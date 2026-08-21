@@ -16,7 +16,7 @@ import { planejarFases, confrontarPlano, MesProjetado } from "@/lib/planoDeFases
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
 import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, compareVolumeToTarget, VolumeStatus } from "@/lib/trainingVolume";
 import { TrainingLog, LoggedSetEntry } from "@/lib/trainingBuilder";
-import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence } from "@/lib/trainingSplitBuilder";
+import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence, ajusteDeFadigaPara, diasEfetivosPara } from "@/lib/trainingSplitBuilder";
 import { suggestLoadProgression } from "@/lib/trainingPeriodization";
 import { assessDietCleanliness, assessTrainingCleanliness, checkBfConsistency, computeTdeeCalibration, CalibrationAuditRow } from "@/lib/calibration";
 import { prescribeCardio } from "@/lib/cardioPrescription";
@@ -972,14 +972,24 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       loadByExercise.set(exerciseId, suggestion.suggestedLoadKg);
     }
 
+    /* Recuperação ruim não muda só o orçamento: concentra a semana em menos
+       sessões e afasta a prescrição da falha. Cortar volume mantendo RIR 1-2
+       era o pior dos dois mundos — menos estímulo total com a mesma demanda
+       neural e articular por série. Ver `ajusteDeFadigaPara`. */
+    const diasEfetivos = diasEfetivosPara(daysPerWeek, recoveryScore);
     muscleTargetsOut = computeMuscleTargets(
       vision.muscleGroupAssessment ?? [],
       prefs?.priority_muscles ?? [],
       trainingAdherenceScore,
-      daysPerWeek,
+      diasEfetivos,
       recoveryScore
     );
-    suggestedTrainingProgram = buildSplit(daysPerWeek, muscleTargetsOut, loadByExercise);
+    suggestedTrainingProgram = buildSplit(
+      diasEfetivos,
+      muscleTargetsOut,
+      loadByExercise,
+      ajusteDeFadigaPara(recoveryScore)
+    );
 
     // META vs REALIZADO por grupo. Os dois números sempre existiram e nunca se encontravam: adesão
     // baixa a um grupo específico ficava invisível no agregado de sessões completadas, que não

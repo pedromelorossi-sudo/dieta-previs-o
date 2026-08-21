@@ -36,7 +36,10 @@ export interface VolumeLandmark {
 export const VOLUME_LANDMARKS: VolumeLandmark[] = [
   { muscle: "peito", mev: 8, mav: 14, mrv: 22 },
   { muscle: "costas", mev: 10, mav: 16, mrv: 25 },
-  { muscle: "ombro", mev: 8, mav: 16, mrv: 26 },
+  // "Ombro" agora é anterior + medial. O anterior já recebe ~16 séries indiretas
+  // por semana de supino/desenvolvimento, então o MEV direto pode ser menor.
+  { muscle: "ombro", mev: 6, mav: 12, mrv: 20 },
+  { muscle: "deltoide_posterior", mev: 6, mav: 12, mrv: 20 },
   { muscle: "biceps", mev: 6, mav: 12, mrv: 20 },
   { muscle: "triceps", mev: 6, mav: 12, mrv: 20 },
   { muscle: "antebraco", mev: 0, mav: 6, mrv: 16 },
@@ -74,9 +77,26 @@ function isEffective(set: LoggedSet): boolean {
 /** Soma o volume semanal efetivo por grupo muscular a partir dos sets logados + o catálogo de
  * exercícios (pra saber qual grupo cada exercício alvo). Só conta o grupo PRIMÁRIO do exercício — o
  * estímulo em grupos secundários existe mas é indireto/parcial, contá-lo por igual infla o volume real. */
+/** Peso do estímulo INDIRETO na contagem de volume.
+ *
+ * `secondaryMuscles` existia no modelo de dados desde o início e nunca era lido
+ * por ninguém. A consequência aparecia na simulação: um bíceps com 12 séries
+ * diretas recebia mais 14 séries de puxada e remada — todas com bíceps
+ * secundário. Contando indireto a 0,5 isso dá ~19 séries, com o MRV do bíceps
+ * em 20. Ou seja, o grupo que o algoritmo queria priorizar já estava no teto
+ * recuperável, e somar série ali não é ineficaz: é contraproducente, e é
+ * exatamente onde tendinopatia de cotovelo aparece em natural.
+ *
+ * 0,5 e não 1,0 porque o secundário trabalha em amplitude e tensão menores que
+ * o primário no mesmo movimento. É uma ponderação prudente, não medida — mesma
+ * classe de premissa explícita que o resto do arquivo já assume. */
+export const PESO_INDIRETO = 0.5;
+
 export function weeklyVolumeByMuscle(
   loggedSets: LoggedSet[],
-  muscleOf: (exerciseId: string) => MuscleGroup | undefined
+  muscleOf: (exerciseId: string) => MuscleGroup | undefined,
+  /** grupos secundários do exercício — quando informado, entram a `PESO_INDIRETO` */
+  secondaryOf?: (exerciseId: string) => MuscleGroup[]
 ): Map<MuscleGroup, number> {
   const totals = new Map<MuscleGroup, number>();
   for (const set of loggedSets) {
@@ -84,7 +104,13 @@ export function weeklyVolumeByMuscle(
     const muscle = muscleOf(set.exerciseId);
     if (!muscle) continue;
     totals.set(muscle, (totals.get(muscle) ?? 0) + set.sets);
+    for (const sec of secondaryOf?.(set.exerciseId) ?? []) {
+      totals.set(sec, (totals.get(sec) ?? 0) + set.sets * PESO_INDIRETO);
+    }
   }
+  // arredonda no fim: meia série não existe como prescrição, mas a soma
+  // intermediária precisa dela pra não perder o indireto de sessões curtas
+  for (const [m, v] of totals) totals.set(m, Math.round(v * 10) / 10);
   return totals;
 }
 
@@ -133,6 +159,7 @@ const ATROPHY_RATE_PER_WEEK: Record<MuscleGroup, number> = {
   costas: 0.012,
   peito: 0.012,
   ombro: 0.012,
+  deltoide_posterior: 0.012,
   biceps: 0.01,
   triceps: 0.01,
   antebraco: 0.008,
