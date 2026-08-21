@@ -1,5 +1,5 @@
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exercisesByMuscle, exerciseById } from "./exerciseLibrary";
-import { VOLUME_LANDMARKS, landmarkFor } from "./trainingVolume";
+import { VOLUME_LANDMARKS, landmarkFor, PESO_INDIRETO } from "./trainingVolume";
 import { TrainingItem, TrainingSession } from "./trainingBuilder";
 
 export type RelativeDevelopment = "atras_dos_outros" | "proporcional" | "destaque";
@@ -116,6 +116,53 @@ export function diasEfetivosPara(daysPerWeek: number, recoveryScore: number): nu
   return recoveryScore >= 4 ? Math.min(3, clampDays(daysPerWeek)) : clampDays(daysPerWeek);
 }
 
+/* Coeficiente de estímulo INDIRETO entre grupos, derivado do próprio catálogo.
+ *
+ * Para cada grupo P, que fração dos exercícios de P tem M como secundário. Ex:
+ * todas as puxadas e remadas listam bíceps em `secondaryMuscles`, então o
+ * coeficiente costas→bíceps fica perto de 1. Multiplicado pela meta de P e pelo
+ * `PESO_INDIRETO`, dá quanto estímulo M recebe sem que ninguém prescreva uma
+ * série direta para ele.
+ *
+ * Isso existe porque `secondaryMuscles` estava no modelo desde o começo e só
+ * era lido no RELATÓRIO de volume logado, nunca na PRESCRIÇÃO. O efeito
+ * prático: um bíceps com 12 séries diretas mais ~14 séries indiretas de
+ * puxada já encosta no MRV de 20 — e o algoritmo, sem enxergar isso, tratava
+ * "bíceps atrasado" somando mais série direta. Não é ineficaz: é
+ * contraproducente, e é onde tendinopatia de cotovelo aparece em natural.
+ *
+ * O coeficiente é calculado uma vez, não por chamada. */
+const COEF_INDIRETO: Map<MuscleGroup, Map<MuscleGroup, number>> = (() => {
+  const mapa = new Map<MuscleGroup, Map<MuscleGroup, number>>();
+  for (const lm of VOLUME_LANDMARKS) {
+    const doGrupo = exercisesByMuscle(lm.muscle);
+    if (doGrupo.length === 0) continue;
+    const porSecundario = new Map<MuscleGroup, number>();
+    for (const ex of doGrupo) {
+      for (const sec of ex.secondaryMuscles) {
+        porSecundario.set(sec, (porSecundario.get(sec) ?? 0) + 1);
+      }
+    }
+    const fracoes = new Map<MuscleGroup, number>();
+    for (const [sec, n] of porSecundario) fracoes.set(sec, n / doGrupo.length);
+    mapa.set(lm.muscle, fracoes);
+  }
+  return mapa;
+})();
+
+/** Estimativa de séries indiretas por semana que cada grupo recebe, dadas as
+ * metas DIRETAS dos outros. Já ponderada por `PESO_INDIRETO`. */
+export function estimarVolumeIndireto(metasDiretas: Map<MuscleGroup, number>): Map<MuscleGroup, number> {
+  const indireto = new Map<MuscleGroup, number>();
+  for (const [primario, metaP] of metasDiretas) {
+    if (metaP <= 0) continue;
+    for (const [secundario, fracao] of COEF_INDIRETO.get(primario) ?? []) {
+      indireto.set(secundario, (indireto.get(secundario) ?? 0) + metaP * fracao * PESO_INDIRETO);
+    }
+  }
+  return indireto;
+}
+
 export function computeMuscleTargets(
   assessment: MuscleAssessmentInput[] = [],
   priorityMuscles: MuscleGroup[] = [],
@@ -158,6 +205,8 @@ export function computeMuscleTargets(
     ceiling: number;
     ideal: number;
     sets: number;
+    /** séries/semana que este grupo recebe como secundário de outros exercícios */
+    indiretoEstimado?: number;
   }
 
   const slots: Slot[] = VOLUME_LANDMARKS.map((landmark) => {
@@ -308,6 +357,29 @@ export function computeMuscleTargets(
     }
   }
 
+  /* TETO CORRIGIDO PELO ESTÍMULO INDIRETO.
+   *
+   * Duas passadas, porque o cálculo é circular: o indireto depende das metas, e
+   * as metas do indireto. A primeira passada acima já produziu metas diretas
+   * plausíveis; aqui elas servem de base para estimar o indireto e, com ele,
+   * baixar o teto de quem já está saturado. É aproximação declarada, não
+   * medição — mesma classe de premissa do resto do arquivo.
+   *
+   * A regra: `direto + indireto <= MRV`. O piso continua sendo o MEV, porque
+   * estímulo indireto não substitui trabalho direto por completo (amplitude e
+   * tensão menores no secundário — é o próprio motivo de `PESO_INDIRETO` ser
+   * 0,5 e não 1,0). Um grupo saturado indiretamente NÃO recebe mais série
+   * direta; recebe exercício e posição diferentes, que é o que a prioridade já
+   * faz por outro caminho. */
+  const indiretoEstimado = estimarVolumeIndireto(new Map(slots.map((sl) => [sl.landmark.muscle, sl.sets])));
+  for (const sl of slots) {
+    if (sl.sets <= 0) continue;
+    const indireto = indiretoEstimado.get(sl.landmark.muscle) ?? 0;
+    const tetoCorrigido = Math.max(Math.min(sl.landmark.mev, sl.ceiling), Math.round(sl.landmark.mrv - indireto));
+    sl.indiretoEstimado = Math.round(indireto * 10) / 10;
+    sl.sets = Math.min(sl.sets, tetoCorrigido);
+  }
+
   /* Meta abaixo do piso de prescrição vira zero.
    *
    * `pickExercisesForMuscle` não prescreve exercício com menos de 2 séries —
@@ -344,6 +416,8 @@ export function computeMuscleTargets(
       reason = `Prioridade declarada (consultoria) — ${sl.sets} séries/semana, com peso dobrado na disputa pelo orçamento e entrada primeiro na sessão.${
         sl.sets < sl.landmark.mrv ? ` Abaixo do MRV (${sl.landmark.mrv}) porque ${sl.sets >= sl.ceiling ? `a frequência de ${freq}x/semana tem teto de ${sl.ceiling} séries` : "o orçamento semanal não comporta mais"}.` : ""
       }${budgetNote}`;
+    } else if ((sl.indiretoEstimado ?? 0) > 0 && sl.sets + (sl.indiretoEstimado ?? 0) >= sl.landmark.mrv - 0.5) {
+      reason = `${sl.sets} séries diretas/semana. O grupo ainda recebe ~${sl.indiretoEstimado} séries indiretas de outros exercícios (contadas a meio peso), o que soma perto do teto recuperável de ${sl.landmark.mrv}. Somar série direta aqui não acelera nada — o que fecha diferença neste ponto é trocar exercício e posição na sessão, não volume.${budgetNote}`;
     } else if (sl.sets >= sl.landmark.mav) {
       reason = `Meta no MAV (${sl.landmark.mav} séries/semana) — melhor custo-benefício da dose-resposta volume→hipertrofia.${budgetNote}`;
     } else if (sl.assessed && sl.assessed.relativeDevelopment !== "proporcional") {
@@ -593,10 +667,24 @@ function pickExercisesForMuscle(
   // Supino Inclinado 30° no peito, e duas puxadas verticais sem nenhuma remada nas costas.
   const chosen: typeof rotated = [];
   const usedFamilies = new Set<string>();
+
+  /* Quando o grupo leva UM exercício só no dia, ele tem de ser composto.
+   *
+   * O filtro de família da semana bloqueava `supino-inclinado` no Upper, sobrava
+   * um slot, e o primeiro candidato livre era a crucifixo — resultado: peito com
+   * um único movimento de empurrar na semana inteira, e metade do volume dele em
+   * isolamento. Para um fisiculturista isso é um grupo abandonado. Com um slot,
+   * o composto é o que tem melhor retorno por série; a variedade de família
+   * cede, porque repetir padrão é menos grave que não treinar o padrão. */
+  const soUmSlot = numExercises === 1;
+  const temComposto = rotated.some((e) => e.pattern === "composto");
+  const elegivelNoSlotUnico = (ex: (typeof rotated)[number]) => !soUmSlot || !temComposto || ex.pattern === "composto";
+
   // 1ª volta: famílias inéditas NA SEMANA — evita repetir o mesmo movimento nos
   // dois dias em que o grupo aparece (achado 16)
   for (const ex of rotated) {
     if (chosen.length >= numExercises) break;
+    if (!elegivelNoSlotUnico(ex)) continue;
     if (usedFamilies.has(ex.movementFamily) || familiasDaSemana?.has(ex.movementFamily)) continue;
     chosen.push(ex);
     usedFamilies.add(ex.movementFamily);
@@ -604,6 +692,7 @@ function pickExercisesForMuscle(
   // 2ª volta: relaxa a semana, mantém a regra do dia
   for (const ex of rotated) {
     if (chosen.length >= numExercises) break;
+    if (!elegivelNoSlotUnico(ex)) continue;
     if (usedFamilies.has(ex.movementFamily)) continue;
     chosen.push(ex);
     usedFamilies.add(ex.movementFamily);
