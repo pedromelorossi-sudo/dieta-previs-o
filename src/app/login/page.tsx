@@ -32,7 +32,7 @@ export default function LoginPage() {
     <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-start gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-accent text-[color:var(--accent-contrast)]">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-brand-ink text-brand">
             <IconDegrau className="h-[19px] w-[19px]" />
           </span>
           <div className="space-y-1">

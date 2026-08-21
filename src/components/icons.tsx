@@ -1,4 +1,4 @@
-type IconProps = { className?: string };
+type IconProps = { className?: string; style?: React.CSSProperties };
 
 const base = "h-4 w-4";
 
@@ -79,21 +79,51 @@ export function IconCheck({ className = base }: IconProps) {
   );
 }
 
-/* Marca do Degrau — três degraus subindo.
+/* Marca do Degrau — dragão cuspindo fogo.
  *
- * O anterior era um torso de boneco: literal ("físico"), figurativo, e ilegível
- * a 16px. Este é o nome do app desenhado — degrau — e ao mesmo tempo lê como
- * barra subindo, que é o que o app de fato faz: medir o passo de cada ciclo.
+ * Desenhado como BRASÃO em silhueta cheia, não como ilustração de traço: a
+ * marca precisa viver a 15px dentro do chip da nav, e ali qualquer linha fina
+ * fecha e vira mancha. Por isso o desenho tem poucas formas, todas grandes —
+ * cabeça de perfil, um chifre varrido para trás, mandíbula aberta, e o fogo
+ * saindo em três línguas.
  *
- * Três blocos separados, não uma silhueta cheia: cheia, a forma fica ambígua a
- * 15px e lê como um "4". Separados, leem inequivocamente como degraus. Largura
- * igual, altura em passo constante de 4,6 — a geometria é a mensagem. */
-export function IconDegrau({ className = base }: IconProps) {
+ * O fogo usa `--warn` (o token "heat" da skill), que é o único segundo acento
+ * que o sistema autoriza. Em contexto monocromático ele cai para currentColor
+ * com opacidade, então a silhueta continua legível sem depender de cor.
+ */
+/* Marca do Degrau — Hidra de três cabeças, na língua da cerâmica grega de
+ * figura vermelha (terracota sobre preto).
+ *
+ * Desenho original: a referência que o Pedro mandou é arte de banco de imagens,
+ * com marca d'água — copiar ou traçar aquilo seria usar obra de terceiro. O que
+ * se herda dela é o vocabulário (figura vermelha, greca na borda, o motivo da
+ * Hidra), que é estilo e mito, não propriedade de ninguém.
+ *
+ * Construção: pescoços como traço grosso de ponta arredondada, cabeças como
+ * cunhas com a boca aberta em V. Silhueta só — a 15px na nav qualquer detalhe
+ * interno fecha, e o que sobrevive é a forma de três pescoços subindo.
+ *
+ * O mito também assenta no app: cada cabeça cortada volta, e o herói só vence
+ * repetindo o golpe ciclo após ciclo. É literalmente o método do Degrau. */
+export function IconDegrau({ className = base, style }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <rect x="3.4" y="14.2" width="5.2" height="6.4" rx="1.3" />
-      <rect x="9.4" y="9.6" width="5.2" height="11" rx="1.3" />
-      <rect x="15.4" y="5" width="5.2" height="15.6" rx="1.3" />
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style} aria-hidden="true">
+      <g stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" fill="none">
+        <path d="M10.9 19.4C9.7 16 8.2 13.3 6.2 11" />
+        <path d="M12 19.9V7.6" />
+        <path d="M13.1 19.4c1.2-3.4 2.7-6.1 4.7-8.4" />
+      </g>
+      {/* cabeças: cunha com a mandíbula aberta */}
+      <g fill="currentColor">
+        <path d="m6.3 11.2-4.1-1.9 3.1-.3-1.7-2.4 3.9 2.8-1.2 1.8Z" />
+        <path d="M12.1 7.8 9.6 4.1l2.7 1.1.9-2.7 1 4.6-2.1.7Z" />
+        <path d="m17.7 11.2 4.1-1.9-3.1-.3 1.7-2.4-3.9 2.8 1.2 1.8Z" />
+      </g>
+      {/* corpo enrolado na base — dá peso e assenta a figura */}
+      <path
+        fill="currentColor"
+        d="M12 18.2c2.9 0 5.2 1 6.9 3H5.1c1.7-2 4-3 6.9-3Z"
+      />
     </svg>
   );
 }

@@ -54,6 +54,14 @@
   --danger: #d70015; /* vermelho escurecido: sobre branco precisa de 4.5:1 */
   --live: #30d158;
 
+  /* ── marca ──
+     Terracota sobre quase-preto: a paleta da cerâmica ática de figura vermelha.
+     É token de MARCA, não de interface — o acento de ação segue sendo o azul.
+     A skill autoriza "brand" como acento sancionado, e o que ela proíbe é duas
+     cores de acento competindo na MESMA tela; a marca vive só no chip. */
+  --brand: #b4462a;
+  --brand-ink: #131110;
+
   /* ── tipografia: pilha do sistema, sempre.
      A skill proíbe Inter/Roboto como fonte de marca — fonte genérica é um dos
      tells. SF já está no Mac e no iPhone do usuário, e carrega zero byte. ── */
@@ -100,6 +108,8 @@
   --color-warn: var(--warn);
   --color-danger: var(--danger);
   --color-live: var(--live);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
   --font-sans: var(--font-system);
   --font-display: var(--font-system);
   --font-mono: var(--font-mono-sf);

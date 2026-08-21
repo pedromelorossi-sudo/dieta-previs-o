@@ -34,7 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <header className="glass-nav sticky top-0 z-50">
               <div className="mx-auto max-w-5xl px-[22px] py-3 flex items-center justify-between gap-4">
                 <Link href="/" className="flex items-center gap-2 font-semibold tracking-[-0.01em] shrink-0 group">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-accent text-[color:var(--accent-contrast)] transition-colors duration-200 group-hover:bg-accent-strong">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-brand-ink text-brand transition-transform duration-200 group-hover:scale-[1.04]">
                     <IconDegrau className="h-[15px] w-[15px]" />
                   </span>
                   <span className="hidden sm:inline">Degrau</span>
