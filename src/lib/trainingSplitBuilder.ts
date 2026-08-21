@@ -64,7 +64,19 @@ export function scoreTrainingAdherence(signals: TrainingAdherenceSignals): numbe
  * divisão nunca conseguia entregar (93 séries de 140, com ombro e lombar em zero) e, pior, um número
  * exibido pro usuário que não descrevia nenhum treino existente. Priorizar todos os grupos ao mesmo
  * tempo não é priorizar. */
-const SETS_PER_SESSION_BUDGET = 22;
+/* 24, não 22.
+ *
+ * O número existia como palpite ("~20-25 antes de virar duas horas"), sem
+ * intervalo parametrizado — não dava para afirmar duração. Agora `restSeconds`
+ * está prescrito (180 s composto, 90 s isolado), então dá para contar: uma
+ * sessão típica de 24 séries sai com ~7 exercícios a ~3,4 séries cada, o que dá
+ * 75-80 min contando execução, descanso e troca de estação.
+ *
+ * O que forçou a subida foi o arranjo de 3 dias: o dia de Legs concentra os
+ * quatro grupos de perna, cuja soma de MEVs é 8+6+4+6 = 24. Com teto em 22 o
+ * PPL de 3 dias era ESTRUTURALMENTE incapaz de entregar o mínimo das pernas —
+ * nenhum ajuste de distribuição resolveria, porque não cabia. */
+const SETS_PER_SESSION_BUDGET = 24;
 
 /** Frequência semanal de cada grupo no template de N dias — precisa ser conhecida ANTES de definir a
  * meta, porque um grupo que aparece 1x/semana tem teto físico de
@@ -279,6 +291,19 @@ export function computeMuscleTargets(
   const slotPorMusculo = new Map(slots.map((sl) => [sl.landmark.muscle, sl]));
   for (const sl of slots) sl.sets = 0;
 
+  /* Fatias por dia, guardadas separadamente.
+   *
+   * A meta não pode ser a SOMA das fatias diárias: `buildSplit` redivide o
+   * total semanal IGUALMENTE entre os dias do músculo, e a alocação aqui é
+   * assimétrica (o Push tem folga, o Upper não). O peito ganhava 5 no Push e 4
+   * no Upper, somava 9, e o `buildSplit` devolvia 4,5 → 5 no Upper, que não
+   * cabia — e a entrega ficava abaixo da meta anunciada.
+   *
+   * A meta usa a fatia do dia MAIS APERTADO vezes a frequência. É conservador
+   * de propósito: garante que todo dia consegue entregar o que foi prometido,
+   * que é a única forma de meta e entrega baterem por construção. */
+  const fatiasPorMusculo = new Map<MuscleGroup, number[]>();
+
   for (const dia of templateParaMeta) {
     const noDia = dia.muscles.map((m) => slotPorMusculo.get(m)).filter((sl): sl is Slot => !!sl && sl.ceiling > 0);
     if (noDia.length === 0) continue;
@@ -289,24 +314,67 @@ export function computeMuscleTargets(
       const freq = freqByMuscle.get(sl.landmark.muscle) ?? 1;
       desejo.set(sl, sl.ideal / Math.max(1, freq));
     }
-    const somaPeso = noDia.reduce((n, sl) => n + (desejo.get(sl) ?? 0) * (sl.isPriority ? 2 : 1), 0);
-    if (somaPeso <= 0) continue;
+    /* O MEV VEM PRIMEIRO. Só o excedente é repartido proporcionalmente.
+     *
+     * A repartição puramente proporcional ao ideal (=MAV) não distinguia quem
+     * tem piso de quem não tem — e grupos com MEV 0 (antebraço, abdominal,
+     * lombar) entravam na fila com o mesmo direito de quem estava abaixo do
+     * mínimo. No arranjo de 3 dias isso tirava séries do quadríceps e das
+     * costas para dar rosca inversa e extensão lombar. Prescrever antebraço
+     * enquanto o quadríceps está abaixo do mínimo é uma troca ruim para
+     * qualquer fisiculturista: MEV 0 quer dizer "o indireto já basta", não
+     * "tem a mesma urgência". */
+    const freqDe = (sl: Slot) => Math.max(1, freqByMuscle.get(sl.landmark.muscle) ?? 1);
+    const tetoDoDia = (sl: Slot) =>
+      Math.min(MAX_SETS_PER_MUSCLE_PER_SESSION, sl.ceiling / freqDe(sl));
+
+    let disponivel = orcamentoPorSessao;
+
+    // 1ª rodada: o mínimo efetivo de quem tem mínimo
+    for (const sl of noDia) {
+      if (sl.landmark.mev <= 0) continue;
+      const pisoDia = Math.min(sl.landmark.mev / freqDe(sl), tetoDoDia(sl), desejo.get(sl) ?? 0);
+      const dar = Math.min(pisoDia, disponivel);
+      if (dar <= 0) continue;
+      sl.sets += dar;
+      disponivel -= dar;
+    }
+
+    // 2ª rodada: o que sobra vai proporcional ao que ainda falta para o ideal,
+    // com peso dobrado para prioridade. Aqui os grupos de MEV 0 entram.
+    const faltaDe = (sl: Slot) => Math.max(0, Math.min(desejo.get(sl) ?? 0, tetoDoDia(sl)) - sl.sets / freqDe(sl));
+    const somaPeso = noDia.reduce((n, sl) => n + faltaDe(sl) * (sl.isPriority ? 2 : 1), 0);
+    if (somaPeso <= 0 || disponivel <= 0) continue;
 
     for (const sl of noDia) {
-      const peso = (desejo.get(sl) ?? 0) * (sl.isPriority ? 2 : 1);
-      const fatia = Math.min(
-        desejo.get(sl) ?? 0, // nunca dá mais que o desejado, mesmo sobrando orçamento
-        (orcamentoPorSessao * peso) / somaPeso
-      );
-      const freq = freqByMuscle.get(sl.landmark.muscle) ?? 1;
-      const tetoDoDia = Math.min(MAX_SETS_PER_MUSCLE_PER_SESSION, sl.ceiling / Math.max(1, freq));
-      sl.sets += Math.min(fatia, tetoDoDia);
+      const peso = faltaDe(sl) * (sl.isPriority ? 2 : 1);
+      if (peso <= 0) continue;
+      sl.sets += Math.min(faltaDe(sl), (disponivel * peso) / somaPeso);
     }
+
+    // registra a fatia deste dia (o `sl.sets` acumulado menos o que já havia)
+    for (const sl of noDia) {
+      const lista = fatiasPorMusculo.get(sl.landmark.muscle) ?? [];
+      const jaSomado = lista.reduce((n, v) => n + v, 0);
+      lista.push(Math.max(0, sl.sets - jaSomado));
+      fatiasPorMusculo.set(sl.landmark.muscle, lista);
+    }
+  }
+
+  // a meta é a fatia do dia mais apertado × frequência (ver comentário acima)
+  for (const sl of slots) {
+    const fatias = fatiasPorMusculo.get(sl.landmark.muscle) ?? [];
+    if (fatias.length === 0) {
+      sl.sets = 0;
+      continue;
+    }
+    sl.sets = Math.min(...fatias) * fatias.length;
   }
 
   // arredonda no fim e garante o piso de MEV onde o teto físico permite
   for (const sl of slots) {
-    const alvo = Math.round(sl.sets);
+    const freq = Math.max(1, freqByMuscle.get(sl.landmark.muscle) ?? 1);
+    const alvo = Math.round(sl.sets / freq) * freq; // múltiplo da frequência: divide exato nos dias
     sl.sets = sl.ceiling === 0 ? 0 : Math.max(Math.min(sl.landmark.mev, sl.ceiling), alvo);
   }
 
@@ -426,7 +494,11 @@ export function computeMuscleTargets(
       reason = `${sl.sets} séries/semana: perto do mínimo produtivo (MEV ${sl.landmark.mev}), porque ${daysPerWeek} dias/semana dão um orçamento de ~${budget} séries e ele não cobre o MAV de todos os grupos. Mirar MAV em tudo exige mais dias de treino, não uma meta maior no papel.${budgetNote}`;
     }
 
-    return { muscle: sl.landmark.muscle, muscleLabel, weeklySets: sl.sets, reason, isPriority: sl.isPriority || undefined };
+    /* Não anuncia prioridade que o orçamento não financia. Numa semana de
+     * recuperação ruim, exibir "★ prioridade" num grupo abaixo do MEV
+     * desinforma: a prioridade está suspensa, não em vigor. */
+    const prioridadeEmVigor = sl.isPriority && sl.sets >= sl.landmark.mev;
+    return { muscle: sl.landmark.muscle, muscleLabel, weeklySets: sl.sets, reason, isPriority: prioridadeEmVigor || undefined };
   });
 }
 
@@ -519,7 +591,14 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
      * ponto fraco de grupo em destaque, o que recriava o achado 4 por outro
      * caminho. Tríceps saiu daqui (recebe volume indireto de todo o Push) e
      * abdominal também (já está no Lower). Cinco grupos em cada um. */
-    { label: "Upper", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps"] },
+    /* Tríceps aqui, bíceps não. Enxugar o Upper de 7 para 5 grupos derrubou
+     * tríceps e abdominal para 1×/semana, e 7-8 séries de tríceps numa sessão
+     * só, sempre depois de peito e ombro, é pior que 2× menores. A troca é
+     * possível porque o bíceps recebe estímulo indireto das 5 séries de puxada
+     * do próprio Upper, e o tríceps não recebe nada aqui — o Push dele fica
+     * longe. Quando o bíceps for ponto fraco, `ensurePriorityFrequency`
+     * devolve a segunda exposição a ele automaticamente. */
+    { label: "Upper", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "triceps"] },
     { label: "Lower", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
   ],
   6: [
@@ -599,6 +678,7 @@ function pickExercisesForMuscle(
   isPriority: boolean,
   loadByExercise?: Map<string, number>,
   familiasDaSemana?: Set<string>,
+  exerciciosDaSemana?: Set<string>,
   axiaisNaSemana?: { n: number },
   axiaisNaSessao?: { n: number },
   familiasAquecidasNaSessao?: Set<string>,
@@ -703,8 +783,16 @@ function pickExercisesForMuscle(
    * o composto é o que tem melhor retorno por série; a variedade de família
    * cede, porque repetir padrão é menos grave que não treinar o padrão. */
   const soUmSlot = numExercises === 1;
+  /* A preferência por composto no slot único vale enquanto houver um composto
+   * AINDA NÃO usado na semana. Sem essa ressalva, um grupo com um só composto
+   * no catálogo (tríceps, depois que o mergulho virou isolado) recebia
+   * literalmente o mesmo exercício nos dois dias — Supino Fechado 4× e depois
+   * Supino Fechado 3×. Repetir o movimento idêntico é pior que trocar por um
+   * isolado: some a variedade E o segundo dia não acrescenta padrão nenhum. */
+  const compostoInedito = rotated.some((e) => e.pattern === "composto" && !familiasDaSemana?.has(e.movementFamily));
   const temComposto = rotated.some((e) => e.pattern === "composto");
-  const elegivelNoSlotUnico = (ex: (typeof rotated)[number]) => !soUmSlot || !temComposto || ex.pattern === "composto";
+  const elegivelNoSlotUnico = (ex: (typeof rotated)[number]) =>
+    !soUmSlot || !temComposto || (compostoInedito ? ex.pattern === "composto" : true);
 
   // 1ª volta: famílias inéditas NA SEMANA — evita repetir o mesmo movimento nos
   // dois dias em que o grupo aparece (achado 16)
@@ -715,7 +803,21 @@ function pickExercisesForMuscle(
     chosen.push(ex);
     usedFamilies.add(ex.movementFamily);
   }
-  // 2ª volta: relaxa a semana, mantém a regra do dia
+  /* 2ª volta: relaxa a FAMÍLIA da semana, mas ainda evita o exercício idêntico.
+   *
+   * Antes ela relaxava tudo de uma vez, e o resultado era Desenvolvimento com
+   * Halteres e Remada Curvada aparecendo nos dois dias do grupo. Repetir a
+   * família é aceitável quando o catálogo aperta; repetir o mesmo exercício não
+   * acrescenta padrão nenhum ao segundo dia. */
+  for (const ex of rotated) {
+    if (chosen.length >= numExercises) break;
+    if (!elegivelNoSlotUnico(ex)) continue;
+    if (usedFamilies.has(ex.movementFamily) || exerciciosDaSemana?.has(ex.id)) continue;
+    chosen.push(ex);
+    usedFamilies.add(ex.movementFamily);
+  }
+
+  // 3ª volta: último recurso, aceita repetir o exercício (catálogo pequeno)
   for (const ex of rotated) {
     if (chosen.length >= numExercises) break;
     if (!elegivelNoSlotUnico(ex)) continue;
@@ -950,6 +1052,7 @@ export function buildSplit(
    * exercício se repetia: Supino Reto no Smith aparecia no Push e no Upper,
    * Remada Curvada no Pull e no Upper. A variedade era só do primeiro slot. */
   const familiasDaSemana = new Set<string>();
+  const exerciciosDaSemana = new Set<string>();
   const axiaisNaSemana = { n: fadiga.semCargaAxialPesada ? MAX_EXERCICIOS_AXIAIS_PESADOS_POR_SEMANA : 0 };
 
   return template.map((day) => {
@@ -1023,6 +1126,7 @@ export function buildSplit(
         priorityByMuscle.has(muscle),
         loadByExercise,
         familiasDaSemana,
+        exerciciosDaSemana,
         axiaisNaSemana,
         axiaisNaSessao,
         familiasAquecidasNaSessao,
@@ -1031,6 +1135,7 @@ export function buildSplit(
       for (const it of novos) {
         const fam = exerciseById(it.exerciseId)?.movementFamily;
         if (fam) familiasDaSemana.add(fam);
+        exerciciosDaSemana.add(it.exerciseId);
       }
       items.push(...novos);
     }

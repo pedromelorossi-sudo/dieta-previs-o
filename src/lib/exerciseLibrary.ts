@@ -64,6 +64,10 @@ export const EXERCISE_LIBRARY: Exercise[] = [
 
   // ombro
   { id: "desenvolvimento-halteres-75", name: "Desenvolvimento com Halteres (75°)", primaryMuscle: "ombro", secondaryMuscles: ["triceps"], pattern: "composto", movementFamily: "desenvolvimento", equipment: "halteres" },
+  // Segundo composto de ombro. Com só o desenvolvimento com halteres no
+  // catálogo, o grupo repetia o MESMO exercício nos dois dias da semana — a
+  // regra de "slot único prefere composto" não tinha alternativa para oferecer.
+  { id: "desenvolvimento-maquina", name: "Desenvolvimento na Máquina", primaryMuscle: "ombro", secondaryMuscles: ["triceps"], pattern: "composto", movementFamily: "desenvolvimento-maquina", equipment: "maquina" },
   { id: "elevacao-lateral-halteres", name: "Elevação Lateral com Halteres", primaryMuscle: "ombro", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-lateral", equipment: "halteres" },
   { id: "elevacao-lateral-unilateral-polia-90", name: "Elevação Lateral Unilateral na Polia (90°)", primaryMuscle: "ombro", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-lateral", equipment: "polia", unilateral: true },
   { id: "crucifixo-inverso-maquina", name: "Crucifixo Inverso Máquina", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "deltoide-posterior", equipment: "maquina" },
