@@ -121,14 +121,31 @@ export function computeMuscleTargets(
   priorityMuscles: MuscleGroup[] = [],
   adherenceScore = 0,
   daysPerWeek = 3,
-  recoveryScore = 0
+  recoveryScore = 0,
+  /** `true` quando o chamador JÁ reduziu os dias por recuperação ruim (ver
+   * `diasEfetivosPara`). Precisa ser explícito: inferir a partir de
+   * `daysPerWeek <= 3` puniria de menos quem genuinamente treina 3 dias e está
+   * mal recuperado — a pessoa não concentrou nada, sempre foi 3. */
+  diasJaConcentrados = false
 ): MuscleTarget[] {
   const freqByMuscle = frequencyByMuscleFor(daysPerWeek, priorityMuscles);
 
   // Corte de orçamento por adesão e por recuperação. Antes, adesão baixa "travava o teto no MAV" — o
   // que era no-op no caminho padrão, porque sem prioridade declarada o alvo já era o MAV.
   const adherenceFactor = adherenceScore >= 1 ? 0.85 : 1;
-  const recoveryFactor = recoveryScore >= 4 ? 0.6 : recoveryScore >= 2 ? 0.8 : 1;
+  /* CORTE ÚNICO, não duplo.
+   *
+   * Quando `recoveryScore >= 4`, a rota já concentra a semana de 5 para 3
+   * sessões (`diasEfetivosPara`). Aplicar TAMBÉM o fator de 0,6 sobre o
+   * orçamento por sessão multiplicava os dois cortes: a simulação caía para 32
+   * séries semanais, com 11 de 13 grupos abaixo do MEV e nenhum composto de
+   * perna na semana inteira. Numa semana de recuperação ruim o objetivo é
+   * MANTER, e manter é MEV com fadiga baixa — não sub-MEV com fadiga baixa,
+   * que custa músculo justamente quando o natural não tem margem.
+   *
+   * A concentração de dias JÁ é o corte de volume. O alívio de fadiga vem do
+   * RIR e da retirada do axial pesado, que atuam por outro caminho. */
+  const recoveryFactor = diasJaConcentrados ? 0.9 : recoveryScore >= 4 ? 0.6 : recoveryScore >= 2 ? 0.8 : 1;
   const budget = Math.round(
     clampDays(daysPerWeek) * SETS_PER_SESSION_BUDGET * adherenceFactor * recoveryFactor
   );
@@ -233,7 +250,7 @@ export function computeMuscleTargets(
         (orcamentoPorSessao * peso) / somaPeso
       );
       const freq = freqByMuscle.get(sl.landmark.muscle) ?? 1;
-      const tetoDoDia = sl.ceiling / Math.max(1, freq);
+      const tetoDoDia = Math.min(MAX_SETS_PER_MUSCLE_PER_SESSION, sl.ceiling / Math.max(1, freq));
       sl.sets += Math.min(fatia, tetoDoDia);
     }
   }
@@ -469,6 +486,22 @@ function clampDays(daysPerWeek: number): number {
  * semanas de um natural, e 2 séries a mais de posterior não pagam esse risco. */
 const FAMILIAS_AXIAIS = new Set(["quadril-dominante", "quadril-dominante-barra", "agachamento"]);
 const MAX_EXERCICIOS_AXIAIS_PESADOS_POR_SEMANA = 2;
+/* ...e no máximo UM por sessão. O teto só semanal permitia gastar os dois no
+ * mesmo dia: a simulação produziu Stiff 3× seguido de Levantamento Terra 2×
+ * na mesma sessão de perna, o segundo com isquiotibiais e eretores já
+ * fatigados. Dois hinges pesados num dia é pior que dois em dias separados. */
+const MAX_AXIAIS_PESADOS_POR_SESSAO = 1;
+
+/* Teto de séries por GRUPO por sessão.
+ *
+ * Sem ele, um grupo que aparece 1×/semana (caso do tríceps no arranjo de 3
+ * dias) recebia a meta semanal inteira num dia só — 10 séries espremidas em 2
+ * exercícios, virando dois blocos de 5×. A curva dose-resposta que sustenta o
+ * MEV/MAV/MRV é SEMANAL; empilhar a semana toda numa sessão não entrega o mesmo
+ * estímulo, porque as últimas séries são limitadas por fadiga local. Passando
+ * daqui, o excedente simplesmente não é prescrito e o `reason` aponta o que
+ * resolve de verdade: mais dias de treino. */
+const MAX_SETS_PER_MUSCLE_PER_SESSION = 8;
 
 const MAX_SETS_PER_EXERCISE = 5;
 const MAX_EXERCISES_PER_MUSCLE_PER_DAY = 2;
@@ -489,6 +522,7 @@ function pickExercisesForMuscle(
   loadByExercise?: Map<string, number>,
   familiasDaSemana?: Set<string>,
   axiaisNaSemana?: { n: number },
+  axiaisNaSessao?: { n: number },
   familiasAquecidasNaSessao?: Set<string>,
   fadiga: AjusteDeFadiga = { rirExtra: 0, semCargaAxialPesada: false }
 ): TrainingItem[] {
@@ -590,18 +624,25 @@ function pickExercisesForMuscle(
       const ex = chosen[k];
       const pesado = FAMILIAS_AXIAIS.has(ex.movementFamily) && ex.equipment === "barra";
       if (!pesado) continue;
-      if (axiaisNaSemana.n < MAX_EXERCICIOS_AXIAIS_PESADOS_POR_SEMANA) {
+      const cabeNaSemana = axiaisNaSemana.n < MAX_EXERCICIOS_AXIAIS_PESADOS_POR_SEMANA;
+      const cabeNaSessao = (axiaisNaSessao?.n ?? 0) < MAX_AXIAIS_PESADOS_POR_SESSAO;
+      if (cabeNaSemana && cabeNaSessao) {
         axiaisNaSemana.n += 1;
+        if (axiaisNaSessao) axiaisNaSessao.n += 1;
         continue;
       }
       // a alternativa também respeita a regra de uma família por dia — senão a
       // troca reintroduz Mesa Flexora + Cadeira Flexora no mesmo posterior
-      const alternativa = rotated.find(
-        (o) =>
-          !chosen.includes(o) &&
-          !usedFamilies.has(o.movementFamily) &&
-          !(FAMILIAS_AXIAIS.has(o.movementFamily) && o.equipment === "barra")
-      );
+      /* Prefere COMPOSTO na substituição. A busca ingênua pegava o primeiro da
+       * lista intercalada, que é sempre um isolado — barrado o agachamento, a
+       * troca caía em Cadeira Extensora e o Leg Press, que é a substituição
+       * óbvia e não carrega a coluna, ficava logo atrás sem ser alcançado. Na
+       * semana de recuperação ruim isso apagava todo composto de perna. */
+      const elegivel = (o: (typeof rotated)[number]) =>
+        !chosen.includes(o) &&
+        !usedFamilies.has(o.movementFamily) &&
+        !(FAMILIAS_AXIAIS.has(o.movementFamily) && o.equipment === "barra");
+      const alternativa = rotated.find((o) => elegivel(o) && o.pattern === "composto") ?? rotated.find(elegivel);
       if (alternativa) {
         usedFamilies.delete(ex.movementFamily);
         usedFamilies.add(alternativa.movementFamily);
@@ -613,11 +654,16 @@ function pickExercisesForMuscle(
     }
   }
 
-  const base = Math.min(MAX_SETS_PER_EXERCISE, Math.floor(setsNeeded / chosen.length));
+  /* O alvo de 3 séries por exercício vale TAMBÉM depois da substituição axial.
+   * Quando a troca colapsava a lista para um exercício só, `floor(5/1) = 5`
+   * recriava o bloco de 5 séries que o piso de 3 existe para evitar — a
+   * simulação produziu "Cadeira Flexora 5×10-15 RIR1". */
+  const tetoPorExercicio = Math.min(MAX_SETS_PER_EXERCISE, Math.max(alvoSeriesPorExercicio, Math.ceil(setsNeeded / chosen.length)));
+  const base = Math.min(tetoPorExercicio, Math.floor(setsNeeded / chosen.length));
   const remainder = Math.min(chosen.length, setsNeeded - base * chosen.length);
 
   return chosen.flatMap((ex, i) => {
-    const workSets = Math.min(MAX_SETS_PER_EXERCISE, base + (i < remainder ? 1 : 0));
+    const workSets = Math.min(tetoPorExercicio, base + (i < remainder ? 1 : 0));
     /* Piso de 2 séries: prescrição de 1 série é ruído — não estimula e ocupa
      * linha no plano. A simulação produzia "Good Morning — warmup 2×8-12 | work
      * 1×6-10", duas séries de aquecimento para fazer UMA série de trabalho. */
@@ -642,7 +688,13 @@ function pickExercisesForMuscle(
      *
      * Agora: rampa de duas séries com repetições DESCENDENTES (50% × 8, 70% × 4)
      * só no primeiro movimento pesado com barra/composto da sessão. */
-    if (i === 0 && ex.pattern === "composto" && !familiasAquecidasNaSessao?.has(ex.movementFamily)) {
+    /* Todo movimento axial pesado com barra ganha rampa PRÓPRIA, mesmo sendo o
+     * 3º exercício do dia. A regra `i === 0` deixava o Levantamento Terra
+     * entrar a RIR 2 sem nenhuma aproximação, porque o Stiff já tinha
+     * consumido o aquecimento da família. Barra na coluna não usa aquecimento
+     * de outro exercício. */
+    const axialPesado = FAMILIAS_AXIAIS.has(ex.movementFamily) && ex.equipment === "barra";
+    if ((axialPesado || (i === 0 && ex.pattern === "composto")) && !familiasAquecidasNaSessao?.has(ex.movementFamily)) {
       familiasAquecidasNaSessao?.add(ex.movementFamily);
       blocks.push({
         reserveType: "warmup" as const,
@@ -795,6 +847,7 @@ export function buildSplit(
 
     const items: TrainingItem[] = [];
     const familiasAquecidasNaSessao = new Set<string>();
+    const axiaisNaSessao = { n: 0 };
 
     /* TETO POR SESSÃO (achado 3). `SETS_PER_SESSION_BUDGET` só formava o
      * orçamento SEMANAL e nunca era aplicado por dia — o dia com mais grupos
@@ -840,7 +893,10 @@ export function buildSplit(
     }
 
     for (const muscle of orderedMuscles) {
-      const setsAjustado = Math.round((desejadoPorGrupo.get(muscle) ?? 0) * (escalaPorGrupo.get(muscle) ?? 1));
+      const setsAjustado = Math.min(
+        MAX_SETS_PER_MUSCLE_PER_SESSION,
+        Math.round((desejadoPorGrupo.get(muscle) ?? 0) * (escalaPorGrupo.get(muscle) ?? 1))
+      );
       if (setsAjustado <= 0) continue;
 
       const rotation = rotationByMuscle.get(muscle) ?? 0;
@@ -853,6 +909,7 @@ export function buildSplit(
         loadByExercise,
         familiasDaSemana,
         axiaisNaSemana,
+        axiaisNaSessao,
         familiasAquecidasNaSessao,
         fadiga
       );
@@ -908,7 +965,10 @@ export function planTrainingPeriodization(
      * 118, ou seja +11,9%, +6,4% e +18%. O maior salto caía justamente na
      * semana 4, que já é a mais pesada do bloco. Agora o passo é fixo: a semana
      * 1 sai em ~78% da meta e cresce ~9% ao mês até 100% na semana 4. */
-    const FRACAO_SEMANA_1 = 0.78;
+    /* Semana 1 em 65% da meta, não 78%. Com 78% a amplitude do bloco inteiro
+     * era de 14% (79 → 90 séries) e o passo saía decrescente — um mesociclo
+     * cuja primeira semana já está a 88% do pico não acumula nada. */
+    const FRACAO_SEMANA_1 = 0.65;
     const fracaoAcumulo = FRACAO_SEMANA_1 + (1 - FRACAO_SEMANA_1) * progressFraction;
     const rampedTargets: MuscleTarget[] = muscleTargets.map((t) => {
       const landmark = landmarkFor(t.muscle);

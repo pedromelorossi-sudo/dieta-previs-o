@@ -982,7 +982,8 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       prefs?.priority_muscles ?? [],
       trainingAdherenceScore,
       diasEfetivos,
-      recoveryScore
+      recoveryScore,
+      diasEfetivos < daysPerWeek
     );
     suggestedTrainingProgram = buildSplit(
       diasEfetivos,

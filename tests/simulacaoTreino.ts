@@ -107,7 +107,7 @@ function imprimeCenario(c: Cenario) {
   if (fadiga.rirExtra > 0) {
     console.log(`⚠ RIR aumentado em ${fadiga.rirExtra} ponto(s)${fadiga.semCargaAxialPesada ? ", e sem agachamento/terra com barra" : ""}.`);
   }
-  const alvos = computeMuscleTargets(c.leitura, c.prioridade, c.adesao, diasEfetivos, c.recuperacao);
+  const alvos = computeMuscleTargets(c.leitura, c.prioridade, c.adesao, diasEfetivos, c.recuperacao, diasEfetivos < c.dias);
 
   console.log("\n" + linha());
   console.log("META DE VOLUME SEMANAL POR GRUPO (séries efetivas)");

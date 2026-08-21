@@ -126,7 +126,13 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   // um bucket só fazia o algoritmo reforçar justamente a cabeça saturada.
   { id: "face-pull-polia", name: "Face Pull na Polia", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "face-pull", equipment: "polia" },
   { id: "rotacao-externa-polia", name: "Rotação Externa na Polia", primaryMuscle: "deltoide_posterior", secondaryMuscles: [], pattern: "isolado", movementFamily: "rotacao-externa", equipment: "polia" },
-  { id: "remada-alta-cotovelo-aberto", name: "Remada Alta com Cotovelo Aberto", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["ombro"], pattern: "composto", movementFamily: "remada-alta", equipment: "halteres" },
+  // Remada alta é ISOLADO aqui de propósito. Marcada como composto, ela era o
+  // único composto do grupo, e a intercalação composto-primeiro a punha abrindo
+  // o Pull nos quatro cenários a 6-10 reps RIR2 — remada alta carregada é o
+  // clássico de impacto subacromial. Face Pull e Rotação Externa, que entraram
+  // justamente para dar opção segura, apareciam ZERO vezes. Mesmo erro do
+  // catálogo anterior: acrescentar exercício sem conferir se o seletor alcança.
+  { id: "remada-alta-cotovelo-aberto", name: "Remada Alta com Cotovelo Aberto", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["ombro"], pattern: "isolado", movementFamily: "remada-alta", equipment: "halteres" },
 
   { id: "abdominal-banco-declinado", name: "Abdominal no Banco Declinado", primaryMuscle: "abdominal", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-tronco", equipment: "banco" },
   { id: "abdominal-reto-solo", name: "Abdominal Reto Solo", primaryMuscle: "abdominal", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-tronco", equipment: "solo" },

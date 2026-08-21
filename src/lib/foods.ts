@@ -39,12 +39,20 @@ export const FOODS: Food[] = [
   { id: "picanha", name: "Picanha grelhada", category: "proteina", group: "prot_animal", kcal100: 259, protein100: 25, fat100: 17, carb100: 0, vegetarian: false, vegan: false, lactoseFree: true, glutenFree: true },
   { id: "queijo-minas", name: "Queijo minas frescal", category: "proteina", group: "prot_animal", kcal100: 264, protein100: 17, fat100: 20, carb100: 3.2, vegetarian: true, vegan: false, lactoseFree: false, glutenFree: true },
   { id: "leite-desnatado", name: "Leite desnatado", category: "proteina", group: "prot_animal", kcal100: 35, protein100: 3.4, fat100: 0.2, carb100: 5, vegetarian: true, vegan: false, lactoseFree: false, glutenFree: true },
+  { id: "sardinha-lata", name: "Sardinha em lata (óleo drenado)", category: "proteina", group: "prot_animal", kcal100: 208, protein100: 24, fat100: 11, carb100: 0, vegetarian: false, vegan: false, lactoseFree: true, glutenFree: true },
+  { id: "sobrecoxa-sem-pele", name: "Sobrecoxa de frango sem pele", category: "proteina", group: "prot_animal", kcal100: 177, protein100: 24, fat100: 8, carb100: 0, vegetarian: false, vegan: false, lactoseFree: true, glutenFree: true },
+  { id: "alcatra", name: "Alcatra grelhada", category: "proteina", group: "prot_animal", kcal100: 205, protein100: 27, fat100: 10, carb100: 0, vegetarian: false, vegan: false, lactoseFree: true, glutenFree: true },
+  { id: "iogurte-natural-desnatado", name: "Iogurte natural desnatado", category: "proteina", group: "prot_animal", kcal100: 41, protein100: 4, fat100: 0.2, carb100: 6, vegetarian: true, vegan: false, lactoseFree: false, glutenFree: true },
+  { id: "ricota", name: "Ricota", category: "proteina", group: "prot_animal", kcal100: 140, protein100: 11, fat100: 8, carb100: 3, vegetarian: true, vegan: false, lactoseFree: false, glutenFree: true },
+  { id: "mussarela", name: "Queijo mussarela", category: "proteina", group: "prot_animal", kcal100: 280, protein100: 22, fat100: 21, carb100: 2, unitHint: "1 fatia ≈ 20g", vegetarian: true, vegan: false, lactoseFree: false, glutenFree: true },
+  { id: "caseina", name: "Caseína (pó)", category: "proteina", group: "prot_suplemento", kcal100: 360, protein100: 78, fat100: 1.5, carb100: 8, unitHint: "1 dose ≈ 30g", vegetarian: true, vegan: false, lactoseFree: false, glutenFree: true },
+  { id: "proteina-soja-texturizada", name: "Proteína de soja texturizada (seca)", category: "proteina", group: "prot_vegetal", kcal100: 336, protein100: 51, fat100: 1, carb100: 33, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "grao-de-bico", name: "Grão-de-bico cozido", category: "proteina", group: "prot_vegetal", kcal100: 164, protein100: 8.9, fat100: 2.6, carb100: 27, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "edamame", name: "Edamame cozido", category: "proteina", group: "prot_vegetal", kcal100: 121, protein100: 11, fat100: 5, carb100: 9, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   // proteínas vegetais
   { id: "tofu", name: "Tofu firme", category: "proteina", group: "prot_vegetal", kcal100: 76, protein100: 8, fat100: 4.8, carb100: 1.9, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "feijao-preto", name: "Feijão preto cozido", category: "proteina", group: "prot_vegetal", kcal100: 77, protein100: 4.5, fat100: 0.5, carb100: 14, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "lentilha", name: "Lentilha cozida", category: "proteina", group: "prot_vegetal", kcal100: 93, protein100: 6.3, fat100: 0.4, carb100: 16, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
-  { id: "grao-de-bico", name: "Grão-de-bico cozido", category: "proteina", group: "prot_vegetal", kcal100: 121, protein100: 7.3, fat100: 2, carb100: 20, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
-  { id: "edamame", name: "Edamame cozido", category: "proteina", group: "prot_vegetal", kcal100: 122, protein100: 11, fat100: 5, carb100: 10, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "proteina-ervilha", name: "Proteína de ervilha (pó)", category: "proteina", group: "prot_suplemento", kcal100: 375, protein100: 78, fat100: 5, carb100: 7, unitHint: "1 dose ≈ 30g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   // carboidratos
   { id: "arroz-branco", name: "Arroz branco cozido", category: "carboidrato", group: "carbo", kcal100: 128, protein100: 2.5, fat100: 0.2, carb100: 28, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
@@ -63,6 +71,23 @@ export const FOODS: Food[] = [
   { id: "milho", name: "Milho cozido", category: "carboidrato", group: "carbo", kcal100: 98, protein100: 3.4, fat100: 1.5, carb100: 21, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "granola", name: "Granola sem açúcar", category: "carboidrato", group: "carbo_seco", kcal100: 471, protein100: 10, fat100: 20, carb100: 64, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: false },
   { id: "batata-baroa", name: "Inhame cozido", category: "carboidrato", group: "carbo", kcal100: 118, protein100: 1.5, fat100: 0.2, carb100: 28, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  // Pães e derivados. O catálogo tinha pão francês e integral e nenhum pão de
+  // forma, que é o formato de fatia — a IA não conseguia montar um lanche de
+  // sanduíche. `unitHint` em fatia importa aqui: a pessoa serve por fatia, não
+  // pesa 43 g de pão.
+  { id: "pao-forma-integral", name: "Pão de forma integral", category: "carboidrato", group: "carbo_seco", kcal100: 253, protein100: 9.4, fat100: 3.5, carb100: 43, unitHint: "1 fatia ≈ 25g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: false },
+  { id: "pao-forma-branco", name: "Pão de forma branco", category: "carboidrato", group: "carbo_seco", kcal100: 265, protein100: 8, fat100: 3.2, carb100: 49, unitHint: "1 fatia ≈ 25g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: false },
+  { id: "pao-sirio", name: "Pão sírio (pita)", category: "carboidrato", group: "carbo_seco", kcal100: 275, protein100: 9, fat100: 1.2, carb100: 55, unitHint: "1 unidade ≈ 60g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: false },
+  { id: "wrap-trigo", name: "Wrap / tortilha de trigo", category: "carboidrato", group: "carbo_seco", kcal100: 310, protein100: 8, fat100: 8, carb100: 51, unitHint: "1 unidade ≈ 45g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: false },
+  { id: "torrada-integral", name: "Torrada integral", category: "carboidrato", group: "carbo_seco", kcal100: 375, protein100: 12, fat100: 6, carb100: 68, unitHint: "1 fatia ≈ 8g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: false },
+  { id: "biscoito-arroz", name: "Biscoito de arroz integral", category: "carboidrato", group: "carbo_seco", kcal100: 387, protein100: 8, fat100: 3, carb100: 81, unitHint: "1 unidade ≈ 9g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "pao-queijo", name: "Pão de queijo", category: "carboidrato", group: "carbo_seco", kcal100: 330, protein100: 6, fat100: 18, carb100: 37, unitHint: "1 unidade ≈ 30g", vegetarian: true, vegan: false, lactoseFree: false, glutenFree: true },
+  // outros carboidratos
+  { id: "arroz-parboilizado", name: "Arroz parboilizado cozido", category: "carboidrato", group: "carbo", kcal100: 123, protein100: 2.6, fat100: 0.3, carb100: 26, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "macarrao-integral", name: "Macarrão integral cozido", category: "carboidrato", group: "carbo", kcal100: 124, protein100: 5, fat100: 0.6, carb100: 25, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: false },
+  { id: "polenta", name: "Polenta cozida", category: "carboidrato", group: "carbo", kcal100: 85, protein100: 2, fat100: 0.4, carb100: 18, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "cara", name: "Cará cozido", category: "carboidrato", group: "carbo", kcal100: 116, protein100: 1.5, fat100: 0.2, carb100: 27, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "farofa-pronta", name: "Farinha de mandioca", category: "carboidrato", group: "carbo_seco", kcal100: 361, protein100: 1.6, fat100: 0.3, carb100: 87, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   // gorduras
   { id: "azeite", name: "Azeite de oliva extra virgem", category: "gordura", group: "gordura", kcal100: 884, protein100: 0, fat100: 100, carb100: 0, unitHint: "1 colher de sopa ≈ 13g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "pasta-amendoim", name: "Pasta de amendoim integral", category: "gordura", group: "gordura", kcal100: 588, protein100: 25, fat100: 50, carb100: 20, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
@@ -74,6 +99,9 @@ export const FOODS: Food[] = [
   { id: "linhaca", name: "Semente de linhaça", category: "gordura", group: "gordura", kcal100: 534, protein100: 18, fat100: 42, carb100: 29, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "oleo-coco", name: "Óleo de coco", category: "gordura", group: "gordura", kcal100: 862, protein100: 0, fat100: 100, carb100: 0, unitHint: "1 colher de sopa ≈ 13g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "azeitona", name: "Azeitona preta", category: "gordura", group: "gordura", kcal100: 349, protein100: 2.4, fat100: 36, carb100: 6, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "nozes", name: "Nozes", category: "gordura", group: "gordura", kcal100: 654, protein100: 15, fat100: 65, carb100: 14, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "gergelim", name: "Semente de gergelim", category: "gordura", group: "gordura", kcal100: 573, protein100: 18, fat100: 50, carb100: 23, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "amendoim", name: "Amendoim torrado", category: "gordura", group: "gordura", kcal100: 567, protein100: 26, fat100: 49, carb100: 16, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   // frutas
   { id: "banana", name: "Banana", category: "fruta", group: "fruta", kcal100: 89, protein100: 1.1, fat100: 0.3, carb100: 23, unitHint: "1 unidade ≈ 100g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "maca", name: "Maçã", category: "fruta", group: "fruta", kcal100: 52, protein100: 0.3, fat100: 0.2, carb100: 14, unitHint: "1 unidade ≈ 130g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
@@ -86,6 +114,11 @@ export const FOODS: Food[] = [
   { id: "kiwi", name: "Kiwi", category: "fruta", group: "fruta", kcal100: 61, protein100: 1.1, fat100: 0.5, carb100: 15, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "melancia", name: "Melancia", category: "fruta", group: "fruta", kcal100: 30, protein100: 0.6, fat100: 0.2, carb100: 7.6, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "pera", name: "Pera", category: "fruta", group: "fruta", kcal100: 57, protein100: 0.4, fat100: 0.1, carb100: 15, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "goiaba", name: "Goiaba", category: "fruta", group: "fruta", kcal100: 68, protein100: 2.6, fat100: 1, carb100: 14, unitHint: "1 unidade ≈ 130g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "melao", name: "Melão", category: "fruta", group: "fruta", kcal100: 34, protein100: 0.8, fat100: 0.2, carb100: 8, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "tangerina", name: "Tangerina", category: "fruta", group: "fruta", kcal100: 53, protein100: 0.8, fat100: 0.3, carb100: 13, unitHint: "1 unidade ≈ 100g", vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "ameixa", name: "Ameixa fresca", category: "fruta", group: "fruta", kcal100: 46, protein100: 0.7, fat100: 0.3, carb100: 11, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "acai-polpa", name: "Açaí polpa sem açúcar", category: "fruta", group: "fruta", kcal100: 58, protein100: 0.8, fat100: 3.9, carb100: 6.2, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   // vegetais (grupo "livre" — baixa caloria, à vontade)
   { id: "brocolis", name: "Brócolis cozido", category: "vegetal", group: "vegetal_livre", kcal100: 35, protein100: 2.4, fat100: 0.4, carb100: 7, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "alface", name: "Alface", category: "vegetal", group: "vegetal_livre", kcal100: 15, protein100: 1.4, fat100: 0.2, carb100: 2.9, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
@@ -100,6 +133,12 @@ export const FOODS: Food[] = [
   { id: "abobora", name: "Abóbora cozida", category: "vegetal", group: "vegetal_livre", kcal100: 39, protein100: 1.4, fat100: 0.1, carb100: 9, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "rucula", name: "Rúcula", category: "vegetal", group: "vegetal_livre", kcal100: 25, protein100: 2.6, fat100: 0.7, carb100: 3.7, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
   { id: "vagem", name: "Vagem refogada", category: "vegetal", group: "vegetal_livre", kcal100: 32, protein100: 1.8, fat100: 0.2, carb100: 7, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "couve-flor", name: "Couve-flor cozida", category: "vegetal", group: "vegetal_livre", kcal100: 23, protein100: 1.9, fat100: 0.3, carb100: 4.1, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "repolho", name: "Repolho cru", category: "vegetal", group: "vegetal_livre", kcal100: 25, protein100: 1.3, fat100: 0.1, carb100: 5.8, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "beterraba", name: "Beterraba cozida", category: "vegetal", group: "vegetal_livre", kcal100: 44, protein100: 1.7, fat100: 0.2, carb100: 10, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "chuchu", name: "Chuchu cozido", category: "vegetal", group: "vegetal_livre", kcal100: 19, protein100: 0.8, fat100: 0.1, carb100: 4.5, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "quiabo", name: "Quiabo refogado", category: "vegetal", group: "vegetal_livre", kcal100: 33, protein100: 1.9, fat100: 0.2, carb100: 7, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
+  { id: "cogumelo", name: "Cogumelo Paris refogado", category: "vegetal", group: "vegetal_livre", kcal100: 28, protein100: 3.1, fat100: 0.4, carb100: 4.3, vegetarian: true, vegan: true, lactoseFree: true, glutenFree: true },
 ];
 
 export const CATEGORY_LABEL: Record<FoodCategory, string> = {
