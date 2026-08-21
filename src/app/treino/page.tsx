@@ -15,7 +15,8 @@ import { recommendNextWeek, WeeklyRecommendation } from "@/lib/trainingPeriodiza
 import { buildMuscleEvolution, MuscleEvolution } from "@/lib/muscleEvolution";
 import { loadCycles } from "@/lib/storage";
 import { fmtDate } from "@/lib/format";
-import { IconDumbbell, IconCheck, IconTrend } from "@/components/icons";
+import { IconDumbbell, IconCheck, IconTrend, IconClipboard } from "@/components/icons";
+import { generateMetodologiaPdf } from "@/lib/pdf";
 
 const RESERVE_LABEL: Record<ReserveType, string> = {
   warmup: "Warm up",
@@ -46,6 +47,10 @@ function newRow(): DraftRow {
 
 import { GridPage, PageHero, SectionHeading, Panel, FormRow } from "@/components/apple";
 import { ProgramaDaSemana } from "@/components/ProgramaDaSemana";
+import { computeMuscleTargets, buildSplit, ajusteDeFadigaPara, diasEfetivosPara } from "@/lib/trainingSplitBuilder";
+import { upsertTrainingProgram } from "@/lib/trainingStorage";
+import { loadPreferences } from "@/lib/questionnaire";
+import { newId } from "@/components/DietMealsEditor";
 
 export default function TreinoPage() {
   const { ready, user } = useAuth();
@@ -63,6 +68,16 @@ export default function TreinoPage() {
      que o usuário descreveu como "treino com nome de grupamento e sem séries".
      O treino sempre existiu; faltava exibi-lo. */
   const [programa, setPrograma] = useState<TrainingProgram | null>(null);
+
+  /* GERAÇÃO AUTOMÁTICA.
+   *
+   * O treino nunca deveria ser montado à mão pelo usuário — o app tem leitura de
+   * foto, histórico de ciclos e as faixas de volume; montar exercício por
+   * exercício é justamente o trabalho que ele existe para eliminar. O único
+   * input que não dá para inferir é quantos dias a pessoa consegue ir. */
+  const [diasPorSemana, setDiasPorSemana] = useState(5);
+  const [gerando, setGerando] = useState(false);
+  const [erroGerar, setErroGerar] = useState<string | null>(null);
 
   const [sessionLabel, setSessionLabel] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -106,6 +121,40 @@ export default function TreinoPage() {
       cancelled = true;
     };
   }, [ready, user]);
+
+  async function handleGerarTreino() {
+    setGerando(true);
+    setErroGerar(null);
+    try {
+      const [prefs, cycles] = await Promise.all([loadPreferences(), loadCycles()]);
+      const ultimo = cycles.length ? cycles[cycles.length - 1] : null;
+
+      /* A leitura visual do último ciclo é o que marca ponto fraco. Sem ciclo
+         ainda, o treino sai equilibrado — e o `reason` de cada grupo explica
+         que a diferenciação chega quando houver foto. */
+      const leitura = (ultimo?.muscleAssessment ?? []).map((a) => ({
+        muscle: a.muscle as MuscleGroup,
+        relativeDevelopment: a.relativeDevelopment,
+        confidence: a.confidence,
+      }));
+
+      const dias = diasEfetivosPara(diasPorSemana, 0);
+      const alvos = computeMuscleTargets(leitura, prefs.priorityMuscles ?? [], 0, dias, 0, dias < diasPorSemana);
+      const sessions = buildSplit(dias, alvos, undefined, ajusteDeFadigaPara(0));
+
+      await upsertTrainingProgram({
+        id: newId(),
+        name: `Treino de ${dias} dias`,
+        createdAt: new Date().toISOString(),
+        sessions,
+      });
+      await refresh();
+    } catch (e) {
+      setErroGerar(e instanceof Error ? e.message : "Erro ao gerar o treino.");
+    } finally {
+      setGerando(false);
+    }
+  }
 
   const volumeReadings: VolumeReading[] = useMemo(() => {
     if (!logs || nowMs == null) return [];
@@ -187,7 +236,54 @@ export default function TreinoPage() {
           por grupamento — informação de auditoria, não de execução.
           A renderização vive em `ProgramaDaSemana` para poder ser exercitada
           fora desta página, que exige sessão e dados no Supabase. */}
+      {/* GERAR — a primeira ação da página. Antes o usuário precisava montar
+          exercício por exercício no formulário lá embaixo, que é exatamente o
+          trabalho que o app existe para fazer por ele. */}
+      <section>
+        <SectionHeading
+          title={programa ? "Gerar de novo" : "Gerar seu treino"}
+          desc={
+            programa
+              ? "Refaz o programa com a leitura de foto e as prioridades mais recentes. O anterior é substituído."
+              : "O programa sai da leitura das suas fotos, das prioridades declaradas e das faixas de volume. O único dado que falta é quantos dias você consegue treinar."
+          }
+        />
+        <div className="panel">
+          <FormRow label="Dias de treino por semana" hint="Define a divisão: 3 vira Push/Pull/Legs, 5 vira PPL + Upper/Lower.">
+            <select
+              value={diasPorSemana}
+              onChange={(e) => setDiasPorSemana(Number(e.target.value))}
+              className="input"
+            >
+              {[1, 2, 3, 4, 5, 6].map((d) => (
+                <option key={d} value={d}>
+                  {d} {d === 1 ? "dia" : "dias"}
+                </option>
+              ))}
+            </select>
+          </FormRow>
+          {erroGerar && <p className="panel-row text-[14.5px] text-danger">{erroGerar}</p>}
+        </div>
+        <button type="button" onClick={handleGerarTreino} disabled={gerando} className="btn-primary mt-4">
+          <IconDumbbell className="h-4 w-4" />
+          {gerando ? "Gerando…" : programa ? "Gerar de novo" : "Gerar treino"}
+        </button>
+      </section>
+
       {programa && <ProgramaDaSemana sessions={programa.sessions} />}
+
+      {/* O guia explica o vocabulário que a prescrição usa. Fica logo abaixo do
+          programa porque é ali que a dúvida aparece — "o que é RIR 2?". */}
+      <section>
+        <SectionHeading
+          title="Guia de metodologia"
+          desc="O que significa cada tipo de série, por que o RIR existe, como o volume é decidido, e as orientações de dieta — incluindo por que as refeições proteicas ficam a cada 3 horas."
+        />
+        <button type="button" onClick={() => generateMetodologiaPdf()} className="btn-secondary">
+          <IconClipboard className="h-4 w-4" />
+          Baixar o guia em PDF
+        </button>
+      </section>
 
       {loadError && (
         <Panel>

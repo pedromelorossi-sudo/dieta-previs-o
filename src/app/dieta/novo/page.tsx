@@ -10,7 +10,7 @@ import Link from "next/link";
 import { Food, FOODS } from "@/lib/foods";
 import { Diet, DietMeal, MEAL_PRESETS, dietTotals } from "@/lib/dietBuilder";
 import { upsertDiet } from "@/lib/dietStorage";
-import { generateDietPdf } from "@/lib/pdf";
+import { generateDietPdf, generateMetodologiaPdf } from "@/lib/pdf";
 import { loadLastPrediction } from "@/lib/predictionsLog";
 import { RESTRICTION_LABEL, Restriction, UserPreferences, loadPreferences } from "@/lib/questionnaire";
 import { IconCheck, IconClipboard, IconDroplet, IconFlame, IconWheat } from "@/components/icons";
@@ -305,6 +305,11 @@ export default function NovaDietaPage() {
         <button type="button" onClick={handleDownloadPdf} className="btn-primary">
           <IconClipboard className="h-4 w-4" />
           Baixar PDF do plano
+        </button>
+        {/* Metade do guia é orientação de dieta — o botão precisa existir aqui
+            também, não só na tela de treino. */}
+        <button type="button" onClick={() => generateMetodologiaPdf()} className="btn-secondary">
+          Guia de metodologia
         </button>
         <button type="button" onClick={handleSave} className="btn-secondary">
           {saved ? <IconCheck className="h-4 w-4" /> : null}

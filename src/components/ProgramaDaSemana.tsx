@@ -10,7 +10,7 @@
  */
 
 import { TrainingSession, ReserveType } from "@/lib/trainingBuilder";
-import { exerciseById, MUSCLE_GROUP_LABEL } from "@/lib/exerciseLibrary";
+import { exerciseById } from "@/lib/exerciseLibrary";
 import { SectionHeading } from "@/components/apple";
 
 const RESERVE_LABEL: Record<ReserveType, string> = {
@@ -68,14 +68,12 @@ export function ProgramaDaSemana({ sessions }: { sessions: TrainingSession[] }) 
               const ex = exerciseById(item.exerciseId);
               return (
                 <div key={`${item.exerciseId}-${j}`} className="panel-row">
-                  <div className="flex items-baseline justify-between gap-4">
-                    <span className="text-[15px] font-medium">{ex?.name ?? item.exerciseId}</span>
-                    {ex && (
-                      <span className="shrink-0 text-[13px] text-neutral">
-                        {MUSCLE_GROUP_LABEL[ex.primaryMuscle]}
-                      </span>
-                    )}
-                  </div>
+                  {/* Só o nome do exercício. O grupamento muscular ("Costas",
+                      "Tríceps") era informação de auditoria vazando para a tela
+                      de execução: quem vai treinar precisa saber O QUE fazer e
+                      QUANTO, não a taxonomia por trás da escolha. A análise por
+                      grupo continua existindo, mais abaixo na página. */}
+                  <span className="text-[15px] font-medium">{ex?.name ?? item.exerciseId}</span>
                   <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] tabular-nums text-muted">
                     {item.blocks.map((b, k) => (
                       <span key={k}>
