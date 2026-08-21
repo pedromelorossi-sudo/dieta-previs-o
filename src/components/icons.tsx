@@ -79,11 +79,21 @@ export function IconCheck({ className = base }: IconProps) {
   );
 }
 
-export function IconPhysique({ className = base }: IconProps) {
+/* Marca do Degrau — três degraus subindo.
+ *
+ * O anterior era um torso de boneco: literal ("físico"), figurativo, e ilegível
+ * a 16px. Este é o nome do app desenhado — degrau — e ao mesmo tempo lê como
+ * barra subindo, que é o que o app de fato faz: medir o passo de cada ciclo.
+ *
+ * Três blocos separados, não uma silhueta cheia: cheia, a forma fica ambígua a
+ * 15px e lê como um "4". Separados, leem inequivocamente como degraus. Largura
+ * igual, altura em passo constante de 4,6 — a geometria é a mensagem. */
+export function IconDegrau({ className = base }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="12" cy="4.4" r="2.1" fill="currentColor" stroke="none" />
-      <path d="M6.2 20c.3-3.6 1-6.1 2.1-7.7-1.4-.8-2.1-2.3-1.7-3.9.6-2.1 2.6-3.2 4.2-2.4.6-.6 1.3-1 2.2-1s1.6.4 2.2 1c1.6-.8 3.6.3 4.2 2.4.4 1.6-.3 3.1-1.7 3.9 1.1 1.6 1.8 4.1 2.1 7.7" />
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <rect x="3.4" y="14.2" width="5.2" height="6.4" rx="1.3" />
+      <rect x="9.4" y="9.6" width="5.2" height="11" rx="1.3" />
+      <rect x="15.4" y="5" width="5.2" height="15.6" rx="1.3" />
     </svg>
   );
 }

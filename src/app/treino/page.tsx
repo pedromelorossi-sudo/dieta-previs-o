@@ -1,5 +1,10 @@
 "use client";
 
+/* apple-design · arquétipo B (Índice/lista) · coluna de grade 1080
+ * "Volume por grupo" e "Evolução por grupo" eram grades de cartões com itens do
+ * mesmo tipo — a fragmentação que a regra 1 proíbe. Viraram painel unificado.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { EXERCISE_LIBRARY, MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
@@ -10,7 +15,6 @@ import { recommendNextWeek, WeeklyRecommendation } from "@/lib/trainingPeriodiza
 import { buildMuscleEvolution, MuscleEvolution } from "@/lib/muscleEvolution";
 import { loadCycles } from "@/lib/storage";
 import { fmtDate } from "@/lib/format";
-import { Field } from "@/components/DietMealsEditor";
 import { IconDumbbell, IconCheck, IconTrend } from "@/components/icons";
 
 const RESERVE_LABEL: Record<ReserveType, string> = {
@@ -39,6 +43,8 @@ function newRow(): DraftRow {
     loadKg: "",
   };
 }
+
+import { GridPage, PageHero, SectionHeading, Panel, FormRow } from "@/components/apple";
 
 export default function TreinoPage() {
   const { ready, user } = useAuth();
@@ -146,56 +152,59 @@ export default function TreinoPage() {
 
   if (!ready || logs === null) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10 space-y-6">
-        <div className="skeleton h-14 w-full" />
+      <GridPage>
+        <div className="skeleton h-14 w-full max-w-[420px]" />
         <div className="skeleton h-48 w-full" />
-      </div>
+      </GridPage>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10 space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Treino</h1>
-        <p className="text-sm text-muted mt-2">
-          Log de sessões, volume semanal por grupo muscular (MEV/MAV/MRV) e recomendação pra próxima semana.
-        </p>
-      </div>
+    <GridPage>
+      <PageHero
+        eyebrow="Semana"
+        title="Treino"
+        lede="Log de sessões, volume semanal por grupo muscular (MEV/MAV/MRV) e recomendação para a próxima semana."
+      />
 
       {loadError && (
-        <div className="card border-warn/30 bg-warn/5 p-4 text-sm text-warn">
-          {loadError} — se as tabelas de treino ainda não foram criadas no Supabase, rode a migração antes de usar esta
-          página.
-        </div>
+        <Panel>
+          <div className="panel-row text-[14.5px] leading-[1.6] text-warn">
+            {loadError} — se as tabelas de treino ainda não foram criadas no Supabase, rode a migração antes de usar
+            esta página.
+          </div>
+        </Panel>
       )}
 
       {recommendation?.deloadSuggested && (
-        <div className="card border-danger/30 bg-danger/5 p-4 text-sm text-danger">
-          {recommendation.deloadReason}
-        </div>
+        <Panel>
+          <div className="panel-row text-[14.5px] leading-[1.6] text-danger">{recommendation.deloadReason}</div>
+        </Panel>
       )}
 
       <section>
-        <h2 className="text-lg font-semibold tracking-tight mb-1">Volume da semana por grupo</h2>
-        <p className="text-sm text-muted mb-4">Últimos 7 dias, contando só séries Work e Top set.</p>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <SectionHeading
+          title="Volume da semana por grupo"
+          desc="Últimos 7 dias, contando só séries Work e Top set."
+        />
+        <Panel>
           {volumeReadings.map((r) => {
             const rec = recommendation?.muscles.find((m) => m.muscle === r.muscle);
+            /* A cor do número diz o estado; a etiqueta fica cinza. Duas cores
+               competindo na mesma linha é o que a regra 4 chama de errado. */
             const tone =
-              r.status === "abaixo_mev"
-                ? "bg-warn/15 text-warn"
-                : r.status === "acima_mrv"
-                  ? "bg-danger/15 text-danger"
-                  : "bg-accent/15 text-accent";
+              r.status === "abaixo_mev" ? "text-warn" : r.status === "acima_mrv" ? "text-danger" : "text-foreground";
             return (
-              <div key={r.muscle} className="card p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{r.muscleLabel}</span>
-                  <span className={`badge ${tone} shrink-0`}>{r.effectiveSets} séries</span>
+              <div key={r.muscle} className="panel-row">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-[17px] font-semibold tracking-[-0.01em]">{r.muscleLabel}</span>
+                  <span className={`shrink-0 text-[17px] font-semibold tabular-nums ${tone}`}>
+                    {r.effectiveSets} séries
+                  </span>
                 </div>
-                <p className="text-xs text-muted mt-2 leading-relaxed">{r.note}</p>
+                <p className="mt-1 text-[13.5px] leading-[1.5] text-muted">{r.note}</p>
                 {rec && rec.adjustment !== "manter" && (
-                  <p className="text-xs mt-2 text-accent leading-relaxed">
+                  <p className="mt-1.5 text-[13.5px] leading-[1.5] text-accent">
                     Próxima semana: {rec.adjustment === "subir" ? "subir volume" : "reduzir volume"}
                     {rec.suggestedExerciseSwap &&
                       ` — experimentar "${exerciseById(rec.suggestedExerciseSwap.toExerciseId)?.name ?? ""}"`}
@@ -204,45 +213,51 @@ export default function TreinoPage() {
               </div>
             );
           })}
-        </div>
+        </Panel>
       </section>
 
       {muscleEvolution.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold tracking-tight mb-1">Evolução por grupo muscular</h2>
-          <p className="text-sm text-muted mb-4">
-            A partir da leitura visual das fotos em cada ciclo — só compara leituras com confiança media/alta, um
-            palpite de baixa confiança não conta como piora ou melhora.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <SectionHeading
+            title="Evolução por grupo muscular"
+            desc="A partir da leitura visual das fotos em cada ciclo — só compara leituras com confiança média/alta; um palpite de baixa confiança não conta como piora nem como melhora."
+          />
+          <Panel>
             {muscleEvolution.map((e) => {
               const tone =
-                e.trend === "melhorando"
-                  ? "bg-accent/15 text-accent"
-                  : e.trend === "piorando"
-                    ? "bg-danger/15 text-danger"
-                    : "bg-surface-raised text-muted";
+                e.trend === "melhorando" ? "text-accent" : e.trend === "piorando" ? "text-danger" : "text-muted";
               return (
-                <div key={e.muscle} className="card p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{e.muscleLabel}</span>
-                    <span className={`badge ${tone} shrink-0 flex items-center gap-1`}>
-                      {e.trend === "melhorando" && <IconTrend className="h-3 w-3" />}
-                      {e.trend === "melhorando" ? "melhorando" : e.trend === "piorando" ? "piorando" : e.trend === "estavel" ? "estável" : "sem dado"}
+                <div key={e.muscle} className="panel-row">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <span className="text-[17px] font-semibold tracking-[-0.01em]">{e.muscleLabel}</span>
+                    <span className={`flex shrink-0 items-center gap-1.5 text-[15px] font-medium ${tone}`}>
+                      {e.trend === "melhorando" && <IconTrend className="h-3.5 w-3.5" />}
+                      {e.trend === "melhorando"
+                        ? "melhorando"
+                        : e.trend === "piorando"
+                          ? "piorando"
+                          : e.trend === "estavel"
+                            ? "estável"
+                            : "sem dado"}
                     </span>
                   </div>
-                  <p className="text-xs text-muted mt-2 leading-relaxed">{e.trendNote}</p>
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <p className="mt-1 text-[13.5px] leading-[1.5] text-muted">{e.trendNote}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {e.points.slice(-6).map((p, i) => (
-                      <span key={i} className="badge bg-surface-raised text-muted border border-border text-[10px]">
-                        {fmtDate(p.date)}: {p.relativeDevelopment === "atras_dos_outros" ? "atrás" : p.relativeDevelopment === "destaque" ? "destaque" : "prop."}
+                      <span key={i} className="badge">
+                        {fmtDate(p.date)}:{" "}
+                        {p.relativeDevelopment === "atras_dos_outros"
+                          ? "atrás"
+                          : p.relativeDevelopment === "destaque"
+                            ? "destaque"
+                            : "prop."}
                       </span>
                     ))}
                   </div>
                 </div>
               );
             })}
-          </div>
+          </Panel>
         </section>
       )}
 
@@ -252,28 +267,27 @@ export default function TreinoPage() {
           <p className="text-sm text-muted">O que você fez de verdade — carga real, não o planejado.</p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nome da sessão">
+        <div className="panel">
+          <FormRow label="Nome da sessão">
             <input
               value={sessionLabel}
               onChange={(e) => setSessionLabel(e.target.value)}
               className="input"
-              placeholder="ex: Peito/Tríceps/Panturrilha A"
+              placeholder="Peito/Tríceps A"
             />
-          </Field>
-          <Field label="Data">
+          </FormRow>
+          <FormRow label="Data">
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
-          </Field>
+          </FormRow>
+          <FormRow label="Nota de lesão ou dor" hint="Opcional." stacked>
+            <input
+              value={injuryNote}
+              onChange={(e) => setInjuryNote(e.target.value)}
+              className="input"
+              placeholder="dor no ombro direito, reduzi carga"
+            />
+          </FormRow>
         </div>
-
-        <Field label="Nota de lesão/dor (opcional)">
-          <input
-            value={injuryNote}
-            onChange={(e) => setInjuryNote(e.target.value)}
-            className="input"
-            placeholder="ex: dor no ombro direito, reduzi carga"
-          />
-        </Field>
 
         <div className="space-y-3">
           {rows.map((row) => {
@@ -353,6 +367,6 @@ export default function TreinoPage() {
           {saving ? "Salvando…" : saved ? "Sessão salva" : "Salvar sessão"}
         </button>
       </section>
-    </div>
+    </GridPage>
   );
 }

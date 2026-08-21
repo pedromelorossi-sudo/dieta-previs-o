@@ -13,6 +13,8 @@ import { useAuth } from "@/context/AuthContext";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+import { ReadingPage } from "@/components/apple";
+
 export default function PrevisaoPage() {
   const router = useRouter();
   const { ready, user } = useAuth();
@@ -75,16 +77,16 @@ export default function PrevisaoPage() {
 
   if (!cycles) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
+      <ReadingPage>
         <div className="skeleton h-14 w-full" />
         <div className="skeleton h-64 w-full" />
-      </div>
+      </ReadingPage>
     );
   }
 
   if (!last) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-16">
+      <ReadingPage>
         <p className="text-muted">
           Nenhum ciclo no histórico ainda.{" "}
           <Link href="/previsao-ia" className="text-accent hover:underline">
@@ -96,12 +98,12 @@ export default function PrevisaoPage() {
           </Link>{" "}
           antes de gerar uma previsão baseada em histórico.
         </p>
-      </div>
+      </ReadingPage>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
+    <ReadingPage>
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Nova previsão</h1>
         <p className="text-sm text-muted mt-2">
@@ -271,7 +273,7 @@ export default function PrevisaoPage() {
           </p>
         </section>
       )}
-    </div>
+    </ReadingPage>
   );
 }
 

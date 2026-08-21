@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { IconFlame } from "@/components/icons";
 
+import { ReadingPage } from "@/components/apple";
+
 export default function AnalisePage() {
   const { ready, user } = useAuth();
   const [analysis, setAnalysis] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export default function AnalisePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10 space-y-8">
+    <ReadingPage>
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Análise do Claude</h1>
         <p className="text-sm text-muted mt-2">
@@ -71,6 +73,6 @@ export default function AnalisePage() {
           </p>
         </div>
       )}
-    </div>
+    </ReadingPage>
   );
 }

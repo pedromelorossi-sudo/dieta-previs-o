@@ -48,15 +48,21 @@ export function TotalCard({
   const close = hasTarget && Math.abs(pct - 1) <= 0.05;
   const tone = !hasTarget ? "text-muted" : close ? "text-accent" : "text-warn";
   return (
-    <div className="card p-3.5">
-      <div className="flex items-center gap-1.5 text-[11px] text-muted">
+    <div className="px-4 py-3.5">
+      <div className="flex items-center gap-1.5 text-[13px] text-neutral">
         <span className={tone}>{icon}</span>
         {label}
       </div>
-      <div className="mt-1 text-base font-semibold">
+      <div className="mt-1 text-[17px] font-semibold tabular-nums">
         <AnimatedNumber value={value} decimals={decimals} durationMs={400} />
         {suffix}
-        {hasTarget && <span className="text-muted font-normal text-xs"> / {fmt(target, decimals)}{suffix}</span>}
+        {hasTarget && (
+          <span className="text-[13px] font-normal text-neutral">
+            {" "}
+            / {fmt(target, decimals)}
+            {suffix}
+          </span>
+        )}
       </div>
       {hasTarget && (
         <div className="mt-1.5 h-1 rounded-full bg-track overflow-hidden">

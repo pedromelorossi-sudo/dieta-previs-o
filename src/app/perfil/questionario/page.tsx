@@ -24,6 +24,8 @@ const MUSCLE_GROUPS: MuscleGroup[] = Object.keys(MUSCLE_GROUP_LABEL) as MuscleGr
 
 const CATEGORIES: FoodCategory[] = ["proteina", "carboidrato", "gordura", "fruta", "vegetal"];
 
+import { ReadingPage } from "@/components/apple";
+
 export default function QuestionarioPage() {
   const { ready, user, profile } = useAuth();
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
@@ -76,15 +78,15 @@ export default function QuestionarioPage() {
 
   if (!loaded) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-10 space-y-6">
+      <ReadingPage>
         <div className="skeleton h-14 w-full" />
         <div className="skeleton h-96 w-full" />
-      </div>
+      </ReadingPage>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10 space-y-8">
+    <ReadingPage>
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Questionário de hábitos</h1>
         <p className="text-sm text-muted mt-2">
@@ -217,7 +219,7 @@ export default function QuestionarioPage() {
         {saved ? <IconCheck className="h-4 w-4" /> : null}
         {saved ? "Preferências salvas" : "Salvar preferências"}
       </button>
-    </div>
+    </ReadingPage>
   );
 }
 

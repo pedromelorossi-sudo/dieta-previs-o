@@ -1,5 +1,10 @@
 "use client";
 
+/* apple-design · arquétipo D (Formulário) + painel de resultado
+ * As quatro "StatCard" em grade viraram um painel único de linhas — regra 1:
+ * itens irmãos não moram em cartões separados.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -9,9 +14,11 @@ import { fmt, fmtSigned } from "@/lib/format";
 import { saveLastPrediction } from "@/lib/predictionsLog";
 import { addCycle } from "@/lib/storage";
 import { Cycle } from "@/lib/types";
-import { IconCheck, IconDroplet, IconFlame, IconScale, IconTarget, IconWheat } from "@/components/icons";
+import { IconCheck, IconDroplet, IconFlame, IconScale, IconWheat } from "@/components/icons";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+import { ReadingPage, PageHero, FormPanel, FormRow, Panel, ValueRow, SectionHeading } from "@/components/apple";
 
 export default function EstimarPage() {
   const router = useRouter();
@@ -81,81 +88,121 @@ export default function EstimarPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Estimar dieta inicial</h1>
-        <p className="text-sm text-muted mt-2">
-          Sem histórico de ciclos? Estime um ponto de partida a partir do peso, altura e %BF — o algoritmo decide
-          entre cutting, normocalórico ou bulking e sugere os macros.
-        </p>
-      </div>
+    <ReadingPage>
+      <PageHero
+        eyebrow="Ponto de partida"
+        title="Estimar dieta inicial"
+        lede="Sem histórico de ciclos? Estime um ponto de partida a partir do peso, altura e %BF — o algoritmo decide entre cutting, normocalórico ou bulking e sugere os macros."
+      />
 
-      <div className="card p-6 space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Peso (kg)">
-            <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="ex: 78" className="input" />
-          </Field>
-          <Field label="Altura (cm)">
-            <input type="number" step="1" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="ex: 178" className="input" />
-          </Field>
-          <Field label="%BF estimado">
-            <input type="number" step="0.1" value={bodyFat} onChange={(e) => setBodyFat(e.target.value)} placeholder="ex: 16" className="input" />
-          </Field>
-          <Field label="Idade">
-            <input type="number" step="1" value={age} onChange={(e) => setAge(e.target.value)} placeholder="ex: 30" className="input" />
-          </Field>
-          <Field label="Sexo biológico (referência de %BF e TMB)">
-            <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} className="input">
-              <option value="masculino">Masculino</option>
-              <option value="feminino">Feminino</option>
-            </select>
-          </Field>
-          <Field label="Nível de atividade física">
-            <select value={activityLevel} onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)} className="input">
-              {(Object.keys(ACTIVITY_LABEL) as ActivityLevel[]).map((a) => (
-                <option key={a} value={a}>
-                  {ACTIVITY_LABEL[a]}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        <p className="text-xs text-muted">
-          TMB estimada pela média de duas fórmulas: Katch-McArdle (massa magra a partir do %BF) e Mifflin-St Jeor
-          (peso, altura, idade e sexo) — a segunda funciona como checagem cruzada da primeira. O resultado é
-          multiplicado pelo fator de atividade para chegar ao gasto total estimado (TDEE).
-        </p>
-      </div>
+      <FormPanel label="Corpo">
+        <FormRow label="Peso" hint="Em quilos.">
+          <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="78" className="input" />
+        </FormRow>
+        <FormRow label="Altura" hint="Em centímetros.">
+          <input type="number" step="1" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="178" className="input" />
+        </FormRow>
+        <FormRow label="Gordura corporal" hint="Percentual estimado.">
+          <input type="number" step="0.1" value={bodyFat} onChange={(e) => setBodyFat(e.target.value)} placeholder="16" className="input" />
+        </FormRow>
+        <FormRow label="Idade">
+          <input type="number" step="1" value={age} onChange={(e) => setAge(e.target.value)} placeholder="30" className="input" />
+        </FormRow>
+        <FormRow label="Sexo biológico" hint="Referência de %BF e de TMB.">
+          <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} className="input">
+            <option value="masculino">Masculino</option>
+            <option value="feminino">Feminino</option>
+          </select>
+        </FormRow>
+      </FormPanel>
+
+      <FormPanel
+        label="Atividade"
+        footer="TMB estimada pela média de duas fórmulas: Katch-McArdle (massa magra a partir do %BF) e Mifflin-St Jeor (peso, altura, idade e sexo) — a segunda funciona como checagem cruzada da primeira. O resultado é multiplicado pelo fator de atividade para chegar ao gasto total estimado."
+      >
+        <FormRow label="Nível de atividade física" stacked>
+          <select value={activityLevel} onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)} className="input">
+            {(Object.keys(ACTIVITY_LABEL) as ActivityLevel[]).map((a) => (
+              <option key={a} value={a}>
+                {ACTIVITY_LABEL[a]}
+              </option>
+            ))}
+          </select>
+        </FormRow>
+      </FormPanel>
 
       {result && (
-        <section className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-4">
-            <StatCard label="IMC" value={fmt(result.bmi, 1)} hint="referência, não decide o caminho" />
-            <StatCard label="Massa magra" value={`${fmt(result.leanMassKg, 1)} kg`} hint={`gordura: ${fmt(result.fatMassKg, 1)} kg`} />
-            <StatCard
-              label="TMB (média)"
-              value={`${fmt(result.bmr, 0)} kcal`}
-              hint={`Katch-McArdle ${fmt(result.bmrKatch, 0)} · Mifflin ${fmt(result.bmrMifflin, 0)}`}
-            />
-            <StatCard label="TDEE estimado" value={`${fmt(result.tdee, 0)} kcal`} hint="gasto total diário" />
+        <section className="space-y-[clamp(24px,4vw,36px)]">
+          <div>
+            <SectionHeading title="O que sai da conta" />
+            <Panel>
+              <ValueRow label="IMC" hint="Referência, não decide o caminho." value={fmt(result.bmi, 1)} />
+              <ValueRow
+                label="Massa magra"
+                hint={`Gordura: ${fmt(result.fatMassKg, 1)} kg`}
+                value={`${fmt(result.leanMassKg, 1)} kg`}
+              />
+              <ValueRow
+                label="TMB (média)"
+                hint={`Katch-McArdle ${fmt(result.bmrKatch, 0)} · Mifflin ${fmt(result.bmrMifflin, 0)}`}
+                value={`${fmt(result.bmr, 0)} kcal`}
+              />
+              <ValueRow label="TDEE estimado" hint="Gasto total diário." value={`${fmt(result.tdee, 0)} kcal`} emphasis />
+            </Panel>
           </div>
 
-          <div className="card p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
-                <IconTarget className="h-3.5 w-3.5" />
-              </span>
-              <h2 className="text-sm font-semibold">
-                Caminho recomendado: <span className="text-accent">{PATH_LABEL[result.path]}</span>
-              </h2>
-            </div>
-            <p className="text-xs text-muted leading-relaxed mb-5">{result.pathReason}</p>
-            <div className="grid gap-5 sm:grid-cols-4">
-              <MacroStat icon={<IconFlame className="h-4 w-4" />} label="Kcal alvo" value={fmt(result.targetKcal, 0)} sub={`${fmtSigned(result.surplusPercent * 100, 0)}% do TDEE`} />
-              <MacroStat icon={<IconScale className="h-4 w-4" />} label="Proteína" value={`${fmt(result.targetProteinG, 0)} g`} sub={`${fmt(result.proteinPerKg, 2)} g/kg`} />
-              <MacroStat icon={<IconDroplet className="h-4 w-4" />} label="Gordura" value={`${fmt(result.targetFatG, 0)} g`} sub={`${fmt(result.fatPerKg, 2)} g/kg`} />
-              <MacroStat icon={<IconWheat className="h-4 w-4" />} label="Carboidrato" value={`${fmt(result.targetCarbG, 0)} g`} sub="resíduo" />
-            </div>
+          <div>
+            <SectionHeading
+              title={
+                <>
+                  Caminho recomendado: <span className="text-accent">{PATH_LABEL[result.path]}</span>
+                </>
+              }
+              desc={result.pathReason}
+            />
+            <Panel>
+              <ValueRow
+                label={
+                  <span className="flex items-center gap-2">
+                    <IconFlame className="h-4 w-4 text-neutral" />
+                    Calorias
+                  </span>
+                }
+                hint={`${fmtSigned(result.surplusPercent * 100, 0)}% do TDEE`}
+                value={`${fmt(result.targetKcal, 0)} kcal`}
+                emphasis
+              />
+              <ValueRow
+                label={
+                  <span className="flex items-center gap-2">
+                    <IconScale className="h-4 w-4 text-neutral" />
+                    Proteína
+                  </span>
+                }
+                hint={`${fmt(result.proteinPerKg, 2)} g/kg`}
+                value={`${fmt(result.targetProteinG, 0)} g`}
+              />
+              <ValueRow
+                label={
+                  <span className="flex items-center gap-2">
+                    <IconDroplet className="h-4 w-4 text-neutral" />
+                    Gordura
+                  </span>
+                }
+                hint={`${fmt(result.fatPerKg, 2)} g/kg`}
+                value={`${fmt(result.targetFatG, 0)} g`}
+              />
+              <ValueRow
+                label={
+                  <span className="flex items-center gap-2">
+                    <IconWheat className="h-4 w-4 text-neutral" />
+                    Carboidrato
+                  </span>
+                }
+                hint="Calculado como resíduo."
+                value={`${fmt(result.targetCarbG, 0)} g`}
+              />
+            </Panel>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center flex-wrap">
@@ -168,47 +215,15 @@ export default function EstimarPage() {
             </button>
           </div>
           {savedPrediction && !savedCycle && (
-            <p className="text-xs text-accent">Metas salvas — use em &quot;Montar dieta&quot; quando quiser.</p>
+            <p className="text-[13.5px] text-accent">Metas salvas — use em &quot;Montar dieta&quot; quando quiser.</p>
           )}
-          <p className="text-xs text-muted leading-relaxed">
+          <p className="max-w-[560px] text-[13.5px] leading-[1.6] text-neutral">
             Estimativa inicial, não uma prescrição — ajuste com acompanhamento real assim que possível. Salvar como
             1º ciclo permite que o modelo de previsão por histórico (baseado no algoritmo do Pedro) comece a
             funcionar para este perfil também.
           </p>
         </section>
       )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="block text-xs text-muted mb-1.5">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function StatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="card p-4">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums">{value}</div>
-      <div className="mt-1 text-[10px] text-muted">{hint}</div>
-    </div>
-  );
-}
-
-function MacroStat({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub: string }) {
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 text-xs text-muted">
-        <span className="text-accent">{icon}</span>
-        {label}
-      </div>
-      <div className="mt-1.5 font-semibold text-lg tabular-nums">{value}</div>
-      <div className="text-[11px] text-muted mt-0.5">{sub}</div>
-    </div>
+    </ReadingPage>
   );
 }

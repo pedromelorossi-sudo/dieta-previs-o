@@ -240,3 +240,57 @@ A troca do traço da aba ativa por contraste de texto **matou o número mágico*
 (`-bottom-[15px]`) que dependia da altura exata do header e já tinha quebrado
 uma vez. A armadilha registrada na versão anterior deste arquivo deixou de
 existir.
+
+## Arquétipos de página (o passo que faltava)
+
+> **Correção de 2026-08-20, terceira rodada.** As duas primeiras aplicações do
+> tema Apple rodaram os passos 1, 2 e 4 do fluxo da skill — ler o spec, soltar
+> os tokens, usar os componentes — e **pularam o passo 3**: *escolher uma receita
+> de página em `patterns.md` e rodar as árvores de decisão*. O passo 3 é o que
+> define composição. Sem ele o resultado foi retoque do que já existia, e Pedro
+> viu isso duas vezes: *"mudou apenas as cores"*.
+
+Cada página do Degrau tem um arquétipo atribuído. **Ao mexer numa página, siga o
+arquétipo dela — não improvise composição.**
+
+| arquétipo | páginas | forma |
+|---|---|---|
+| **C · Home/dashboard** | `/` | herói (sobrancelha · H1 · linha de número) → feed em **lista unificada** com segmentado para trocar a visão → seções secundárias em painel |
+| **D · Formulário** | `/previsao-ia`, `/ciclos/novo`, `/estimar`, `/dieta/novo`, `/fotos`, `/perfil/questionario` | grupos = painéis brancos de linhas; **linha = rótulo à esquerda, controle à direita** |
+| **B · Índice/lista** | `/treino`, `/admin` | herói curto → painel unificado de linhas agrupadas |
+
+Containers: **720px** para o que se lê de cima a baixo, **1080px** para o que se
+varre. Respiro entre seções `clamp(34px,6vw,56px)`. Nada além dessas duas larguras.
+
+### A camada que materializa isso
+
+`src/components/apple.tsx` traduz os tijolos de `components.md` para React:
+`ReadingPage`, `GridPage`, `PageHero`, `SectionHeading`, `Panel`, `ListRow`,
+`Segmented`, `FormPanel`, `FormRow`, `ValueRow`.
+
+**Não escreva composição à mão em página nova — use estes.**
+
+### Árvores de decisão (as três que mais decidem)
+
+- **Painel unificado × grade de cartões.** Linhas irmãs do mesmo tipo, varridas
+  com o olho, majoritariamente texto → **painel unificado**. Objetos realmente
+  independentes, cada um com imagem própria, para serem escolhidos → grade de
+  cartões. **Na dúvida, painel** — fragmentação é o pecado maior.
+- **Vidro × sólido.** As camadas se sobrepõem aqui? → vidro. Conteúdo chapado no
+  chão da página? → branco sólido com sombra. No Degrau só a nav é vidro.
+- **Cor × cinza.** É acento, calor, marca ou "ao vivo"? → o token daquilo.
+  Senão → cinza. **Duas cores de acento competindo numa mesma tela = errado.**
+
+## A marca
+
+Três degraus subindo, em blocos separados de largura igual e passo de altura
+constante. É o nome do app desenhado, e lê também como barra subindo — que é o
+que o app faz: medir o passo de cada ciclo.
+
+A versão anterior era um torso de boneco ("físico"): figurativa, literal e
+ilegível a 16px. A primeira tentativa desta foi uma silhueta cheia de escada —
+descartada porque, cheia, a forma lê como um "4" no tamanho do chip.
+
+Chip da marca: quadrado de acento com raio ≈ 22% do lado (o raio de ícone de app
+da Apple) — 6px a 28px, 8px a 36px. `src/app/icon.svg` é a mesma marca para a aba
+do navegador.

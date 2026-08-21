@@ -1,9 +1,17 @@
 "use client";
 
-/* Hallmark · macrostructure: Stat-Led · genre: modern-minimal · tone: technical
- * theme: Apple Liquid Glass (azul #0071e3 sobre chão #f5f5f7) · enrichment: none
- * reveal: number-tick no número do herói apenas · nav: existente (layout.tsx)
- * sistema travado em design.md na raiz
+/* apple-design · arquétipo C (Home/dashboard) · container de grade 1080
+ *
+ * A composição vem de `patterns.md`:
+ *   [nav de vidro] → [herói: sobrancelha viva · H1 · linha de número]
+ *   → [feed primário: LISTA UNIFICADA, com segmentado para trocar a visão]
+ *   → [seções secundárias em painel] → [nota de limitação]
+ *
+ * A regra que muda a estrutura: o feed é uma lista unificada por padrão, e a
+ * tabela densa é uma OPÇÃO do segmentado — não as duas na tela ao mesmo tempo.
+ * Antes isto era um herói + grade de estatística + tabela solta, tudo empilhado.
+ *
+ * Sistema travado em design.md na raiz.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -17,11 +25,22 @@ import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { loadMyComments, AdminComment } from "@/lib/comments";
 import { IconClipboard, IconTrend } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
+import {
+  GridPage,
+  PageHero,
+  Panel,
+  SectionHeading,
+  Segmented,
+  ValueRow,
+} from "@/components/apple";
+
+type FeedView = "lista" | "tabela";
 
 export default function DashboardPage() {
   const { ready, user } = useAuth();
   const [cycles, setCycles] = useState<Cycle[] | null>(null);
   const [comments, setComments] = useState<AdminComment[]>([]);
+  const [feedView, setFeedView] = useState<FeedView>("lista");
 
   useEffect(() => {
     if (ready && user) {
@@ -43,188 +62,246 @@ export default function DashboardPage() {
 
   if (!cycles) {
     return (
-      <div className="mx-auto max-w-[1080px] px-[22px] py-12 space-y-6">
-        <div className="skeleton h-32 w-full" />
-        <div className="skeleton h-20 w-full" />
-        <div className="skeleton h-48 w-full" />
-      </div>
+      <GridPage>
+        <div className="skeleton h-32 w-full max-w-[560px]" />
+        <div className="skeleton h-64 w-full" />
+      </GridPage>
     );
   }
 
+  /* Do mais recente para o mais antigo: no feed a pessoa quer ver o de agora. */
+  const feed = [...cycles].reverse();
+
   return (
-    <div className="mx-auto max-w-[1080px] px-[22px] py-12 space-y-[clamp(34px,6vw,56px)]">
-      {/* ---- Herói Stat-Led: o número é o conteúdo, mas nunca aparece sozinho ---- */}
-      <section>
-        {last ? (
-          <>
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-              <span className="tabular-nums text-[clamp(3.5rem,12vw,7rem)] font-semibold leading-[0.85] tracking-[-0.04em] tabular-nums">
-                <AnimatedNumber value={last.kcal} decimals={0} />
-              </span>
-              <span className="pb-2 text-xl text-muted">kcal/dia</span>
-            </div>
-            <p className="mt-5 max-w-xl text-lg leading-snug tracking-tight">
-              é o que está prescrito desde{" "}
-              <span className="text-accent">{fmtDate(last.date)}</span>
-              {last.isPrediction ? ", a partir de uma previsão." : ", a partir de uma prescrição registrada."}
-            </p>
+    <GridPage>
+      {last ? (
+        <PageHero
+          eyebrow="Prescrição vigente"
+          live
+          title={
+            <>
+              <AnimatedNumber value={last.kcal} decimals={0} /> kcal por dia
+            </>
+          }
+          lede={
+            last.isPrediction
+              ? `Previsto para ${fmtDate(last.date)} a partir do seu histórico de ciclos.`
+              : `Prescrito em ${fmtDate(last.date)} e registrado como medição real.`
+          }
+          stat={
+            <>
+              {fmt(last.weightKg)} kg
+              <span className="mx-2 text-faint">·</span>
+              {last.bodyFatPercent != null ? `${fmt(last.bodyFatPercent)}% de gordura` : "gordura não medida"}
+              <span className="mx-2 text-faint">·</span>
+              {fmt(last.proteinG / last.weightKg, 2)} g/kg de proteína
+              <span className="mx-2 text-faint">·</span>
+              {fmt(last.kcal / last.weightKg, 1)} kcal/kg
+            </>
+          }
+          actions={
+            <>
+              <Link href="/previsao-ia" className="btn-primary">
+                <IconTrend className="h-4 w-4" />
+                Novo ciclo
+              </Link>
+              <Link href="/ciclos/novo" className="btn-secondary">
+                <IconClipboard className="h-4 w-4" />
+                Registrar prescrição
+              </Link>
+            </>
+          }
+        />
+      ) : (
+        <PageHero
+          eyebrow="Nenhum ciclo ainda"
+          title="O método precisa dos seus números para existir."
+          lede="O primeiro ciclo estabelece a linha de base — peso, composição corporal e o que você come hoje. A partir do segundo, o algoritmo passa a retrocalcular seu gasto real em vez de estimá-lo por fórmula."
+          actions={
+            <>
+              <Link href="/previsao-ia" className="btn-primary">
+                <IconTrend className="h-4 w-4" />
+                Começar com fotos
+              </Link>
+              <Link href="/ciclos/novo" className="btn-secondary">
+                <IconClipboard className="h-4 w-4" />
+                Registrar prescrição
+              </Link>
+            </>
+          }
+        />
+      )}
 
-            <dl className="mt-7 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-              <Figure label="Peso" value={`${fmt(last.weightKg)} kg`} />
-              <Figure label="Gordura" value={last.bodyFatPercent != null ? `${fmt(last.bodyFatPercent)}%` : "não medida"} />
-              <Figure label="Proteína" value={`${fmt(last.proteinG / last.weightKg, 2)} g/kg`} />
-              <Figure label="Densidade" value={`${fmt(last.kcal / last.weightKg, 1)} kcal/kg`} />
-              <Figure label="Ciclos" value={String(cycles.length)} />
-            </dl>
-          </>
-        ) : (
-          <>
-            <h1 className="max-w-2xl text-[clamp(1.9rem,5vw,2.9rem)] font-semibold leading-tight tracking-[-0.03em]">
-              Nenhum ciclo ainda. O método precisa dos seus números para existir.
-            </h1>
-            <p className="mt-4 max-w-xl text-muted leading-relaxed">
-              O primeiro ciclo estabelece a linha de base — peso, composição corporal e o que você come hoje.
-              A partir do segundo, o algoritmo passa a retrocalcular seu gasto real em vez de estimá-lo por fórmula.
-            </p>
-          </>
-        )}
-
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/previsao-ia" className="btn-primary">
-            <IconTrend className="h-4 w-4" />
-            {last ? "Novo ciclo" : "Começar com fotos"}
-          </Link>
-          <Link href="/ciclos/novo" className="btn-secondary">
-            <IconClipboard className="h-4 w-4" />
-            Registrar prescrição
-          </Link>
-        </div>
-      </section>
-
-      {/* ---- Recados do admin: hairline, não cartão brilhante ---- */}
+      {/* Recados do admin: painel de linhas, não caixa colorida. */}
       {comments.length > 0 && (
         <section>
-          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">Recados do administrador</h2>
-          <div className="mt-4 space-y-4">
+          <SectionHeading title="Recados do administrador" />
+          <Panel>
             {comments.map((c) => (
-              <div key={c.id} className="border-l-2 border-accent/50 pl-4">
-                <p className="text-sm leading-relaxed">{c.body}</p>
-                <p className="mt-1.5 tabular-nums text-xs text-muted tabular-nums">
+              <div key={c.id} className="panel-row">
+                <p className="text-[15px] leading-[1.6]">{c.body}</p>
+                <p className="mt-2 text-[13px] tabular-nums text-neutral">
                   {c.authorName ?? "Administrador"} · {fmtDate(c.createdAt.slice(0, 10))}
                 </p>
               </div>
             ))}
-          </div>
+          </Panel>
         </section>
       )}
 
-      {/* ---- Blocos de estatística separados por régua, não cartões em grade ---- */}
+      {/* Feed primário — o coração do arquétipo C. */}
+      {cycles.length > 0 && (
+        <section>
+          <SectionHeading
+            title="Histórico"
+            desc={`${cycles.length} ${cycles.length === 1 ? "ciclo registrado" : "ciclos registrados"}. Cada linha é uma prescrição e o que o corpo respondeu a ela.`}
+            right={
+              <Segmented
+                label="Visão do histórico"
+                value={feedView}
+                onChange={setFeedView}
+                options={[
+                  { value: "lista", label: "Lista" },
+                  { value: "tabela", label: "Tabela" },
+                ]}
+              />
+            }
+          />
+
+          {feedView === "lista" ? (
+            <Panel>
+              {feed.map((c) => (
+                <div key={c.id} className="panel-row">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[17px] font-semibold tracking-[-0.01em]">{fmtDate(c.date)}</span>
+                      {c.isPrediction && <span className="badge">previsão</span>}
+                    </div>
+                    <span className="shrink-0 text-[19px] font-semibold tabular-nums">{fmt(c.kcal, 0)} kcal</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13.5px] tabular-nums text-muted">
+                    <span>{fmt(c.weightKg)} kg</span>
+                    <span>{c.bodyFatPercent != null ? `${fmt(c.bodyFatPercent)}% BF` : "BF —"}</span>
+                    <span>{fmt(c.kcal / c.weightKg)} kcal/kg</span>
+                    <span>
+                      P {fmt(c.proteinG, 1)}g · G {fmt(c.fatG, 1)}g · C {fmt(c.carbG, 1)}g
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCycle(c.id)}
+                      className="ml-auto text-[13px] text-neutral transition-colors hover:text-danger focus-visible:text-danger"
+                      title="Excluir ciclo"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </Panel>
+          ) : (
+            <Panel className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm tabular-nums">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    {["Data", "Peso", "%BF", "Kcal", "Kcal/kg", "Proteína", "Gordura", "Carbo", ""].map((h) => (
+                      <th key={h} className="py-3 pr-5 text-[13px] font-normal text-neutral first:pl-6 last:pr-6">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cycles.map((c) => (
+                    <tr key={c.id} className="border-b border-border transition-colors last:border-0 hover:bg-hover">
+                      <td className="whitespace-nowrap py-3 pl-6 pr-5">
+                        {fmtDate(c.date)}
+                        {c.isPrediction && <span className="badge ml-2">previsão</span>}
+                      </td>
+                      <td className="whitespace-nowrap py-3 pr-5 font-medium">{fmt(c.weightKg)} kg</td>
+                      <td className="whitespace-nowrap py-3 pr-5 text-muted">
+                        {c.bodyFatPercent != null ? `${fmt(c.bodyFatPercent)}%` : "—"}
+                      </td>
+                      <td className="whitespace-nowrap py-3 pr-5">{fmt(c.kcal, 0)}</td>
+                      <td className="whitespace-nowrap py-3 pr-5 text-muted">{fmt(c.kcal / c.weightKg)}</td>
+                      <td className="whitespace-nowrap py-3 pr-5">
+                        {fmt(c.proteinG, 1)}g <span className="text-muted">({fmt(c.proteinG / c.weightKg, 1)} g/kg)</span>
+                      </td>
+                      <td className="whitespace-nowrap py-3 pr-5">
+                        {fmt(c.fatG, 1)}g <span className="text-muted">({fmt(c.fatG / c.weightKg, 1)} g/kg)</span>
+                      </td>
+                      <td className="whitespace-nowrap py-3 pr-5">{fmt(c.carbG, 1)}g</td>
+                      <td className="whitespace-nowrap py-3 pr-6 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCycle(c.id)}
+                          className="text-[13px] text-neutral transition-colors hover:text-danger focus-visible:text-danger"
+                          title="Excluir ciclo"
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Panel>
+          )}
+        </section>
+      )}
+
+      {/* Regras extraídas: painel de linhas rótulo-esquerda / valor-direita. */}
       {rules && cycles.length > 0 && (
         <section>
-          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">Regras extraídas do histórico</h2>
-          <p className="mt-2 max-w-xl text-sm text-muted leading-relaxed">
-            Padrões que se mantiveram até aqui. São hipóteses de trabalho enquanto seguram, não leis confirmadas —
-            cada ciclo novo testa se continuam valendo.
-          </p>
-
-          <div className="panel mt-6 grid divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <StatBlock
+          <SectionHeading
+            title="Regras extraídas do histórico"
+            desc="Padrões que se mantiveram até aqui. São hipóteses de trabalho enquanto seguram, não leis confirmadas — cada ciclo novo testa se continuam valendo."
+          />
+          <Panel>
+            <ValueRow
               label="Gordura"
-              value={fmt(rules.fatPerKg, 2)}
-              unit="g/kg"
-              note="Estável nos ciclos observados — repetir até aparecer desvio."
-              steady
+              hint="Estável nos ciclos observados — repetir até aparecer desvio."
+              value={`${fmt(rules.fatPerKg, 2)} g/kg`}
+              emphasis
             />
-            <StatBlock
+            <ValueRow
               label="Proteína"
-              value={fmt(rules.proteinPerKg, 2)}
-              unit="g/kg"
-              note={
+              hint={
                 rules.proteinStepSuspected
                   ? "Último salto: +0,1 g/kg. O gatilho do degrau ainda não é conhecido."
                   : "Repete o último valor prescrito."
               }
-              steady={!rules.proteinStepSuspected}
+              value={`${fmt(rules.proteinPerKg, 2)} g/kg`}
+              emphasis
             />
-            <StatBlock
-              label="Densidade calórica"
-              value={fmt(rules.kcalPerKgLast, 1)}
-              unit="kcal/kg"
-              note={`Progressão média de ${fmt(rules.kcalPerKgAvgStep, 2)} por ciclo. Próximo extrapolado: ${fmt(rules.kcalPerKgExtrapolated, 1)}.`}
-              chart={
+            <div className="panel-row">
+              <div className="flex items-baseline justify-between gap-5">
+                <div className="min-w-0">
+                  <div className="text-[15px] font-semibold">Densidade calórica</div>
+                  <div className="mt-0.5 text-[13px] leading-[1.45] text-neutral">
+                    Progressão média de {fmt(rules.kcalPerKgAvgStep, 2)} por ciclo. Próximo extrapolado:{" "}
+                    {fmt(rules.kcalPerKgExtrapolated, 1)}.
+                  </div>
+                </div>
+                <div className="shrink-0 text-[19px] font-semibold tabular-nums">
+                  {fmt(rules.kcalPerKgLast, 1)} kcal/kg
+                </div>
+              </div>
+              <div className="mt-3">
                 <Sparkline
                   values={rules.kcalPerKgSeries.map((s) => s.value)}
                   projectedNext={rules.kcalPerKgExtrapolated}
                 />
-              }
-            />
-          </div>
+              </div>
+            </div>
+          </Panel>
         </section>
       )}
 
-      {/* ---- Histórico ---- */}
-      {cycles.length > 0 && (
-        <section>
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">Histórico</h2>
-            <span className="tabular-nums text-xs text-muted tabular-nums">
-              {cycles.length} {cycles.length === 1 ? "ciclo" : "ciclos"}
-            </span>
-          </div>
-
-          <div className="panel mt-4 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm tabular-nums">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  {["Data", "Peso", "%BF", "Kcal", "Kcal/kg", "Proteína", "Gordura", "Carbo", ""].map((h) => (
-                    <th key={h} className="py-2.5 pr-5 text-[13px] font-normal text-neutral first:pl-5 last:pr-5">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {cycles.map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-0 transition-colors hover:bg-hover">
-                    <td className="whitespace-nowrap py-3 pr-5 pl-5">
-                      {fmtDate(c.date)}
-                      {c.isPrediction && <span className="ml-2 badge bg-warn/15 text-warn">previsão</span>}
-                    </td>
-                    <td className="whitespace-nowrap py-3 pr-5 font-medium">{fmt(c.weightKg)} kg</td>
-                    <td className="whitespace-nowrap py-3 pr-5 text-muted">
-                      {c.bodyFatPercent != null ? `${fmt(c.bodyFatPercent)}%` : "—"}
-                    </td>
-                    <td className="whitespace-nowrap py-3 pr-5">{fmt(c.kcal, 0)}</td>
-                    <td className="whitespace-nowrap py-3 pr-5 text-muted">{fmt(c.kcal / c.weightKg)}</td>
-                    <td className="whitespace-nowrap py-3 pr-5">
-                      {fmt(c.proteinG, 1)}g <span className="text-muted">({fmt(c.proteinG / c.weightKg, 1)} g/kg)</span>
-                    </td>
-                    <td className="whitespace-nowrap py-3 pr-5">
-                      {fmt(c.fatG, 1)}g <span className="text-muted">({fmt(c.fatG / c.weightKg, 1)} g/kg)</span>
-                    </td>
-                    <td className="whitespace-nowrap py-3 pr-5">{fmt(c.carbG, 1)}g</td>
-                    <td className="whitespace-nowrap py-3 pr-5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCycle(c.id)}
-                        className="text-xs text-muted transition-colors hover:text-danger focus-visible:text-danger"
-                        title="Excluir ciclo"
-                      >
-                        excluir
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* ---- Limitações: nota de rodapé, não cartão de destaque ---- */}
-      <section>
-        <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">O que este método não sabe</h2>
-        <ul className="mt-4 max-w-2xl space-y-2.5 text-sm leading-relaxed text-muted">
+      {/* Limitações: prosa solta sob um fio. Nunca caixa de destaque — a regra 3
+          da skill diz que espaço em branco resolve antes de moldura. */}
+      <section className="border-t border-border pt-8">
+        <h2 className="text-[17px]">O que este método não sabe</h2>
+        <ul className="mt-4 max-w-[720px] space-y-3 text-[14.5px] leading-[1.65] text-muted">
           <li>
             Foi construído com poucos pontos de dado. Cada ciclo novo é um teste de se as regras seguram, não uma
             confirmação de que seguram.
@@ -239,52 +316,6 @@ export default function DashboardPage() {
           </li>
         </ul>
       </section>
-    </div>
-  );
-}
-
-/** Figura de apoio do herói: rótulo pequeno acima, valor tabular abaixo. */
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[13px] text-neutral">{label}</dt>
-      <dd className="mt-0.5 font-medium tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-/** Bloco de estatística separado por régua. Substitui o cartão em grade de três colunas —
- * o número é o conteúdo, a moldura não precisa competir com ele. */
-function StatBlock({
-  label,
-  value,
-  unit,
-  note,
-  steady,
-  chart,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  note: string;
-  steady?: boolean;
-  chart?: React.ReactNode;
-}) {
-  return (
-    <div className="px-0 py-5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
-      <div className="flex items-center gap-2">
-        <span className="text-[13px] text-neutral">{label}</span>
-        <span
-          className={`h-1 w-1 rounded-full ${steady ? "bg-accent" : "bg-warn"}`}
-          title={steady ? "Estável" : "Em observação"}
-        />
-      </div>
-      <div className="mt-2 flex items-baseline gap-1.5">
-        <span className="tabular-nums text-3xl font-semibold tracking-tight tabular-nums">{value}</span>
-        <span className="text-sm text-muted">{unit}</span>
-      </div>
-      <p className="mt-2 text-xs leading-relaxed text-muted">{note}</p>
-      {chart && <div className="mt-3">{chart}</div>}
-    </div>
+    </GridPage>
   );
 }

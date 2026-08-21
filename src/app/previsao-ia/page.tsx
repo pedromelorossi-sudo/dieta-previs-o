@@ -1,5 +1,13 @@
 "use client";
 
+/* apple-design · arquétipo D (Formulário) · coluna de leitura 720
+ *
+ * Cada etapa numerada virou um PAINEL branco de linhas, com o rótulo do grupo
+ * fora dele — a estrutura de Ajustes do macOS. O `Field` local foi reescrito
+ * para render `FormRow` (rótulo à esquerda, controle à direita), o que converte
+ * os 40 campos da página de uma vez em vez de 40 edições.
+ */
+
 import { memo, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -198,6 +206,8 @@ interface PredictionResponse {
     interferenceNote: string;
   };
 }
+
+import { ReadingPage, PageHero, FormRow } from "@/components/apple";
 
 export default function PrevisaoIaPage() {
   const router = useRouter();
@@ -556,30 +566,29 @@ export default function PrevisaoIaPage() {
 
   if (!cycles || !prefsLoaded) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
-        <div className="skeleton h-14 w-full" />
+      <ReadingPage>
+        <div className="skeleton h-14 w-full max-w-[420px]" />
         <div className="skeleton h-64 w-full" />
-      </div>
+      </ReadingPage>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {isFirstCycle ? "Começar: informações e fotos" : "Novo ciclo: fotos e previsão"}
-        </h1>
-        <p className="text-sm text-muted mt-2">
-          {isFirstCycle
+    <ReadingPage>
+      <PageHero
+        eyebrow={isFirstCycle ? "Primeiro ciclo" : "Novo ciclo"}
+        title={isFirstCycle ? "Começar: informações e fotos" : "Fotos e previsão"}
+        lede={
+          isFirstCycle
             ? "Preencha suas informações básicas e envie fotos — o Claude estima seu %BF e calcula sua dieta inicial. Da próxima vez, essas informações já vêm preenchidas."
-            : `O Claude estima seu %BF a partir das fotos e recomenda um ponto dentro das faixas calculadas pelo seu algoritmo — baseado no último ciclo (${fmtDate(last!.date)}: ${fmt(last!.weightKg)} kg).`}
-        </p>
-      </div>
+            : `O Claude estima seu %BF a partir das fotos e recomenda um ponto dentro das faixas calculadas pelo seu algoritmo — baseado no último ciclo (${fmtDate(last!.date)}: ${fmt(last!.weightKg)} kg).`
+        }
+      />
 
-      <form onSubmit={handleSubmit} className="card p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-[clamp(24px,4vw,36px)]">
         <div>
           <Etapa numero="1" titulo={"Informações básicas"} />
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="panel">
             <Field label="Sexo biológico">
               <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} className="input">
                 <option value="masculino">Masculino</option>
@@ -722,7 +731,7 @@ export default function PrevisaoIaPage() {
                 Responda com números reais, não com &quot;quão ativo você se sente&quot; — o algoritmo calcula o nível a
                 partir disso.
               </p>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="panel">
                 <Field label="Horas por dia sentado(a) — trabalho, estudo, trajeto, tela (fora o sono)">
                   <input
                     type="number"
@@ -944,7 +953,7 @@ export default function PrevisaoIaPage() {
               Detalhes de execução — usados só pra decidir se esse ciclo é confiável o bastante pra ensinar algo à
               fórmula (ver nota de calibração nos resultados), não pra te julgar.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="panel">
               <Field label="Em quantos dos 7 dias da semana você seguiu a dieta à risca?">
                 <input
                   type="number"
@@ -988,7 +997,7 @@ export default function PrevisaoIaPage() {
               Sobre o ciclo que terminou — isso decide se o déficit foi grande demais e ajusta automaticamente o
               próximo, sem você precisar avaliar &quot;quão cansado&quot; se sentiu.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="panel">
               <Field label="Comparado ao início desse ciclo, sua carga nos exercícios principais:">
                 <select value={strengthTrend} onChange={(e) => setStrengthTrend(e.target.value as typeof strengthTrend)} className="input">
                   <option value="">Selecione…</option>
@@ -1041,7 +1050,7 @@ export default function PrevisaoIaPage() {
               ciclo), isso só ajusta o volume do próximo mesociclo pra não mirar o teto se o atual nem está sendo
               completado.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="panel">
               <Field label="Quantas sessões de treino você completou de verdade desde o último ciclo?">
                 <input
                   type="number"
@@ -1126,7 +1135,7 @@ export default function PrevisaoIaPage() {
           handleSaveTrainingProgram={handleSaveTrainingProgram}
         />
       )}
-    </div>
+    </ReadingPage>
   );
 }
 
@@ -1745,21 +1754,30 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
  * como um rótulo de estágio de verdade: número em mono, título ao lado, régua abaixo separando as
  * etapas. A macroestrutura pede "large numbered stage labels" e "thick numbered rule between stages",
  * e o processo aqui é uma sequência real — a pessoa preenche 1, depois 2, depois 3. */
-function Etapa({ numero, titulo }: { numero: string; titulo: string }) {
-  return (
-    <div className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
-      <span className="tabular-nums text-2xl font-semibold leading-none tabular-nums text-accent">{numero}</span>
-      <span className="text-sm font-medium tracking-tight">{titulo}</span>
-    </div>
-  );
+/* Rótulo do grupo, ACIMA do painel. O número da etapa some do visual: numerar
+   cada bloco era a voz antiga; aqui a ordem já é dada pela sequência vertical,
+   e a regra 3 da skill manda remover o que não carrega significado. */
+function Etapa({ titulo }: { numero?: string; titulo: string }) {
+  return <h2 className="mb-3 px-1 text-[15px] font-semibold tracking-[-0.01em]">{titulo}</h2>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/* Reescrito sobre FormRow: rótulo à esquerda, controle à direita, dentro do
+   painel do grupo. `stacked` para controle largo (textarea, grupo de opções). */
+function Field({
+  label,
+  hint,
+  stacked,
+  children,
+}: {
+  label: string;
+  hint?: React.ReactNode;
+  stacked?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="block">
-      <span className="block text-xs text-muted mb-1.5">{label}</span>
+    <FormRow label={label} hint={hint} stacked={stacked}>
       {children}
-    </label>
+    </FormRow>
   );
 }
 

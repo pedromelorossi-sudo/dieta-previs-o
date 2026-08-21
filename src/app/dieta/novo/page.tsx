@@ -1,5 +1,10 @@
 "use client";
 
+/* apple-design · arquétipo D (Formulário) · coluna de grade 1080
+ * Metas em painel de linhas rótulo/controle; filtros do questionário viram
+ * linha de painel em vez de fileira de etiquetas coloridas soltas na página.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Food, FOODS } from "@/lib/foods";
@@ -10,7 +15,7 @@ import { loadLastPrediction } from "@/lib/predictionsLog";
 import { RESTRICTION_LABEL, Restriction, UserPreferences, loadPreferences } from "@/lib/questionnaire";
 import { IconCheck, IconClipboard, IconDroplet, IconFlame, IconWheat } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
-import { Field, MealCard, TotalCard, newId, newMeal } from "@/components/DietMealsEditor";
+import { MealCard, TotalCard, newId, newMeal } from "@/components/DietMealsEditor";
 
 function filterFoodsByPreferences(foods: Food[], prefs: UserPreferences): Food[] {
   return foods.filter((f) => {
@@ -22,6 +27,8 @@ function filterFoodsByPreferences(foods: Food[], prefs: UserPreferences): Food[]
     return true;
   });
 }
+
+import { GridPage, PageHero, FormPanel, FormRow, Panel, SectionHeading } from "@/components/apple";
 
 export default function NovaDietaPage() {
   const { ready, user } = useAuth();
@@ -150,75 +157,71 @@ export default function NovaDietaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10 space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Montar dieta</h1>
-        <p className="text-sm text-muted mt-2">
-          Escolha os alimentos por refeição, veja as substituições equivalentes e gere o PDF do plano.
-        </p>
-      </div>
+    <GridPage>
+      <PageHero
+        eyebrow="Plano alimentar"
+        title="Montar dieta"
+        lede="Escolha os alimentos por refeição, veja as substituições equivalentes e gere o PDF do plano."
+      />
 
       {prefs && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-muted">Filtros do questionário:</span>
-          {prefs.restrictions.length === 0 && prefs.dislikedFoodIds.length === 0 ? (
-            <span className="text-muted">nenhum</span>
-          ) : (
-            <>
-              {prefs.restrictions.map((r) => (
-                <span key={r} className="badge bg-accent/15 text-accent">
-                  {RESTRICTION_LABEL[r]}
-                </span>
-              ))}
-              {prefs.dislikedFoodIds.length > 0 && (
-                <span className="badge bg-surface-raised text-muted border border-border">
-                  {prefs.dislikedFoodIds.length} alimento(s) excluído(s)
-                </span>
-              )}
-            </>
-          )}
-          <Link href="/perfil/questionario" className="text-accent hover:underline ml-1">
-            editar
-          </Link>
-        </div>
+        <Panel>
+          <div className="panel-row flex items-center justify-between gap-5">
+            <div className="min-w-0">
+              <div className="text-[15px] font-medium">Filtros do questionário</div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {prefs.restrictions.length === 0 && prefs.dislikedFoodIds.length === 0 ? (
+                  <span className="text-[13.5px] text-muted">Nenhum filtro ativo.</span>
+                ) : (
+                  <>
+                    {prefs.restrictions.map((r) => (
+                      <span key={r} className="badge">
+                        {RESTRICTION_LABEL[r]}
+                      </span>
+                    ))}
+                    {prefs.dislikedFoodIds.length > 0 && (
+                      <span className="badge">{prefs.dislikedFoodIds.length} alimento(s) excluído(s)</span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <Link href="/perfil/questionario" className="shrink-0 text-[13px] text-accent hover:underline">
+              Editar
+            </Link>
+          </div>
+        </Panel>
       )}
 
-      <div className="card p-6 space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nome do plano">
-            <input value={name} onChange={(e) => setName(e.target.value)} className="input" />
-          </Field>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-4">
-          <Field label="Meta kcal">
-            <input type="number" value={targetKcal} onChange={(e) => setTargetKcal(e.target.value)} className="input" />
-          </Field>
-          <Field label="Meta proteína (g)">
-            <input type="number" value={targetProtein} onChange={(e) => setTargetProtein(e.target.value)} className="input" />
-          </Field>
-          <Field label="Meta gordura (g)">
-            <input type="number" value={targetFat} onChange={(e) => setTargetFat(e.target.value)} className="input" />
-          </Field>
-          <Field label="Meta carboidrato (g)">
-            <input type="number" value={targetCarb} onChange={(e) => setTargetCarb(e.target.value)} className="input" />
-          </Field>
-        </div>
-        <p className="text-xs text-muted">
-          Preenchido automaticamente com a última previsão salva. Ajuste livremente se quiser outra meta.
-        </p>
-      </div>
+      <FormPanel
+        label="Metas do plano"
+        footer="Preenchido automaticamente com a última previsão salva. Ajuste livremente se quiser outra meta."
+      >
+        <FormRow label="Nome do plano">
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input" />
+        </FormRow>
+        <FormRow label="Calorias" hint="Meta diária.">
+          <input type="number" value={targetKcal} onChange={(e) => setTargetKcal(e.target.value)} className="input" />
+        </FormRow>
+        <FormRow label="Proteína" hint="Em gramas.">
+          <input type="number" value={targetProtein} onChange={(e) => setTargetProtein(e.target.value)} className="input" />
+        </FormRow>
+        <FormRow label="Gordura" hint="Em gramas.">
+          <input type="number" value={targetFat} onChange={(e) => setTargetFat(e.target.value)} className="input" />
+        </FormRow>
+        <FormRow label="Carboidrato" hint="Em gramas.">
+          <input type="number" value={targetCarb} onChange={(e) => setTargetCarb(e.target.value)} className="input" />
+        </FormRow>
+      </FormPanel>
 
-      <div className="card p-6 space-y-5">
-        <div>
-          <h2 className="text-sm font-semibold mb-1">Gerar dieta automaticamente</h2>
-          <p className="text-xs text-muted mb-3">
-            A IA distribui os alimentos do catálogo entre as refeições pra bater as metas acima. Você pode editar
-            tudo depois de gerado.
-          </p>
-        </div>
-
-        <div>
-          <span className="block text-xs text-muted mb-2">Alimentos que não podem faltar</span>
+      <section>
+        <SectionHeading
+          title="Gerar dieta automaticamente"
+          desc="A IA distribui os alimentos do catálogo entre as refeições para bater as metas acima. Você pode editar tudo depois de gerado."
+        />
+        <div className="panel">
+        <div className="panel-row">
+          <span className="block text-[15px] font-medium mb-2.5">Alimentos que não podem faltar</span>
           <div className="flex flex-wrap gap-1.5">
             {FOODS.map((f) => (
               <button
@@ -237,8 +240,8 @@ export default function NovaDietaPage() {
           </div>
         </div>
 
-        <div>
-          <span className="block text-xs text-muted mb-2">Restrições para esta dieta</span>
+        <div className="panel-row">
+          <span className="block text-[15px] font-medium mb-2.5">Restrições para esta dieta</span>
           <div className="flex flex-wrap gap-1.5">
             {(Object.keys(RESTRICTION_LABEL) as Restriction[]).map((r) => (
               <button
@@ -257,21 +260,24 @@ export default function NovaDietaPage() {
           </div>
         </div>
 
-        {genError && <p className="text-xs text-danger">{genError}</p>}
+        {genError && <p className="panel-row text-[14.5px] text-danger">{genError}</p>}
         {genWarnings.length > 0 && (
-          <div className="text-xs text-warn space-y-1">
+          <div className="panel-row space-y-1 text-[14.5px] leading-[1.5] text-warn">
             {genWarnings.map((w, i) => (
               <p key={i}>{w}</p>
             ))}
           </div>
         )}
+        </div>
 
-        <button type="button" onClick={handleGenerate} disabled={generating} className="btn-primary">
+        <button type="button" onClick={handleGenerate} disabled={generating} className="btn-primary mt-4">
           {generating ? "Gerando…" : "Gerar dieta automaticamente"}
         </button>
-      </div>
+      </section>
 
-      <div className="grid gap-3 sm:grid-cols-4 sticky top-[73px] z-[5]">
+      {/* Barra de totais: um painel só, dividido por fio vertical. Antes eram
+          quatro cartões flutuando lado a lado — fragmentação de itens irmãos. */}
+      <div className="panel sticky top-[61px] z-[5] grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
         <TotalCard icon={<IconFlame className="h-4 w-4" />} label="Kcal" value={totals.kcal} target={diet.targetKcal} decimals={0} />
         <TotalCard icon={<IconFlame className="h-4 w-4" />} label="Proteína" value={totals.proteinG} target={diet.targetProteinG} suffix="g" />
         <TotalCard icon={<IconDroplet className="h-4 w-4" />} label="Gordura" value={totals.fatG} target={diet.targetFatG} suffix="g" />
@@ -305,6 +311,6 @@ export default function NovaDietaPage() {
           {saved ? "Salvo" : "Salvar rascunho"}
         </button>
       </div>
-    </div>
+    </GridPage>
   );
 }

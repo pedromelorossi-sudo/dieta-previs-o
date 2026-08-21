@@ -7,6 +7,8 @@ import { fmt, fmtDate } from "@/lib/format";
 import { IconScale } from "@/components/icons";
 import { useRouter } from "next/navigation";
 
+import { GridPage } from "@/components/apple";
+
 export default function AdminPage() {
   const router = useRouter();
   const { ready, profile } = useAuth();
@@ -21,19 +23,19 @@ export default function AdminPage() {
   }, [ready, profile]);
 
   if (!ready) {
-    return <div className="mx-auto max-w-4xl px-6 py-16 text-muted">Carregando…</div>;
+    return <GridPage>Carregando…</GridPage>;
   }
 
   if (!profile?.isAdmin) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-16">
+      <GridPage>
         <p className="text-sm text-muted">Acesso restrito a administradores.</p>
-      </div>
+      </GridPage>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10 space-y-8">
+    <GridPage>
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Painel de administrador</h1>
         <p className="text-sm text-muted mt-2">
@@ -96,6 +98,6 @@ export default function AdminPage() {
           </table>
         </div>
       )}
-    </div>
+    </GridPage>
   );
 }

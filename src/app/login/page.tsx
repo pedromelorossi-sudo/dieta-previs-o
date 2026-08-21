@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { IconFlame } from "@/components/icons";
+import { IconDegrau } from "@/components/icons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,8 +32,8 @@ export default function LoginPage() {
     <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-start gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-accent text-[color:var(--accent-contrast)]">
-            <IconFlame className="h-5 w-5" />
+          <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-accent text-[color:var(--accent-contrast)]">
+            <IconDegrau className="h-[19px] w-[19px]" />
           </span>
           <div className="space-y-1">
             <p className="meta">Degrau</p>

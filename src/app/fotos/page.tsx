@@ -1,5 +1,11 @@
 "use client";
 
+/* apple-design · arquétipo B (Índice) + formulário D
+ * A grade de miniaturas fica como grade: são objetos independentes com imagem
+ * própria, que é o caso em que a árvore de decisão da skill autoriza cartão.
+ * O formulário acima dela vira painéis de linhas.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Sex, estimateBfPercentNavy } from "@/lib/bodyComposition";
@@ -8,6 +14,8 @@ import { fmt, fmtDate } from "@/lib/format";
 import { IconScale } from "@/components/icons";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+import { GridPage, PageHero, SectionHeading, FormPanel, FormRow, Panel } from "@/components/apple";
 
 export default function FotosPage() {
   const { ready, user } = useAuth();
@@ -82,73 +90,79 @@ export default function FotosPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10 space-y-10">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Fotos de progresso</h1>
-        <p className="text-sm text-muted mt-2">
-          Anexe uma foto por data para comparar sua evolução visualmente. O %BF é calculado pelo método da Marinha
-          dos EUA a partir de medidas de circunferência — não por análise da imagem.
-        </p>
-      </div>
+    <GridPage>
+      <PageHero
+        eyebrow="Progresso"
+        title="Fotos de progresso"
+        lede="Anexe uma foto por data para comparar sua evolução visualmente. O %BF é calculado pelo método da Marinha dos EUA a partir de medidas de circunferência — não por análise da imagem."
+      />
 
-      <form onSubmit={handleSubmit} className="card p-6 space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Data">
+      <form onSubmit={handleSubmit} className="space-y-[clamp(24px,4vw,36px)]">
+        <FormPanel label="Registro">
+          <FormRow label="Data">
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" required />
-          </Field>
-          <Field label="Foto">
+          </FormRow>
+          <FormRow label="Foto" stacked>
             <input
               type="file"
               accept="image/*"
               onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-              className="input file:mr-3 file:rounded-[12px] file:border-0 file:bg-accent/15 file:text-accent file:px-3 file:py-1.5 file:text-xs"
+              className="input file:mr-3 file:rounded-full file:border-0 file:bg-accent file:px-4 file:py-1.5 file:text-[13px] file:text-white"
               required
             />
-          </Field>
-        </div>
+            {preview && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="Prévia da foto" className="mt-3 h-40 w-40 rounded-[12px] object-cover" />
+            )}
+          </FormRow>
+          <FormRow label="Notas" hint="Opcional." stacked>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="input resize-none" />
+          </FormRow>
+        </FormPanel>
 
-        {preview && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Prévia da foto" className="h-40 w-40 object-cover rounded-[12px] border border-border" />
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Sexo biológico (fórmula do %BF)">
+        <FormPanel
+          label="Medidas de circunferência"
+          desc="É daqui que sai o %BF — a foto não é analisada."
+          footer={estimatedBf != null ? undefined : "Preencha altura, cintura e pescoço para o %BF aparecer."}
+        >
+          <FormRow label="Sexo biológico" hint="Define a fórmula usada.">
             <select value={sex} onChange={(e) => setSex(e.target.value as Sex)} className="input">
               <option value="masculino">Masculino</option>
               <option value="feminino">Feminino</option>
             </select>
-          </Field>
-          <Field label="Altura (cm)">
-            <input type="number" step="0.1" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} className="input" placeholder="ex: 178" />
-          </Field>
-          <Field label="Cintura (cm)">
-            <input type="number" step="0.1" value={waist} onChange={(e) => setWaist(e.target.value)} className="input" placeholder="na altura do umbigo" />
-          </Field>
-          <Field label="Pescoço (cm)">
+          </FormRow>
+          <FormRow label="Altura" hint="Em centímetros.">
+            <input type="number" step="0.1" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} className="input" placeholder="178" />
+          </FormRow>
+          <FormRow label="Cintura" hint="Na altura do umbigo.">
+            <input type="number" step="0.1" value={waist} onChange={(e) => setWaist(e.target.value)} className="input" />
+          </FormRow>
+          <FormRow label="Pescoço" hint="Em centímetros.">
             <input type="number" step="0.1" value={neck} onChange={(e) => setNeck(e.target.value)} className="input" />
-          </Field>
+          </FormRow>
           {sex === "feminino" && (
-            <Field label="Quadril (cm)">
+            <FormRow label="Quadril" hint="Em centímetros.">
               <input type="number" step="0.1" value={hip} onChange={(e) => setHip(e.target.value)} className="input" />
-            </Field>
+            </FormRow>
           )}
-        </div>
+          {estimatedBf != null && (
+            <div className="panel-row flex items-center justify-between gap-5">
+              <span className="flex items-center gap-2 text-[15px] font-semibold">
+                <IconScale className="h-4 w-4 text-neutral" />
+                %BF estimado
+              </span>
+              <span className="shrink-0 text-[19px] font-semibold tabular-nums text-accent">
+                {fmt(estimatedBf, 1)}%
+              </span>
+            </div>
+          )}
+        </FormPanel>
 
-        {estimatedBf != null && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
-              <IconScale className="h-3.5 w-3.5" />
-            </span>
-            %BF estimado: <span className="font-semibold">{fmt(estimatedBf, 1)}%</span>
-          </div>
+        {error && (
+          <Panel>
+            <p className="panel-row text-[14.5px] text-danger">{error}</p>
+          </Panel>
         )}
-
-        <Field label="Notas (opcional)">
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="input resize-none" />
-        </Field>
-
-        {error && <p className="text-xs text-danger">{error}</p>}
 
         <button type="submit" disabled={saving || !file} className="btn-primary">
           {saving ? "Salvando…" : "Salvar foto"}
@@ -156,7 +170,7 @@ export default function FotosPage() {
       </form>
 
       <section>
-        <h2 className="text-lg font-semibold tracking-tight mb-4">Histórico de fotos</h2>
+        <SectionHeading title="Histórico de fotos" />
         {!photos ? (
           <div className="skeleton h-40 w-full" />
         ) : photos.length === 0 ? (
@@ -184,15 +198,6 @@ export default function FotosPage() {
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="block text-xs text-muted mb-1.5">{label}</span>
-      {children}
-    </label>
+    </GridPage>
   );
 }

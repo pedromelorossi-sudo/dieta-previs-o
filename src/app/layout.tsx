@@ -3,7 +3,7 @@ import Link from "next/link";
 import { NavLink } from "@/components/NavLink";
 import { UserMenu } from "@/components/UserMenu";
 import { SupabaseNotConfigured } from "@/components/SupabaseNotConfigured";
-import { IconPhysique } from "@/components/icons";
+import { IconDegrau } from "@/components/icons";
 import { AuthProvider } from "@/context/AuthContext";
 import "./globals.css";
 
@@ -35,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <div className="mx-auto max-w-5xl px-[22px] py-3 flex items-center justify-between gap-4">
                 <Link href="/" className="flex items-center gap-2 font-semibold tracking-[-0.01em] shrink-0 group">
                   <span className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-accent text-[color:var(--accent-contrast)] transition-colors duration-200 group-hover:bg-accent-strong">
-                    <IconPhysique className="h-4 w-4" />
+                    <IconDegrau className="h-[15px] w-[15px]" />
                   </span>
                   <span className="hidden sm:inline">Degrau</span>
                 </Link>

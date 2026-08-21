@@ -16,6 +16,8 @@ import { Sparkline } from "@/components/Sparkline";
 import { IconDrumstick, IconDroplet, IconFlame, IconClipboard } from "@/components/icons";
 import Link from "next/link";
 
+import { GridPage } from "@/components/apple";
+
 export default function AdminUserDetailPage() {
   const params = useParams<{ userId: string }>();
   const userId = params.userId;
@@ -77,21 +79,21 @@ export default function AdminUserDetailPage() {
   }
 
   if (!ready) {
-    return <div className="mx-auto max-w-4xl px-6 py-16 text-muted">Carregando…</div>;
+    return <GridPage>Carregando…</GridPage>;
   }
 
   if (!profile?.isAdmin) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-16">
+      <GridPage>
         <p className="text-sm text-muted">Acesso restrito a administradores.</p>
-      </div>
+      </GridPage>
     );
   }
 
   const rules = cycles && cycles.length > 0 ? extractRules(cycles) : null;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10 space-y-10">
+    <GridPage>
       <div>
         <Link href="/admin" className="text-sm text-accent hover:underline">
           ← Todos os usuários
@@ -276,6 +278,6 @@ export default function AdminUserDetailPage() {
           </div>
         )}
       </section>
-    </div>
+    </GridPage>
   );
 }

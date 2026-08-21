@@ -1,5 +1,10 @@
 "use client";
 
+/* apple-design · arquétipo D (Formulário) · coluna de leitura 720
+ * Grupos = painéis brancos de linhas; linha = rótulo à esquerda, controle à
+ * direita. Antes era uma grade de dois campos empilhados dentro de um cartão.
+ */
+
 import { useEffect, useState } from "react";
 import { addCycle } from "@/lib/storage";
 import { Cycle } from "@/lib/types";
@@ -8,6 +13,7 @@ import { clearLastPrediction, loadLastPrediction, LoggedPrediction } from "@/lib
 import { IconCheck, IconClipboard } from "@/components/icons";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
+import { ReadingPage, PageHero, FormPanel, FormRow, Panel } from "@/components/apple";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -63,37 +69,38 @@ export default function NovoCicloPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10 space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Registrar ciclo real</h1>
-        <p className="text-sm text-muted mt-2">
-          Quando a prescrição real da consultoria chegar, registre aqui para atualizar o histórico e as regras.
-        </p>
-      </div>
+    <ReadingPage>
+      <PageHero
+        eyebrow="Histórico"
+        title="Registrar ciclo real"
+        lede="Quando a prescrição real da consultoria chegar, registre aqui para atualizar o histórico e as regras."
+      />
 
       {pending && !savedCycle && (
-        <div className="card border-warn/30 bg-warn/5 p-4 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="font-medium">
-              Há uma previsão salva para {fmtDate(pending.targetDate)}
-            </span>
-            <button onClick={handleDismissPrediction} className="text-xs text-muted hover:text-foreground">
-              descartar
-            </button>
+        <Panel>
+          <div className="panel-row">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[15px] font-medium">
+                Há uma previsão salva para {fmtDate(pending.targetDate)}
+              </span>
+              <button onClick={handleDismissPrediction} className="shrink-0 text-[13px] text-neutral transition-colors hover:text-foreground">
+                Descartar
+              </button>
+            </div>
+            <p className="mt-1 text-[13.5px] leading-[1.5] text-muted">
+              Preencha os dados reais abaixo — a comparação (Passo 7) aparece automaticamente ao salvar.
+            </p>
           </div>
-          <p className="text-muted mt-1 text-xs">
-            Preencha os dados reais abaixo — a comparação (Passo 7) aparece automaticamente ao salvar.
-          </p>
-        </div>
+        </Panel>
       )}
 
       {!savedCycle ? (
-        <form onSubmit={handleSubmit} className="card p-6 space-y-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Data">
+        <form onSubmit={handleSubmit} className="space-y-[clamp(24px,4vw,36px)]">
+          <FormPanel label="Medição">
+            <FormRow label="Data">
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" required />
-            </Field>
-            <Field label="Peso (kg)">
+            </FormRow>
+            <FormRow label="Peso" hint="Em quilos, na mesma balança e horário de sempre.">
               <input
                 type="number"
                 step="0.1"
@@ -102,14 +109,20 @@ export default function NovoCicloPage() {
                 className="input"
                 required
               />
-            </Field>
-            <Field label="%BF (opcional)">
+            </FormRow>
+            <FormRow label="Gordura corporal" hint="Opcional. Deixe vazio se não mediu.">
               <input type="number" step="0.1" value={bodyFat} onChange={(e) => setBodyFat(e.target.value)} className="input" />
-            </Field>
-            <Field label="Kcal">
+            </FormRow>
+          </FormPanel>
+
+          <FormPanel
+            label="Prescrição"
+            footer="O carboidrato é calculado como resíduo das calorias. Preencha só se a consultoria mandou um valor diferente."
+          >
+            <FormRow label="Calorias">
               <input type="number" step="1" value={kcal} onChange={(e) => setKcal(e.target.value)} className="input" required />
-            </Field>
-            <Field label="Proteína (g)">
+            </FormRow>
+            <FormRow label="Proteína" hint="Em gramas por dia.">
               <input
                 type="number"
                 step="0.1"
@@ -118,21 +131,25 @@ export default function NovoCicloPage() {
                 className="input"
                 required
               />
-            </Field>
-            <Field label="Gordura (g)">
+            </FormRow>
+            <FormRow label="Gordura" hint="Em gramas por dia.">
               <input type="number" step="0.1" value={fatG} onChange={(e) => setFatG(e.target.value)} className="input" required />
-            </Field>
-            <Field label={`Carboidrato (g) ${carbAuto != null ? `— auto: ${fmt(carbAuto, 1)}g` : ""}`}>
+            </FormRow>
+            <FormRow
+              label="Carboidrato"
+              hint={carbAuto != null ? `Calculado: ${fmt(carbAuto, 1)} g` : "Calculado como resíduo."}
+            >
               <input
                 type="number"
                 step="0.1"
                 value={carbOverride}
                 onChange={(e) => setCarbOverride(e.target.value)}
-                placeholder={carbAuto != null ? fmt(carbAuto, 1) : "calculado como resíduo"}
+                placeholder={carbAuto != null ? fmt(carbAuto, 1) : "resíduo"}
                 className="input"
               />
-            </Field>
-          </div>
+            </FormRow>
+          </FormPanel>
+
           <button type="submit" className="btn-primary">
             <IconClipboard className="h-4 w-4" />
             Salvar ciclo
@@ -140,32 +157,25 @@ export default function NovoCicloPage() {
         </form>
       ) : (
         <div className="space-y-6">
-          <div className="card border-accent/30 bg-accent/5 p-4 text-sm flex items-center gap-2.5">
-            <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
-              <IconCheck className="h-3.5 w-3.5" />
-            </span>
-            Ciclo de {fmtDate(savedCycle.date)} salvo no histórico.
-          </div>
+          <Panel>
+            <div className="panel-row flex items-center gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-white">
+                <IconCheck className="h-4 w-4" />
+              </span>
+              <span className="text-[15px] font-medium">Ciclo de {fmtDate(savedCycle.date)} salvo no histórico.</span>
+            </div>
+          </Panel>
 
           {pending && (
             <Comparison pending={pending} actual={savedCycle} onDismiss={handleDismissPrediction} />
           )}
 
-          <Link href="/" className="inline-block text-sm text-accent hover:underline">
-            Ver histórico atualizado →
+          <Link href="/" className="btn-secondary">
+            Ver histórico atualizado
           </Link>
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="block text-xs text-muted mb-1.5">{label}</span>
-      {children}
-    </label>
+    </ReadingPage>
   );
 }
 
@@ -187,42 +197,43 @@ function Comparison({
   ];
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold">Previsto × Real (Passo 7)</h2>
-        <button onClick={onDismiss} className="text-xs text-muted hover:text-foreground">
-          limpar previsão
+    <section>
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <h2 className="text-[20px]">Previsto × Real</h2>
+        <button onClick={onDismiss} className="shrink-0 text-[13px] text-neutral transition-colors hover:text-foreground">
+          Limpar previsão
         </button>
       </div>
-      <table className="w-full text-sm">
+      <div className="panel overflow-x-auto">
+      <table className="w-full min-w-[420px] text-sm">
         <thead>
-          <tr className="text-left text-muted text-xs">
-            <th className="pb-2 font-medium">Variável</th>
-            <th className="pb-2 font-medium">Previsto</th>
-            <th className="pb-2 font-medium">Real</th>
-            <th className="pb-2 font-medium">Erro</th>
+          <tr className="border-b border-border text-left">
+            {["Variável", "Previsto", "Real", "Erro"].map((h) => (
+              <th key={h} className="py-3 pr-5 text-[13px] font-normal text-neutral first:pl-6 last:pr-6">
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.label} className="border-t border-border">
-              <td className="py-2.5 font-medium">{r.label}</td>
-              <td className="py-2.5 text-muted">{r.predicted}</td>
-              <td className="py-2.5">{r.real}</td>
-              <td className="py-2.5">
-                <span className={r.inRange ? "text-accent" : "text-warn"}>{r.errorText}</span>
-                <span className={`ml-2 badge ${r.inRange ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"}`}>
-                  {r.inRange ? "dentro" : "fora"}
-                </span>
+            <tr key={r.label} className="border-b border-border last:border-0">
+              <td className="py-3 pl-6 pr-5 font-medium">{r.label}</td>
+              <td className="py-3 pr-5 tabular-nums text-muted">{r.predicted}</td>
+              <td className="py-3 pr-5 tabular-nums">{r.real}</td>
+              <td className="py-3 pr-6">
+                <span className={`tabular-nums ${r.inRange ? "text-accent" : "text-warn"}`}>{r.errorText}</span>
+                <span className="badge ml-2">{r.inRange ? "dentro" : "fora"}</span>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="text-xs text-muted mt-3">
+      </div>
+      <p className="mt-3 px-1 text-[13px] leading-[1.5] text-neutral">
         Se o erro for sistemático (mesmo sinal, repetido em vários ciclos), ajuste as regras do Passo 4.
       </p>
-    </div>
+    </section>
   );
 }
 
