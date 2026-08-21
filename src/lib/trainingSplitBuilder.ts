@@ -70,7 +70,7 @@ const SETS_PER_SESSION_BUDGET = 22;
  * meta, porque um grupo que aparece 1x/semana tem teto físico de
  * (exercícios/dia × séries/exercício) séries, por mais alto que o MAV seja. */
 function frequencyByMuscleFor(daysPerWeek: number, priorityMuscles: MuscleGroup[]): Map<MuscleGroup, number> {
-  const days = Math.max(1, Math.min(6, Math.round(daysPerWeek)));
+  const days = clampDays(daysPerWeek);
   const template = ensurePriorityFrequency(SPLIT_TEMPLATES[days], priorityMuscles);
   const freq = new Map<MuscleGroup, number>();
   for (const day of template) {
@@ -106,7 +106,7 @@ export function computeMuscleTargets(
   const adherenceFactor = adherenceScore >= 1 ? 0.85 : 1;
   const recoveryFactor = recoveryScore >= 4 ? 0.6 : recoveryScore >= 2 ? 0.8 : 1;
   const budget = Math.round(
-    Math.max(1, Math.min(6, Math.round(daysPerWeek))) * SETS_PER_SESSION_BUDGET * adherenceFactor * recoveryFactor
+    clampDays(daysPerWeek) * SETS_PER_SESSION_BUDGET * adherenceFactor * recoveryFactor
   );
 
   interface Slot {
@@ -206,46 +206,80 @@ interface SplitDayTemplate {
   muscles: MuscleGroup[];
 }
 
-// Templates por dias/semana. O de 3 dias replica a divisão real do educador físico do usuário (peito+
-// tríceps+panturrilha / costas+bíceps / pernas, ver exerciseLibrary.ts) — não é um template genérico
-// pra esse caso específico. Os demais seguem convenções padrão de divisão (full body, upper/lower,
-// push/pull/legs) amplamente usadas na prática, já que frequência de treino por si não muda hipertrofia
-// com volume equalizado (Schoenfeld, Grgic & Krieger 2018, DOI 10.1080/02640414.2018.1555906) — o que
-// importa é encaixar o volume-alvo de cada grupo em sessões de tamanho razoável.
+/* Templates por dias/semana — modelo PUSH / PULL / LEGS / UPPER / LOWER.
+ *
+ * Substituiu a divisão anterior, que nomeava os dias por grupamento ("Peito/
+ * Ombro/Tríceps", "Costas/Bíceps"). Nomear por grupamento tem dois problemas:
+ * o dia não diz o PADRÃO de movimento que a pessoa vai executar, e a lista de
+ * grupos vira um convite a esquecer algum. Push/Pull/Legs particiona por padrão
+ * (empurrar, puxar, perna) e não deixa buraco: todo músculo do tronco pertence
+ * a exatamente um dos dois padrões.
+ *
+ * A escada por dias disponíveis:
+ *   1 → Corpo inteiro
+ *   2 → Upper / Lower
+ *   3 → Push / Pull / Legs
+ *   4 → Upper / Lower / Push / Pull   (perna coberta pelo Lower + acessório)
+ *   5 → Push / Pull / Legs / Upper / Lower   ← o pedido, e o arranjo clássico
+ *   6 → Push / Pull / Legs ×2
+ *
+ * Frequência por si não muda hipertrofia com volume equalizado (Schoenfeld,
+ * Grgic & Krieger 2018, DOI 10.1080/02640414.2018.1555906) — o que importa é
+ * encaixar o volume-alvo de cada grupo em sessões de tamanho treinável. Por
+ * isso a escolha do template é sobre PARTICIONAMENTO, não sobre estímulo.
+ *
+ * `assertCoberturaSemanal` abaixo garante em teste que todo template cobre
+ * todos os grupos que têm MEV > 0 — a regra que o usuário pediu explicitamente
+ * ("um treino completo que contemple todos os grupos ao final da semana").
+ */
 const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
   1: [
     {
       label: "Corpo inteiro",
-      muscles: ["peito", "costas", "ombro", "biceps", "triceps", "quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"],
+      muscles: [
+        "peito",
+        "costas",
+        "ombro",
+        "biceps",
+        "triceps",
+        "quadriceps",
+        "posterior_coxa",
+        "gluteo",
+        "panturrilha",
+        "abdominal",
+      ],
     },
   ],
   2: [
-    { label: "Corpo inteiro A", muscles: ["peito", "costas", "ombro", "biceps", "triceps", "quadriceps", "posterior_coxa", "abdominal"] },
-    { label: "Corpo inteiro B", muscles: ["peito", "costas", "ombro", "quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
+    {
+      label: "Upper",
+      muscles: ["peito", "costas", "ombro", "biceps", "triceps", "abdominal"],
+    },
+    {
+      label: "Lower",
+      muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "lombar"],
+    },
   ],
   3: [
-    // Ombro entrou no dia 1. O template original replicava o print do educador (peito/tríceps/
-    // panturrilha), que não tinha exercício de ombro dedicado, sob a justificativa de "estímulo
-    // indireto do supino". Só que o app conta apenas o grupo PRIMÁRIO no volume efetivo (ver
-    // trainingVolume.ts), então na prática o ombro recebia ZERO séries por semana — e como este é o
-    // único template com 3 dias, ficava zero o ano inteiro. Panturrilha saiu do dia 1 e ficou só no dia
-    // de perna, que é onde ela já aparecia, pra o dia 1 não estourar o orçamento de séries por sessão.
-    { label: "Peito/Ombro/Tríceps", muscles: ["peito", "ombro", "triceps"] },
-    { label: "Costas/Bíceps", muscles: ["costas", "biceps", "antebraco", "abdominal"] },
-    { label: "Pernas", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
+    { label: "Push", muscles: ["peito", "ombro", "triceps"] },
+    { label: "Pull", muscles: ["costas", "biceps", "antebraco", "lombar"] },
+    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
   ],
   4: [
-    { label: "Superior A", muscles: ["peito", "ombro", "triceps"] },
-    { label: "Inferior A", muscles: ["quadriceps", "gluteo", "posterior_coxa", "panturrilha"] },
-    { label: "Superior B", muscles: ["costas", "biceps", "antebraco", "abdominal"] },
-    { label: "Inferior B", muscles: ["posterior_coxa", "gluteo", "quadriceps", "panturrilha", "lombar"] },
+    { label: "Upper", muscles: ["peito", "costas", "ombro", "biceps", "triceps"] },
+    { label: "Lower", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Push", muscles: ["peito", "ombro", "triceps", "abdominal"] },
+    { label: "Pull", muscles: ["costas", "biceps", "antebraco", "lombar"] },
   ],
   5: [
-    { label: "Peito/Ombro/Tríceps A", muscles: ["peito", "ombro", "triceps"] },
-    { label: "Costas/Bíceps A", muscles: ["costas", "biceps", "antebraco"] },
-    { label: "Pernas", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
-    { label: "Peito/Ombro/Tríceps B", muscles: ["peito", "ombro", "triceps", "abdominal"] },
-    { label: "Costas/Bíceps B", muscles: ["costas", "biceps", "antebraco", "lombar", "abdominal"] },
+    // O arranjo pedido: PPL cobrindo a semana inteira uma vez, e Upper/Lower
+    // devolvendo a segunda exposição semanal a todo mundo. Nenhum grupo fica
+    // com frequência 1 — que é o que sustenta metas perto do MAV/MRV.
+    { label: "Push", muscles: ["peito", "ombro", "triceps"] },
+    { label: "Pull", muscles: ["costas", "biceps", "antebraco", "lombar"] },
+    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Upper", muscles: ["peito", "costas", "ombro", "biceps", "triceps", "abdominal"] },
+    { label: "Lower", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
   ],
   6: [
     { label: "Push A", muscles: ["peito", "ombro", "triceps"] },
@@ -256,6 +290,19 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
     { label: "Legs B", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
   ],
 };
+
+/** Grupos que TÊM de aparecer na semana, em qualquer template: todos os que o
+ * `VOLUME_LANDMARKS` marca com MEV > 0. Os de MEV 0 (antebraço, abdominal,
+ * lombar) recebem estímulo indireto suficiente e são opcionais por definição.
+ * Exportado para o teste travar a regra. */
+export function musclesCoveredBy(daysPerWeek: number): MuscleGroup[] {
+  const template = SPLIT_TEMPLATES[clampDays(daysPerWeek)];
+  return [...new Set(template.flatMap((d) => d.muscles))];
+}
+
+function clampDays(daysPerWeek: number): number {
+  return Math.max(1, Math.min(6, Math.round(daysPerWeek)));
+}
 
 // tetos pra manter a sessão gerada dentro do que uma pessoa consegue treinar de verdade num dia — sem
 // isso, um grupo com poucos exercícios no catálogo (ex: glúteo, só 1 opção) acabava recebendo todas as
@@ -294,7 +341,18 @@ function pickExercisesForMuscle(
   const offset = rotation % ordered.length;
   const rotated = [...ordered.slice(offset), ...ordered.slice(0, offset)];
 
-  const numExercises = Math.max(1, Math.min(rotated.length, maxExercises, Math.ceil(setsNeeded / MAX_SETS_PER_EXERCISE)));
+  /* Ponto fraco espalha o MESMO volume por MAIS exercícios, em vez de empilhar
+   * séries em poucos. O gargalo aqui era `ceil(séries / 5)`: com ele, o teto
+   * maior de exercícios do grupo prioritário nunca chegava a valer, e priorizar
+   * um grupo só engordava as séries dos mesmos 2 exercícios. Baixar o alvo de
+   * séries por exercício é o que efetivamente acrescenta movimento novo.
+   *
+   * O porquê fisiológico: um grupo atrasado se beneficia de cobrir mais ângulos
+   * e mais regiões do músculo, não de repetir o mesmo padrão com mais séries —
+   * hipertrofia tem componente regional, e o catálogo já separa por
+   * `movementFamily`, que a seleção abaixo usa para não repetir família. */
+  const alvoSeriesPorExercicio = isPriority ? 3 : MAX_SETS_PER_EXERCISE;
+  const numExercises = Math.max(1, Math.min(rotated.length, maxExercises, Math.ceil(setsNeeded / alvoSeriesPorExercicio)));
 
   // Diversidade de padrão: escolhe no máximo um exercício por família de movimento antes de aceitar um
   // segundo da mesma família. Sem isso a ordenação "compostos primeiro" produzia Supino Inclinado 15° +
@@ -384,7 +442,7 @@ export function buildSplit(
   muscleTargets: MuscleTarget[],
   loadByExercise?: Map<string, number>
 ): TrainingSession[] {
-  const days = Math.max(1, Math.min(6, Math.round(daysPerWeek)));
+  const days = clampDays(daysPerWeek);
   const priorityMuscles = muscleTargets.filter((t) => t.isPriority).map((t) => t.muscle);
   const template = ensurePriorityFrequency(SPLIT_TEMPLATES[days], priorityMuscles);
   const targetByMuscle = new Map(muscleTargets.map((t) => [t.muscle, t.weeklySets]));

@@ -8,8 +8,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { EXERCISE_LIBRARY, MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
-import { LoggedSetEntry, ReserveType, TrainingLog } from "@/lib/trainingBuilder";
-import { addTrainingLog, loadTrainingLogs } from "@/lib/trainingStorage";
+import { LoggedSetEntry, ReserveType, TrainingLog, TrainingProgram } from "@/lib/trainingBuilder";
+import { addTrainingLog, loadTrainingLogs, loadTrainingPrograms } from "@/lib/trainingStorage";
 import { readVolumeStatus, weeklyVolumeByMuscle, VolumeReading } from "@/lib/trainingVolume";
 import { recommendNextWeek, WeeklyRecommendation } from "@/lib/trainingPeriodization";
 import { buildMuscleEvolution, MuscleEvolution } from "@/lib/muscleEvolution";
@@ -56,6 +56,12 @@ export default function TreinoPage() {
 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [muscleEvolution, setMuscleEvolution] = useState<MuscleEvolution[]>([]);
+  /* O programa gerado (exercícios, séries, repetições) era SALVO e nunca lido —
+     `loadTrainingPrograms` existia em trainingStorage.ts sem um único chamador.
+     Por isso a página só mostrava contagem de séries por grupamento, que é o
+     que o usuário descreveu como "treino com nome de grupamento e sem séries".
+     O treino sempre existiu; faltava exibi-lo. */
+  const [programa, setPrograma] = useState<TrainingProgram | null>(null);
 
   const [sessionLabel, setSessionLabel] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -69,6 +75,13 @@ export default function TreinoPage() {
     try {
       const l = await loadTrainingLogs(8);
       setLogs(l);
+      // o programa é acessório: se a tabela não existir, a página segue funcionando
+      try {
+        const progs = await loadTrainingPrograms();
+        setPrograma(progs[0] ?? null);
+      } catch {
+        setPrograma(null);
+      }
       setLoadError(null);
     } catch (e) {
       // tabela pode ainda não ter sido migrada — não trava a página, só avisa
@@ -164,8 +177,60 @@ export default function TreinoPage() {
       <PageHero
         eyebrow="Semana"
         title="Treino"
-        lede="Log de sessões, volume semanal por grupo muscular (MEV/MAV/MRV) e recomendação para a próxima semana."
+        lede="Seu programa da semana, o volume por grupo muscular contra as faixas MEV/MAV/MRV, e o que ajustar no próximo bloco."
       />
+
+      {/* ── O PROGRAMA ──
+          Primeira coisa da página, porque é o que a pessoa abre para consultar
+          antes de treinar. Antes disto a página começava por contagem de séries
+          por grupamento — informação de auditoria, não de execução. */}
+      {programa && programa.sessions.length > 0 && (
+        <section>
+          <SectionHeading
+            title="Seu programa"
+            desc="Divisão por padrão de movimento. Cada exercício vem com séries, faixa de repetição e quantas repetições deixar na reserva (RIR)."
+          />
+          <div className="space-y-4">
+            {programa.sessions.map((sessao, i) => (
+              <div key={`${sessao.label}-${i}`} className="panel">
+                <div className="panel-row flex items-baseline justify-between gap-4">
+                  <h3 className="text-[17px] font-semibold tracking-[-0.01em]">{sessao.label}</h3>
+                  <span className="shrink-0 text-[13px] tabular-nums text-neutral">
+                    {sessao.items.reduce(
+                      (n, it) => n + it.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset").reduce((k, b) => k + b.sets, 0),
+                      0
+                    )}{" "}
+                    séries efetivas
+                  </span>
+                </div>
+                {sessao.items.map((item, j) => {
+                  const ex = exerciseById(item.exerciseId);
+                  return (
+                    <div key={`${item.exerciseId}-${j}`} className="panel-row">
+                      <div className="flex items-baseline justify-between gap-4">
+                        <span className="text-[15px] font-medium">{ex?.name ?? item.exerciseId}</span>
+                        {ex && (
+                          <span className="shrink-0 text-[13px] text-neutral">{MUSCLE_GROUP_LABEL[ex.primaryMuscle]}</span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] tabular-nums text-muted">
+                        {item.blocks.map((b, k) => (
+                          <span key={k}>
+                            <span className="text-neutral">{RESERVE_LABEL[b.reserveType]}</span>{" "}
+                            {b.sets}×{b.repRange}
+                            {b.rirTarget != null && <span className="text-neutral"> · RIR {b.rirTarget}</span>}
+                            {b.loadKg != null && <span className="text-foreground"> · {b.loadKg} kg</span>}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {loadError && (
         <Panel>

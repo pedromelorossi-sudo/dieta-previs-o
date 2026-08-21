@@ -71,6 +71,8 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "triceps-polia-barra-w", name: "Tríceps na Polia Barra W", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-polia", equipment: "polia" },
   { id: "triceps-frances-polia-corda", name: "Tríceps Francês na Polia com Corda", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-overhead", equipment: "polia" },
   { id: "triceps-unilateral-polia-alta-pronada", name: "Tríceps Unilateral na Polia Alta (Pegada Pronada)", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-polia", equipment: "polia", unilateral: true },
+  { id: "triceps-frances-halter", name: "Tríceps Francês com Halter", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-acima-cabeca", equipment: "halteres" },
+  { id: "mergulho-banco", name: "Mergulho no Banco", primaryMuscle: "triceps", secondaryMuscles: ["peito", "ombro"], pattern: "composto", movementFamily: "mergulho", equipment: "peso-corporal" },
 
   // costas
   { id: "puxada-aberta-barra-reta", name: "Puxada Aberta Barra Reta", primaryMuscle: "costas", secondaryMuscles: ["biceps"], pattern: "composto", movementFamily: "puxada-vertical", equipment: "polia" },
@@ -84,6 +86,8 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "rosca-direta-barra-w", name: "Rosca Direta com a Barra W", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-direta", equipment: "barra" },
   { id: "rosca-scott-unilateral-halter", name: "Rosca Scott Unilateral com Halter", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-scott", equipment: "halter", unilateral: true },
   { id: "rosca-direta-polia-baixa-corda", name: "Rosca Direta na Polia Baixa com Corda", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-direta", equipment: "polia" },
+  { id: "rosca-martelo-halteres", name: "Rosca Martelo com Halteres", primaryMuscle: "biceps", secondaryMuscles: ["antebraco"], pattern: "isolado", movementFamily: "rosca-neutra", equipment: "halteres" },
+  { id: "rosca-scott-barra-w", name: "Rosca Scott na Barra W", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-apoiada", equipment: "barra" },
   { id: "rosca-inversa-livre-barra-w", name: "Rosca Inversa Livre com Barra W", primaryMuscle: "antebraco", secondaryMuscles: ["biceps"], pattern: "isolado", movementFamily: "rosca-inversa", equipment: "barra" },
   { id: "extensao-punho-halteres", name: "Extensão de Punho com Halteres", primaryMuscle: "antebraco", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-punho", equipment: "halteres" },
 
@@ -99,10 +103,14 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "mesa-flexora", name: "Mesa Flexora", primaryMuscle: "posterior_coxa", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-joelho", equipment: "maquina" },
   { id: "cadeira-flexora", name: "Cadeira Flexora", primaryMuscle: "posterior_coxa", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-joelho", equipment: "maquina" },
   { id: "elevacao-pelvica-barra-livre", name: "Elevação Pélvica com Barra Livre", primaryMuscle: "gluteo", secondaryMuscles: ["posterior_coxa"], pattern: "composto", movementFamily: "extensao-quadril", equipment: "barra" },
+  { id: "cadeira-abdutora", name: "Cadeira Abdutora", primaryMuscle: "gluteo", secondaryMuscles: [], pattern: "isolado", movementFamily: "abducao-quadril", equipment: "maquina" },
+  { id: "coice-polia", name: "Coice na Polia", primaryMuscle: "gluteo", secondaryMuscles: ["posterior_coxa"], pattern: "isolado", movementFamily: "extensao-quadril-unilateral", equipment: "polia", unilateral: true },
+  { id: "afundo-passada-halteres", name: "Afundo com Passada (Halteres)", primaryMuscle: "gluteo", secondaryMuscles: ["quadriceps", "posterior_coxa"], pattern: "composto", movementFamily: "afundo", equipment: "halteres", unilateral: true },
 
   // panturrilha
   { id: "panturrilha-leg-press-45", name: "Panturrilha no Leg Press 45°", primaryMuscle: "panturrilha", secondaryMuscles: [], pattern: "isolado", movementFamily: "panturrilha-em-pe", equipment: "maquina" },
   { id: "panturrilha-sentado", name: "Panturrilha Sentado", primaryMuscle: "panturrilha", secondaryMuscles: [], pattern: "isolado", movementFamily: "panturrilha-sentado", equipment: "maquina" },
+  { id: "panturrilha-unilateral-halter", name: "Panturrilha Unilateral com Halter", primaryMuscle: "panturrilha", secondaryMuscles: [], pattern: "isolado", movementFamily: "panturrilha-unilateral", equipment: "halteres", unilateral: true },
 
   // abdominal
   { id: "abdominal-banco-declinado", name: "Abdominal no Banco Declinado", primaryMuscle: "abdominal", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-tronco", equipment: "banco" },
@@ -110,6 +118,11 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "abdominal-prancha-isometrica", name: "Abdominal Prancha Isométrica", primaryMuscle: "abdominal", secondaryMuscles: ["lombar"], pattern: "isolado", movementFamily: "isometria-core", equipment: "solo" },
   { id: "abdominal-infra-paralelas-pernas-estendidas", name: "Abdominal Infra Paralelas com Pernas Estendidas", primaryMuscle: "abdominal", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-pernas", equipment: "maquina" },
   { id: "abdominal-polia-corda", name: "Abdominal na Polia com Corda", primaryMuscle: "abdominal", secondaryMuscles: [], pattern: "isolado", movementFamily: "flexao-tronco", equipment: "polia" },
+
+  // lombar — o grupo aparecia nos templates Pull e Lower e o catálogo não tinha
+  // NENHUM exercício com ele como primário, então a prescrição saía vazia
+  { id: "extensao-lombar-banco-45", name: "Extensão Lombar no Banco 45°", primaryMuscle: "lombar", secondaryMuscles: ["gluteo", "posterior_coxa"], pattern: "isolado", movementFamily: "extensao-lombar", equipment: "banco" },
+  { id: "good-morning-barra", name: "Good Morning com Barra", primaryMuscle: "lombar", secondaryMuscles: ["posterior_coxa", "gluteo"], pattern: "composto", movementFamily: "quadril-dominante-barra", equipment: "barra" },
 ];
 
 export function exerciseById(id: string): Exercise | undefined {

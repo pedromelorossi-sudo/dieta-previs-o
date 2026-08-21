@@ -5,10 +5,10 @@ import { classifyPathFromBf, macroTargetsForStrategy, estimateBodyComposition, b
 import { planejarFases } from "../src/lib/planoDeFases";
 import { applySafetyLimits } from "../src/lib/safety";
 import { estimateEmpiricalTdeeSeries, weeklyRate, predictNextCycle, signedDaysBetween } from "../src/lib/dietEngine";
-import { computeMuscleTargets, buildSplit } from "../src/lib/trainingSplitBuilder";
+import { computeMuscleTargets, buildSplit, musclesCoveredBy } from "../src/lib/trainingSplitBuilder";
 import { prescribeCardio } from "../src/lib/cardioPrescription";
 import { assessTrainingCleanliness } from "../src/lib/calibration";
-import { compareVolumeToTarget } from "../src/lib/trainingVolume";
+import { compareVolumeToTarget, VOLUME_LANDMARKS, landmarkFor } from "../src/lib/trainingVolume";
 import { confrontarPlano } from "../src/lib/planoDeFases";
 import { suggestLoadProgression } from "../src/lib/trainingPeriodization";
 import { exerciseById } from "../src/lib/exerciseLibrary";
@@ -533,4 +533,82 @@ test("LAÇO: o plano anterior é confrontado com a realidade e distingue as caus
   assert.ok(bfFora.veredito.includes("repartição"), "%BF fora com peso na rota aponta repartição");
 
   assert.equal(confrontarPlano([], 2, 81, 14, "bulking"), null, "sem plano anterior devolve null");
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * TREINO — modelo push/pull/legs/upper/lower
+ * Pedido do usuário em 2026-08-21: "um treino completo que contemple todos os
+ * grupos musculares ao final da semana", no modelo PPL/UL, variando conforme
+ * os dias disponíveis, com ponto fraco recebendo exercício a mais.
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+test("PPL: todo arranjo de dias cobre todos os grupos com MEV > 0 na semana", () => {
+  const obrigatorios = VOLUME_LANDMARKS.filter((l) => l.mev > 0).map((l) => l.muscle);
+  for (let dias = 1; dias <= 6; dias++) {
+    const cobertos = musclesCoveredBy(dias);
+    const faltando = obrigatorios.filter((m) => !cobertos.includes(m));
+    assert.deepEqual(faltando, [], `${dias} dia(s)/semana deixou de fora: ${faltando.join(", ")}`);
+  }
+});
+
+test("PPL: os rótulos dos dias são padrões de movimento, não grupamentos", () => {
+  const permitidos = /^(Push|Pull|Legs|Upper|Lower|Corpo inteiro)( [AB])?$/;
+  for (let dias = 1; dias <= 6; dias++) {
+    const alvos = VOLUME_LANDMARKS.map((l) => ({
+      muscle: l.muscle,
+      muscleLabel: l.muscle,
+      weeklySets: l.mav,
+      isPriority: false,
+      reason: "",
+    }));
+    for (const sessao of buildSplit(dias, alvos)) {
+      assert.match(sessao.label, permitidos, `rótulo fora do modelo PPL/UL: "${sessao.label}"`);
+    }
+  }
+});
+
+test("PPL: nenhum exercício sai sem séries prescritas", () => {
+  for (let dias = 1; dias <= 6; dias++) {
+    const alvos = VOLUME_LANDMARKS.map((l) => ({
+      muscle: l.muscle,
+      muscleLabel: l.muscle,
+      weeklySets: l.mav,
+      isPriority: false,
+      reason: "",
+    }));
+    for (const sessao of buildSplit(dias, alvos)) {
+      for (const item of sessao.items) {
+        assert.ok(item.blocks.length > 0, `${sessao.label}/${item.exerciseId} sem nenhum bloco`);
+        const work = item.blocks.filter((b) => b.reserveType === "work");
+        assert.ok(work.length > 0, `${sessao.label}/${item.exerciseId} sem bloco de trabalho`);
+        for (const b of work) {
+          assert.ok(b.sets >= 1, `${sessao.label}/${item.exerciseId} com sets=${b.sets}`);
+          assert.ok(b.repRange && b.repRange.length > 0, `${sessao.label}/${item.exerciseId} sem faixa de repetição`);
+        }
+      }
+    }
+  }
+});
+
+test("PPL: ponto fraco recebe MAIS exercícios do que o mesmo grupo sem prioridade", () => {
+  const base = VOLUME_LANDMARKS.map((l) => ({
+    muscle: l.muscle,
+    muscleLabel: l.muscle,
+    weeklySets: l.mav,
+    isPriority: false,
+    reason: "",
+  }));
+  const comPrioridade = base.map((t) =>
+    t.muscle === "biceps" ? { ...t, weeklySets: landmarkFor("biceps").mrv, isPriority: true } : t
+  );
+
+  const contaBiceps = (alvos: typeof base) =>
+    buildSplit(5, alvos)
+      .flatMap((s) => s.items)
+      .filter((i) => exerciseById(i.exerciseId)?.primaryMuscle === "biceps").length;
+
+  assert.ok(
+    contaBiceps(comPrioridade) > contaBiceps(base),
+    `prioridade deveria somar exercícios de bíceps (sem: ${contaBiceps(base)}, com: ${contaBiceps(comPrioridade)})`
+  );
 });
