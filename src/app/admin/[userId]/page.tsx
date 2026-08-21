@@ -6,6 +6,9 @@ import { useAuth } from "@/context/AuthContext";
 import { loadCyclesForUser, loadPhotosForUser, loadDietsForUser } from "@/lib/admin";
 import { loadCommentsForUser, addComment, deleteComment, AdminComment } from "@/lib/comments";
 import { deleteDiet } from "@/lib/dietStorage";
+import { adminLoadTrainingPrograms, adminUpsertTrainingProgram } from "@/lib/trainingStorage";
+import { TrainingProgram } from "@/lib/trainingBuilder";
+import { EditorDeTreino } from "@/components/EditorDeTreino";
 import { createClient } from "@/lib/supabase/client";
 import { Cycle } from "@/lib/types";
 import { ProgressPhoto } from "@/lib/photos";
@@ -16,7 +19,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { IconDrumstick, IconDroplet, IconFlame, IconClipboard } from "@/components/icons";
 import Link from "next/link";
 
-import { GridPage } from "@/components/apple";
+import { GridPage, SectionHeading } from "@/components/apple";
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ userId: string }>();
@@ -24,6 +27,7 @@ export default function AdminUserDetailPage() {
   const { ready, profile } = useAuth();
 
   const [name, setName] = useState<string | null>(null);
+  const [programa, setPrograma] = useState<TrainingProgram | null>(null);
   const [cycles, setCycles] = useState<Cycle[] | null>(null);
   const [photos, setPhotos] = useState<ProgressPhoto[] | null>(null);
   const [diets, setDiets] = useState<Diet[] | null>(null);
@@ -42,13 +46,16 @@ export default function AdminUserDetailPage() {
       loadPhotosForUser(userId),
       loadDietsForUser(userId),
       loadCommentsForUser(userId),
+      // o programa é acessório: se a tabela ainda não existir, a página segue
+      adminLoadTrainingPrograms(userId).catch(() => [] as TrainingProgram[]),
     ])
-      .then(([profileRes, cyclesRes, photosRes, dietsRes, commentsRes]) => {
+      .then(([profileRes, cyclesRes, photosRes, dietsRes, commentsRes, programasRes]) => {
         setName(profileRes.data?.name ?? "Usuário");
         setCycles(cyclesRes);
         setPhotos(photosRes);
         setDiets(dietsRes);
         setComments(commentsRes);
+        setPrograma(programasRes[0] ?? null);
       })
       .catch((e) => setError(e.message));
   }, [ready, profile, userId]);
@@ -278,6 +285,24 @@ export default function AdminUserDetailPage() {
           </div>
         )}
       </section>
+
+      {/* ── TREINO ──
+          Editor completo do programa desta pessoa. A dieta já era editável pelo
+          admin (ver /admin/[userId]/dieta/[dietId]); o treino não tinha tela
+          nenhuma, embora a RLS já autorizasse a escrita. */}
+      {programa ? (
+        <EditorDeTreino
+          programaInicial={programa}
+          onSave={(p) => adminUpsertTrainingProgram(userId, p)}
+        />
+      ) : (
+        <section>
+          <SectionHeading
+            title="Treino"
+            desc="Esta pessoa ainda não tem programa salvo. Um programa é criado quando ela gera um ciclo com fotos."
+          />
+        </section>
+      )}
     </GridPage>
   );
 }

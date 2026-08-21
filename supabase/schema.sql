@@ -458,4 +458,109 @@ delete from public.prediction_audit a
 
 create unique index if not exists prediction_audit_user_date_uniq on public.prediction_audit (user_id, date);
 
+-- ============================================================================
+-- ADMIN COM PODER DE ESCRITA TOTAL  (2026-08-21)
+--
+-- Até aqui o admin LIA tudo (todas as tabelas já tinham "select own or admin")
+-- e escrevia só em `diets`, `training_programs` e `admin_comments`. Ciclos,
+-- preferências, logs de treino, previsões e fotos eram somente leitura para
+-- ele — a tela de admin mostrava o histórico do usuário sem poder corrigir.
+--
+-- Estas políticas estendem update/delete/insert do administrador às tabelas
+-- que faltavam. O `insert` importa para o admin poder CRIAR em nome de alguém
+-- (ex: lançar o ciclo de uma consultoria que chegou por fora do app).
+--
+-- A checagem é `public.is_admin()`, que lê `profiles.is_admin` do usuário
+-- autenticado — a autorização mora no BANCO, não no cliente. Uma tela de admin
+-- alcançada indevidamente continua esbarrando aqui.
+-- ============================================================================
+
+-- cycles
+drop policy if exists "cycles: update own" on public.cycles;
+drop policy if exists "cycles: update own or admin" on public.cycles;
+create policy "cycles: update own or admin" on public.cycles
+  for update using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "cycles: delete own" on public.cycles;
+drop policy if exists "cycles: delete own or admin" on public.cycles;
+create policy "cycles: delete own or admin" on public.cycles
+  for delete using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "cycles: insert own" on public.cycles;
+drop policy if exists "cycles: insert own or admin" on public.cycles;
+create policy "cycles: insert own or admin" on public.cycles
+  for insert with check (auth.uid() = user_id or public.is_admin());
+
+-- preferences
+drop policy if exists "preferences: insert own" on public.preferences;
+drop policy if exists "preferences: insert own or admin" on public.preferences;
+create policy "preferences: insert own or admin" on public.preferences
+  for insert with check (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "preferences: update own" on public.preferences;
+drop policy if exists "preferences: update own or admin" on public.preferences;
+create policy "preferences: update own or admin" on public.preferences
+  for update using (auth.uid() = user_id or public.is_admin());
+
+-- training_logs
+drop policy if exists "training_logs: insert own" on public.training_logs;
+drop policy if exists "training_logs: insert own or admin" on public.training_logs;
+create policy "training_logs: insert own or admin" on public.training_logs
+  for insert with check (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "training_logs: update own" on public.training_logs;
+drop policy if exists "training_logs: update own or admin" on public.training_logs;
+create policy "training_logs: update own or admin" on public.training_logs
+  for update using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "training_logs: delete own" on public.training_logs;
+drop policy if exists "training_logs: delete own or admin" on public.training_logs;
+create policy "training_logs: delete own or admin" on public.training_logs
+  for delete using (auth.uid() = user_id or public.is_admin());
+
+-- training_programs: faltava o insert (update/delete já eram do admin)
+drop policy if exists "training_programs: insert own" on public.training_programs;
+drop policy if exists "training_programs: insert own or admin" on public.training_programs;
+create policy "training_programs: insert own or admin" on public.training_programs
+  for insert with check (auth.uid() = user_id or public.is_admin());
+
+-- diets: faltava o insert (update/delete já eram do admin)
+drop policy if exists "diets: insert own" on public.diets;
+drop policy if exists "diets: insert own or admin" on public.diets;
+create policy "diets: insert own or admin" on public.diets
+  for insert with check (auth.uid() = user_id or public.is_admin());
+
+-- predictions
+drop policy if exists "predictions: insert own" on public.predictions;
+drop policy if exists "predictions: insert own or admin" on public.predictions;
+create policy "predictions: insert own or admin" on public.predictions
+  for insert with check (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "predictions: update own" on public.predictions;
+drop policy if exists "predictions: update own or admin" on public.predictions;
+create policy "predictions: update own or admin" on public.predictions
+  for update using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "predictions: delete own" on public.predictions;
+drop policy if exists "predictions: delete own or admin" on public.predictions;
+create policy "predictions: delete own or admin" on public.predictions
+  for delete using (auth.uid() = user_id or public.is_admin());
+
+-- progress_photos
+drop policy if exists "progress_photos: update own" on public.progress_photos;
+drop policy if exists "progress_photos: update own or admin" on public.progress_photos;
+create policy "progress_photos: update own or admin" on public.progress_photos
+  for update using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "progress_photos: delete own" on public.progress_photos;
+drop policy if exists "progress_photos: delete own or admin" on public.progress_photos;
+create policy "progress_photos: delete own or admin" on public.progress_photos
+  for delete using (auth.uid() = user_id or public.is_admin());
+
+-- profiles: admin pode corrigir o nome de alguém (e promover outro admin)
+drop policy if exists "profiles: update own" on public.profiles;
+drop policy if exists "profiles: update own or admin" on public.profiles;
+create policy "profiles: update own or admin" on public.profiles
+  for update using (auth.uid() = id or public.is_admin());
+
 notify pgrst, 'reload schema';

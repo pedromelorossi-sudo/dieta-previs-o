@@ -24,6 +24,36 @@ export async function loadTrainingPrograms(): Promise<TrainingProgram[]> {
   return (data ?? []).map(rowToProgram);
 }
 
+/* ── acesso do administrador ──
+ *
+ * As funções acima operam sempre sobre o usuário logado (`auth.uid()`). O admin
+ * precisa ler e escrever o programa de OUTRA pessoa, então recebe o `userId`
+ * explicitamente. A RLS continua sendo quem autoriza: se quem chamar não for
+ * admin, o Postgres recusa — a checagem não fica só no cliente. */
+
+export async function adminLoadTrainingPrograms(userId: string): Promise<TrainingProgram[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("training_programs")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(rowToProgram);
+}
+
+export async function adminUpsertTrainingProgram(userId: string, program: TrainingProgram): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("training_programs").upsert({
+    id: program.id,
+    user_id: userId,
+    name: program.name,
+    sessions: program.sessions,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
 export async function upsertTrainingProgram(program: TrainingProgram): Promise<void> {
   const supabase = createClient();
   const {
