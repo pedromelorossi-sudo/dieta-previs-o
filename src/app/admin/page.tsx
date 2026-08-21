@@ -69,7 +69,7 @@ export default function AdminPage() {
                 >
                   <td className="px-4 py-3 font-medium">
                     <span className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-[3px] bg-accent/15 text-accent text-[10px] font-semibold">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/10 text-accent text-[10px] font-semibold">
                         {u.name.slice(0, 1).toUpperCase()}
                       </span>
                       {u.name}

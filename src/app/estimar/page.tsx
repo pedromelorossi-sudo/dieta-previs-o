@@ -142,7 +142,7 @@ export default function EstimarPage() {
 
           <div className="card p-6">
             <div className="flex items-center gap-2 mb-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
+              <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
               </span>
               <h2 className="text-sm font-semibold">

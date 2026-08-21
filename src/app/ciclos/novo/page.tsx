@@ -141,7 +141,7 @@ export default function NovoCicloPage() {
       ) : (
         <div className="space-y-6">
           <div className="card border-accent/30 bg-accent/5 p-4 text-sm flex items-center gap-2.5">
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
+            <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
               <IconCheck className="h-3.5 w-3.5" />
             </span>
             Ciclo de {fmtDate(savedCycle.date)} salvo no histórico.

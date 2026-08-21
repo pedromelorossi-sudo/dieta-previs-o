@@ -126,7 +126,7 @@ export default function AdminUserDetailPage() {
           ) : (
             <div className="space-y-3">
               {comments.map((c) => (
-                <div key={c.id} className="rounded-md border border-border bg-surface-raised/40 p-3">
+                <div key={c.id} className="rounded-[12px] border border-border bg-surface-raised/40 p-3">
                   <div className="flex items-center justify-between text-xs text-muted mb-1">
                     <span>
                       {c.authorName ?? "Administrador"} · {fmtDate(c.createdAt.slice(0, 10))}
@@ -154,7 +154,7 @@ export default function AdminUserDetailPage() {
             {diets.map((d) => (
               <div key={d.id} className="card p-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent/15 text-accent shrink-0">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-[12px] bg-accent/15 text-accent shrink-0">
                     <IconClipboard className="h-4 w-4" />
                   </span>
                   <div>
@@ -228,19 +228,19 @@ export default function AdminUserDetailPage() {
           <h2 className="text-lg font-semibold tracking-tight mb-4">Regras extraídas</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconDroplet className="h-4 w-4" /> Gordura
               </div>
               <div className="mt-2 text-xl font-semibold">{fmt(rules.fatPerKg, 2)} g/kg</div>
             </div>
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconDrumstick className="h-4 w-4" /> Proteína
               </div>
               <div className="mt-2 text-xl font-semibold">{fmt(rules.proteinPerKg, 2)} g/kg</div>
             </div>
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconFlame className="h-4 w-4" /> Kcal/kg
               </div>
               <div className="mt-2 text-xl font-semibold">{fmt(rules.kcalPerKgLast, 1)}</div>

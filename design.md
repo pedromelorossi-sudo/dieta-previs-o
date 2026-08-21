@@ -46,67 +46,60 @@ forma; variam só nos arquétipos de componente.
 - **Páginas de listagem** (`/fotos`, `/treino`, `/admin`) — **13 Index-First.**
   A página É a lista. Sem herói, sem narrativa.
 
-## Tema — "instrumento", construído do zero
+## Tema — Apple Liquid Glass
 
-> **Substituição de 2026-08-20.** A primeira versão desta seção se chamava
-> *"preservado, não substituído"* e mantinha o âmbar `#eab308` sobre `#0b0c0d`
-> com Geist. Isso era correto para o verbo `hallmark redesign`, cuja regra é
-> preservar a marca — e foi por isso que a primeira passada entregou uma versão
-> mais arrumada do mesmo site, não um site repaginado. Pedro pediu design do
-> zero; a rota *custom* do Hallmark (`custom-theme.md` § B) foi executada e a
-> paleta abaixo é nova por inteiro. O âmbar não existe mais no projeto.
+> **Terceira versão, 2026-08-20.** A primeira preservava a marca âmbar (verbo
+> `redesign`, que preserva por contrato). A segunda construiu um tema
+> "instrumento" do zero — papel quase-preto frio, acento ciano, Space Grotesk +
+> Inter + JetBrains Mono. Pedro olhou e disse que continuava quase idêntico ao
+> antigo, e tinha razão: **eu tinha trocado a pintura, não a planta.** Esta
+> terceira usa a skill `apple-design` (naplesblue, MIT), que ataca justamente a
+> planta — a regra nº 1 dela é *superfície unificada > cartões fragmentados*.
+> Nem o âmbar nem o ciano existem mais no projeto.
 
-A tese do tema: **este app é um mostrador, não uma página.** O usuário abre para
-ler um número que ele mesmo produziu com o próprio corpo. Daí o fundo chapado, a
-régua de um fio, o raio curto de 6px e a cor concentrada em um lugar só.
+### As cinco regras, em ordem de decisão
 
-Paleta em OKLCH (a construção, não só os valores — para poder estender depois):
+1. **Superfície unificada > cartões fragmentados.** Itens irmãos vão num único
+   painel branco com fios de divisão, não numa pilha de cartões com borda e
+   fundo próprios. Fragmentação é o inimigo nº 1.
+2. **Vidro é tempero, não o prato.** `backdrop-filter` só onde camadas de fato
+   se sobrepõem. **No Degrau isso é exatamente um lugar: a nav fixa.** Conteúdo
+   comum é branco chapado com sombra macia.
+3. **Contenção é o luxo.** Se espaço em branco e hierarquia resolvem, não
+   acrescente borda, preenchimento, ícone ou número.
+4. **Hierarquia vem de peso + tamanho + cinza, não de cor.** O corpo é
+   preto-branco-cinza; a cor é só acento.
+5. **A qualidade mora no detalhe.** Tracking negativo em título grande,
+   `tabular-nums`, fio de 1px, elevação suave, vidro a 180% de saturação.
 
-- Papel quase-preto frio, três degraus e nunca mais que isso:
-  `--background` `oklch(14% 0.012 254)` · `--surface` `oklch(17.5% 0.014 254)` ·
-  `--surface-raised` `oklch(21% 0.015 254)`
-- Réguas em dois pesos: `--border` `oklch(29% 0.012 254)` delimita painel,
-  `--rule-2` `oklch(24% 0.011 254)` divide por dentro
-- Tinta: `--foreground` `oklch(94% 0.008 254)` · `--foreground-2` `oklch(88%…)` ·
-  `--muted` `oklch(62% 0.013 254)` · `--neutral` `oklch(46% 0.012 254)`
-- Acento em **ciano frio**: `--accent` `oklch(76% 0.145 205)` ·
-  `--accent-strong` `oklch(69% 0.155 205)` · `--focus` `oklch(80% 0.15 205)`.
-  Como a claridade passa de 50%, a tinta **sobre** o acento é escura:
-  `--accent-contrast` `oklch(18% 0.03 220)`
-- Estados: `--warn` `oklch(76% 0.14 75)` · `--danger` `oklch(66% 0.17 22)` — os
-  únicos matizes fora da família fria, de propósito: alerta e erro precisam ser
-  lidos como *"não sou o acento"*
+### Paleta
 
-**Por que ciano e não azul.** A primeira tentativa usou `oklch(66% 0.18 254)` —
-o mesmo matiz frio do papel, com 15× a croma. Renderizado, aquilo é
-essencialmente `blue-500` clareado: o acento mais default da web, exatamente o
-que uma paleta feita à mão não deveria produzir. O ciano de 205° acende contra o
-papel frio em vez de se dissolver nele, e carrega o vocabulário certo — traço de
-osciloscópio, não botão de SaaS.
+- Chão `#f5f5f7` (**frio** — creme/bege é o visual de IA mais batido) ·
+  superfície `#ffffff` · embutido `#f0f0f3` · hover de linha `#fbfbfd`
+- Fios: `--border` `rgba(0,0,0,0.08)` · `--rule-2` `rgba(0,0,0,0.05)` ·
+  `--faint` `#d2d2d7` · trilho de medidor `--track` `#e8e8ed`
+- Texto em quatro degraus, todos cinza: `#1d1d1f` · `#424245` · `#6e6e73` ·
+  `#86868b`, e `#aeaeb2` para placeholder
+- Acento **único**: azul Apple `#0071e3` (`#0066cc` no hover). `--warn`
+  `#ff6b00`. `--danger` `#d70015` — o vermelho Apple `#ff3b30` não alcança
+  4,5:1 sobre branco, então foi escurecido.
 
-**Dark-only** por decisão do projeto (`color-scheme: dark`). Não há tema claro, e
-o design não deve fingir que há.
+**Light-only.** O app deixou de ser dark-only nesta versão (`color-scheme:
+light`). Não há tema escuro, e o design não deve fingir que há.
 
-**Disciplina do acento:** ciano em no máximo ~5% do viewport. Ele marca a ação
-primária e o dado que está sendo destacado agora — nada mais. Acento em tudo é o
-mesmo que acento em nada.
+**Disciplina do acento:** azul só na ação primária, no link e no foco.
+Nada mais. Cor para preencher espaço é proibida pela regra 4.
 
-## Tipografia
+### Forma
 
-Três famílias, o teto da disciplina 2+1: display + corpo + a mono, que existe por
-função (alinhar coluna de número) e não por estilo.
+Patamares de raio, **sem inventar valor intermediário**: pílula `999px`
+(botão, etiqueta) · marca `6px` · miniatura e campo `12px` · cartão `18px` ·
+painel `22px`.
 
-- **Display:** Space Grotesk 600, `letter-spacing: -0.02em` — grotesk de traço
-  técnico, aplicada em `h1`–`h4` pelo elemento, não por classe
-- **Corpo:** Inter 400, `0.9375rem` / `1.55` — a sans que some e deixa ler
-- **Números e códigos:** JetBrains Mono, `font-variant-numeric: tabular-nums`
-- **`.meta`** é a assinatura do tema: mono, caixa alta, `0.6875rem`,
-  `letter-spacing: 0.08em`, cor `--muted`. É o rótulo que diz *"isto é uma
-  leitura"* antes de o número aparecer. Todo painel e todo campo usa.
-- **Todo número que o usuário compara entre linhas usa tabular-nums.** Peso, kcal,
-  macro, data, séries. Coluna de número que dança entre as linhas é um erro de
-  leitura, não de estética.
-- Sem itálico em título, nunca. Ênfase vem de peso ou acento.
+Sombra **sempre em duas camadas** — contato curto + espalhamento macio. Uma
+sombra dura só é a armadilha clássica que a skill nomeia.
+
+Alvo de toque ≥ 44px em todo controle, mesmo quando o visual é menor.
 
 ## Espaçamento
 
@@ -133,23 +126,24 @@ O projeto não tem biblioteca de motion instalada e **não deve ganhar uma.**
 
 ## Voz dos botões
 
-- **Primário:** preenchido chapado em ciano, texto `--accent-contrast`, raio 6px.
-  **Sem gradiente e sem glow** — o feedback de clique é 1px de afundamento, o
-  gesto físico de um botão de painel. Um por tela. O verbo diz exatamente o que
-  acontece ("Gerar previsão", não "Continuar").
-- **Secundário:** contornado, borda `--border`, fundo transparente.
+- **Primário:** pílula preenchida em azul Apple, texto branco. É a forma de
+  botão da Apple desde o iOS 7 e o olho reconhece antes de ler. Um por tela. O
+  verbo diz exatamente o que acontece ("Gerar previsão", não "Continuar").
+- **Secundário:** pílula branca com fio interno (`box-shadow: inset`), texto em
+  azul.
+- Feedback de clique é `scale(0.97)`, não afundamento.
 - **Destrutivo:** texto em `--danger`, sem preenchimento.
 - Nunca quebrar em duas linhas em nenhuma largura.
 
 ## O que as páginas DEVEM compartilhar
 
-- O trio Space Grotesk / Inter / JetBrains Mono e a paleta acima.
-- O acento ciano e seu limite de ~5%.
-- **Raio de 6px em tudo que tem borda.** Painel, botão, campo e sub-painel
-  compartilham o mesmo canto; etiqueta usa 3px e chip de identidade 3px. Não há
-  `rounded-lg`/`xl` no projeto — foram todos normalizados.
-- **Medidor de ponta reta, nunca pílula.** Barra de progresso em pílula parece
-  indicador de app; ponta reta parece leitura de escala.
+- A pilha do sistema e a paleta acima.
+- O azul e seu limite: ação primária, link, foco. Nada mais.
+- **Os patamares de raio.** Não há `rounded-lg`/`xl`/`md` no projeto — tudo foi
+  normalizado para os patamares nomeados.
+- **Medidor é pílula em `--track`.** A ponta reta com fio era o tema anterior.
+- **Painel unificado (`.panel` + `.panel-row`) sempre que os itens forem
+  irmãos.** Cartão (`.card`) só para bloco isolado, sem irmãos.
 - `tabular-nums` em toda coluna numérica.
 - A regra de que **todo número exibido tem procedência**: veio de medição, de
   cálculo ou de projeção, e a tela diz qual. Este app existe para não mentir sobre
@@ -217,3 +211,32 @@ header. **Esse número depende da densidade do header** (`py-3` e a marca de
 antigo de `-21px` passou a flutuar longe da régua. Se mexer na altura do header,
 meça de novo no browser em vez de deduzir — a conta envolve a centragem do texto
 contra a marca, não só o padding.
+
+## Armadilha do `.panel-row`
+
+`a.panel-row` e `button.panel-row` **não** podem declarar `display`. Seletor de
+elemento + classe tem especificidade maior que a utilitária `.flex` do Tailwind,
+e uma linha-link com layout flex quebra em duas silenciosamente — aconteceu, e
+só apareceu no screenshot. A regra só define largura, alinhamento e transição.
+
+## Estado da migração instrumento → Apple
+
+O que mudou nesta passada, além dos tokens:
+
+| de (instrumento) | para (Apple) |
+|---|---|
+| `color-scheme: dark` + classe `dark` | `color-scheme: light` |
+| Space Grotesk + Inter + JetBrains Mono via `next/font` | pilha do sistema, sem download |
+| 31 × `rounded-md` (6px) | `rounded-[12px]`, o patamar de miniatura |
+| 28 rótulos em caixa alta com tracking largo | caixa normal; hierarquia por peso e tamanho |
+| 11 × `font-mono` em número de dado | `tabular-nums` na fonte do sistema |
+| Medidor de ponta reta com fio | pílula em `--track` |
+| Avatar/chip quadrado de 3px | círculo |
+| Traço de acento sob a aba ativa | contraste de texto (cinza → preto + peso) |
+| Grade de estatística com borda em volta | painel branco único com fios |
+| Tabela solta na página | tabela dentro de painel, com respiro nas pontas |
+
+A troca do traço da aba ativa por contraste de texto **matou o número mágico**
+(`-bottom-[15px]`) que dependia da altura exata do header e já tinha quebrado
+uma vez. A armadilha registrada na versão anterior deste arquivo deixou de
+existir.

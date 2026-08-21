@@ -101,7 +101,7 @@ export default function FotosPage() {
               type="file"
               accept="image/*"
               onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-              className="input file:mr-3 file:rounded-md file:border-0 file:bg-accent/15 file:text-accent file:px-3 file:py-1.5 file:text-xs"
+              className="input file:mr-3 file:rounded-[12px] file:border-0 file:bg-accent/15 file:text-accent file:px-3 file:py-1.5 file:text-xs"
               required
             />
           </Field>
@@ -109,7 +109,7 @@ export default function FotosPage() {
 
         {preview && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Prévia da foto" className="h-40 w-40 object-cover rounded-md border border-border" />
+          <img src={preview} alt="Prévia da foto" className="h-40 w-40 object-cover rounded-[12px] border border-border" />
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -137,7 +137,7 @@ export default function FotosPage() {
 
         {estimatedBf != null && (
           <div className="flex items-center gap-2 text-sm">
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
+            <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
               <IconScale className="h-3.5 w-3.5" />
             </span>
             %BF estimado: <span className="font-semibold">{fmt(estimatedBf, 1)}%</span>

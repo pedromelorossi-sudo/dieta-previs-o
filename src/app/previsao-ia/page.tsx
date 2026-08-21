@@ -866,7 +866,7 @@ export default function PrevisaoIaPage() {
             {ANGLES.map(({ key, label, required }) => (
               <div key={key}>
                 <label className="block cursor-pointer">
-                  <div className="h-28 w-full rounded-md border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden transition-colors duration-150 hover:border-accent/50 hover:bg-surface-raised/70">
+                  <div className="h-28 w-full rounded-[12px] border border-dashed border-border bg-surface-raised/40 flex items-center justify-center overflow-hidden transition-colors duration-150 hover:border-accent/50 hover:bg-surface-raised/70">
                     {previews[key] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={previews[key]} alt={label} className="h-full w-full object-cover" />
@@ -1160,7 +1160,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
   return (
         <section className="space-y-6">
           <div className="card p-5">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+            <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
               <IconScale className="h-4 w-4" /> %BF estimado por IA
             </div>
             <div className="mt-2 text-2xl font-semibold">
@@ -1177,7 +1177,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           </div>
 
           <div className="card p-5 border-accent/30">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+            <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
               <IconTarget className="h-4 w-4" /> Estratégia decidida
             </div>
             <div className="mt-2 text-xl font-semibold text-accent">{result.strategyLabel}</div>
@@ -1186,7 +1186,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.confrontoDoPlano && (
             <div className={`card p-5 ${result.confrontoDoPlano.dentroDoPlano ? "" : "border-warn/40"}`}>
-              <div className={`flex items-center gap-2 text-xs uppercase tracking-wide ${result.confrontoDoPlano.dentroDoPlano ? "text-accent" : "text-warn"}`}>
+              <div className={`flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] ${result.confrontoDoPlano.dentroDoPlano ? "text-accent" : "text-warn"}`}>
                 {result.confrontoDoPlano.dentroDoPlano ? "✓" : "⚠"} O plano anterior vs. o que aconteceu
               </div>
               <p className="text-sm mt-2 leading-relaxed">{result.confrontoDoPlano.veredito}</p>
@@ -1205,7 +1205,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.volumeAdherence && result.volumeAdherence.perMuscle.length > 0 && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconTarget className="h-4 w-4" /> Volume prescrito vs. executado
               </div>
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.volumeAdherence.summary}</p>
@@ -1216,9 +1216,9 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                   .map((m) => (
                     <div key={m.muscle} className="flex items-center gap-3 text-xs">
                       <span className="w-32 shrink-0 text-muted">{m.muscleLabel}</span>
-                      <div className="flex-1 h-1.5 rounded-[2px] bg-background border border-rule-2 overflow-hidden">
+                      <div className="flex-1 h-1.5 rounded-full bg-track overflow-hidden">
                         <div
-                          className={`h-full ${m.ratio >= 0.9 ? "bg-accent" : m.ratio >= 0.6 ? "bg-warn" : "bg-danger"}`}
+                          className={`h-full rounded-full ${m.ratio >= 0.9 ? "bg-accent" : m.ratio >= 0.6 ? "bg-warn" : "bg-danger"}`}
                           style={{ width: `${Math.min(100, m.ratio * 100)}%` }}
                         />
                       </div>
@@ -1233,7 +1233,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.planoDeFases && result.planoDeFases.fases.length > 0 && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconTarget className="h-4 w-4" /> Roteiro de fases
               </div>
               <p className="text-sm mt-2 leading-relaxed">{result.planoDeFases.resumo}</p>
@@ -1252,7 +1252,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                         ? "bg-accent/15 text-accent"
                         : "bg-surface-raised text-muted";
                   return (
-                    <details key={f.index} className="rounded-md border border-border bg-surface-raised/40 p-3">
+                    <details key={f.index} className="rounded-[12px] border border-border bg-surface-raised/40 p-3">
                       <summary className="cursor-pointer list-none">
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="text-xs text-muted tabular-nums">Fase {f.index}</span>
@@ -1298,7 +1298,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
               </div>
 
               <details className="mt-4 border-t border-border pt-3">
-                <summary className="cursor-pointer text-xs uppercase tracking-wide text-muted">
+                <summary className="cursor-pointer text-[13px] text-muted">
                   Premissas deste plano
                 </summary>
                 <ul className="mt-2 space-y-2">
@@ -1314,7 +1314,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.monthlyPlan && result.monthlyPlan.length > 0 && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconClipboard className="h-4 w-4" /> Detalhamento mês a mês
               </div>
               <p className="text-xs text-muted mt-2 leading-relaxed">
@@ -1332,7 +1332,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                   return (
                     <div
                       key={m.monthIndex}
-                      className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-raised/40 p-3"
+                      className="flex flex-wrap items-center gap-3 rounded-[12px] border border-border bg-surface-raised/40 p-3"
                     >
                       <span className="text-xs text-muted w-14 shrink-0">{m.label}</span>
                       <span className={`badge ${tone} shrink-0`}>{m.phaseLabel}</span>
@@ -1351,7 +1351,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           {result.suggestedTrainingProgram && result.suggestedTrainingProgram.length > 0 && (
             <div className="card p-5">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+                <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                   <IconDumbbell className="h-4 w-4" /> Divisão de treino sugerida
                 </div>
                 <div className="flex items-center gap-2">
@@ -1394,7 +1394,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                   const grupos = [...new Set(session.items.map((it) => exerciseById(it.exerciseId)?.primaryMuscle).filter(Boolean))];
 
                   return (
-                    <div key={i} className="rounded-md border border-border overflow-hidden">
+                    <div key={i} className="rounded-[12px] border border-border overflow-hidden">
                       <div className="bg-surface-raised/70 px-4 py-3 border-b border-border">
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                           <span className="text-sm font-semibold">
@@ -1478,7 +1478,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.trainingPeriodizationPlan && result.trainingPeriodizationPlan.length > 0 && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconDumbbell className="h-4 w-4" /> Periodização de treino
               </div>
               <p className="text-xs text-muted mt-2 leading-relaxed">
@@ -1489,7 +1489,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                 {result.trainingPeriodizationPlan.map((w) => (
                   <div
                     key={w.weekIndex}
-                    className={`flex items-center gap-3 rounded-md border p-3 ${
+                    className={`flex items-center gap-3 rounded-[12px] border p-3 ${
                       w.isDeload ? "border-warn/30 bg-warn/5" : "border-border bg-surface-raised/40"
                     }`}
                   >
@@ -1504,13 +1504,13 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.cardioPrescription && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconTrend className="h-4 w-4" /> Cardio — turnover metabólico
               </div>
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.cardioPrescription.reason}</p>
               <div className="mt-4 space-y-2">
                 {result.cardioPrescription.sessions.map((s, i) => (
-                  <div key={i} className="rounded-md border border-border bg-surface-raised/40 p-3">
+                  <div key={i} className="rounded-[12px] border border-border bg-surface-raised/40 p-3">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-medium">{s.modality}</span>
                       <span className="text-muted">
@@ -1529,7 +1529,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.calibrationUnavailableReason && (
             <div className="card p-5 border-warn/40">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-warn">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-warn">
                 ⚠ Calibração indisponível
               </div>
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.calibrationUnavailableReason}</p>
@@ -1538,7 +1538,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.safetyWarnings && result.safetyWarnings.length > 0 && (
             <div className="card p-5 border-warn/40">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-warn">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-warn">
                 ⚠ Limites de segurança aplicados
               </div>
               <p className="text-xs text-muted mt-2">
@@ -1556,7 +1556,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.tdeeCalibration && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconCheck className="h-4 w-4" /> Calibração contínua da fórmula
               </div>
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.tdeeCalibration.note}</p>
@@ -1601,7 +1601,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.evolutionNote && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconTarget className="h-4 w-4" /> Evolução muscular
               </div>
               <p className="text-sm text-muted mt-2 leading-relaxed">{result.evolutionNote}</p>
@@ -1610,7 +1610,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           {result.gainCompositionLabel && (
             <div className="card p-5">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
                 <IconDrumstick className="h-4 w-4" /> Composição do ganho (decidida pela IA)
               </div>
               <div className="mt-2 text-lg font-semibold">{result.gainCompositionLabel}</div>
@@ -1619,7 +1619,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           )}
 
           <div className="card p-5">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+            <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
               <IconScale className="h-4 w-4" /> Projeção de 1 mês seguindo essa dieta
             </div>
             <div className="mt-2 text-xl font-semibold">
@@ -1631,7 +1631,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 
           <div className="card p-6">
             <h2 className="text-sm font-semibold mb-5 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
+              <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
               </span>
               {result.isFirstCycle ? "Metas iniciais" : "Recomendação da IA (dentro das faixas do seu algoritmo)"}
@@ -1648,7 +1648,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
           {result.meals.length > 0 && (
             <div className="card p-6">
               <h2 className="text-sm font-semibold mb-1 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
+                <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
                   <IconClipboard className="h-3.5 w-3.5" />
                 </span>
                 Dieta montada
@@ -1673,7 +1673,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                 {result.meals.map((meal) => {
                   const totals = mealTotals(meal);
                   return (
-                    <div key={meal.id} className="rounded-md border border-border bg-surface-raised/40 p-4">
+                    <div key={meal.id} className="rounded-[12px] border border-border bg-surface-raised/40 p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold">{meal.name}</span>
                         <span className="text-xs text-muted">
@@ -1748,7 +1748,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
 function Etapa({ numero, titulo }: { numero: string; titulo: string }) {
   return (
     <div className="mb-5 flex items-baseline gap-3 border-b border-border pb-3">
-      <span className="font-mono text-2xl font-semibold leading-none tabular-nums text-accent">{numero}</span>
+      <span className="tabular-nums text-2xl font-semibold leading-none tabular-nums text-accent">{numero}</span>
       <span className="text-sm font-medium tracking-tight">{titulo}</span>
     </div>
   );

@@ -1,56 +1,96 @@
 @import "tailwindcss";
 
 /* ============================================================================
- * Degrau — tema "instrumento"
- * Construído do zero em 2026-08-20 (Hallmark, rota custom · custom-theme.md § B).
+ * Degrau — Apple Liquid Glass
+ * Refeito em 2026-08-20 com a skill `apple-design` (naplesblue, MIT).
+ * Sistema travado em design.md na raiz.
  *
- * A tese: este app é um mostrador, não uma página. O usuário abre para ler um
- * número que ele mesmo produziu com o próprio corpo. Então o fundo é chapado e
- * escuro, a régua é fina, o raio é curto, e a cor existe em um lugar só — o dado
- * que está sendo apontado agora.
+ * As cinco regras, em ordem de decisão:
+ *   1. Superfície unificada > cartões fragmentados. Itens irmãos vão num único
+ *      painel branco com fios de divisão, não numa pilha de cartões com borda
+ *      e fundo próprios. Fragmentação é o inimigo nº 1.
+ *   2. Vidro é tempero, não o prato. `backdrop-filter` só onde camadas de fato
+ *      se sobrepõem: nav fixa, modal, CTA colorido. Conteúdo comum é branco
+ *      chapado com sombra macia.
+ *   3. Contenção é o luxo. Se espaço em branco e hierarquia resolvem, não
+ *      acrescente borda, preenchimento, ícone ou número.
+ *   4. Hierarquia vem de peso + tamanho + cinza, não de cor. O corpo é
+ *      preto-branco-cinza; a cor é só acento.
+ *   5. A qualidade mora no detalhe: tracking negativo em título grande,
+ *      tabular-nums, fio de 1px, elevação suave, vidro a 180% de saturação.
  *
- * Ancoragem OKLCH: o papel é quase-preto levemente frio (hue 254, croma 0.012 —
- * um azul que não se lê como cor, só como temperatura). O acento sai em ciano
- * frio (hue 205) porque um azul 254 saturado é exatamente `blue-500`, o acento
- * mais default da web. Ciano de traço de osciloscópio não é: ele acende contra
- * o papel frio em vez de se dissolver nele.
+ * Os NOMES dos tokens são os mesmos de antes de propósito: as 15 páginas
+ * referenciam `bg-surface`, `text-muted`, `border-border` — trocar só os
+ * valores vira o app inteiro sem tocar em nenhuma página.
  * ==========================================================================*/
 
 :root {
-  /* superfícies — três degraus, nunca mais que isso */
-  --background: oklch(14% 0.012 254);
-  --surface: oklch(17.5% 0.014 254);
-  --surface-raised: oklch(21% 0.015 254);
+  /* ── neutros: o esqueleto da interface ── */
+  --background: #f5f5f7; /* chão da página — cinza-branco FRIO, nunca creme */
+  --surface: #ffffff; /* painéis */
+  --surface-raised: #f0f0f3; /* preenchimento embutido dentro do painel branco */
+  --hover: #fbfbfd; /* tinta de hover de linha */
 
-  /* réguas — `--rule-2` é a divisória interna, quase invisível;
-     `--border` é a que delimita um painel */
-  --border: oklch(29% 0.012 254);
-  --rule-2: oklch(24% 0.011 254);
+  /* ── fios ── */
+  --border: rgba(0, 0, 0, 0.08); /* delimita painel */
+  --rule-2: rgba(0, 0, 0, 0.05); /* divide por dentro */
+  --faint: #d2d2d7; /* números de índice, setas */
+  --track: #e8e8ed; /* trilho de medidor/progresso */
 
-  /* tinta — 94% para o texto principal (papel < 50% pede tinta 88–96%) */
-  --foreground: oklch(94% 0.008 254);
-  --foreground-2: oklch(88% 0.008 254);
-  --muted: oklch(62% 0.013 254);
-  --neutral: oklch(46% 0.012 254);
+  /* ── texto: quatro degraus, todos cinza ── */
+  --foreground: #1d1d1f;
+  --foreground-2: #424245;
+  --muted: #6e6e73;
+  --neutral: #86868b;
+  --placeholder: #aeaeb2;
 
-  /* acento — L 76% está acima de 50, então a tinta SOBRE o acento é escura */
-  --accent: oklch(76% 0.145 205);
-  --accent-strong: oklch(69% 0.155 205);
-  --accent-contrast: oklch(18% 0.03 220);
-  --focus: oklch(80% 0.15 205);
+  /* ── acentos: só ênfase, nunca decoração ── */
+  --accent: #0071e3; /* azul Apple — ação primária, link, foco */
+  --accent-strong: #0066cc;
+  --accent-contrast: #ffffff;
+  --focus: #0071e3;
+  --warn: #ff6b00; /* "heat" */
+  --warn-bg: rgba(255, 107, 0, 0.1);
+  --danger: #d70015; /* vermelho escurecido: sobre branco precisa de 4.5:1 */
+  --live: #30d158;
 
-  /* estados — únicos matizes fora do 254, e é de propósito:
-     alerta e erro precisam ser lidos como "não sou o acento" */
-  --warn: oklch(76% 0.14 75);
-  --danger: oklch(66% 0.17 22);
+  /* ── tipografia: pilha do sistema, sempre.
+     A skill proíbe Inter/Roboto como fonte de marca — fonte genérica é um dos
+     tells. SF já está no Mac e no iPhone do usuário, e carrega zero byte. ── */
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", "PingFang SC", sans-serif;
+  --font-mono-sf: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── raio: patamares semânticos, não inventar valor intermediário ── */
+  --r-pill: 999px;
+  --r-chip: 6px;
+  --r-thumb: 12px;
+  --r-card: 18px;
+  --r-panel: 22px;
+
+  /* ── sombra: sempre duas camadas — contato curto + espalhamento macio.
+     Uma sombra dura só é a armadilha clássica. ── */
+  --sh-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+  --sh-panel: 0 1px 3px rgba(0, 0, 0, 0.05), 0 14px 40px rgba(0, 0, 0, 0.05);
+  --sh-lift: 0 12px 32px rgba(0, 0, 0, 0.1);
+
+  /* ── movimento: curvas de mola ── */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 200ms;
+  --dur-base: 300ms;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
+  --color-hover: var(--hover);
   --color-border: var(--border);
   --color-rule-2: var(--rule-2);
+  --color-faint: var(--faint);
+  --color-track: var(--track);
   --color-foreground: var(--foreground);
   --color-foreground-2: var(--foreground-2);
   --color-muted: var(--muted);
@@ -59,38 +99,47 @@
   --color-accent-strong: var(--accent-strong);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
-  --font-sans: var(--font-body);
-  --font-display: var(--font-display);
-  --font-mono: var(--font-mono-tech);
+  --color-live: var(--live);
+  --font-sans: var(--font-system);
+  --font-display: var(--font-system);
+  --font-mono: var(--font-mono-sf);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
+  font-optical-sizing: auto; /* SF traz tabelas de tamanho óptico — de graça */
 }
 
-/* Fundo chapado. Os dois radial-gradient que ficavam aqui eram o "aurora-blob",
-   um dos tells mais reconhecíveis de interface gerada por IA: ocupavam a tela
-   inteira e não carregavam nenhum dado. */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.9375rem;
-  line-height: 1.55;
+  font-family: var(--font-system);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Título em grotesk. O `-0.02em` fecha o texto o suficiente para parecer
-   gravado na chapa, sem chegar no aperto que atrapalha leitura. */
-h1,
-h2,
+/* Tracking negativo nos títulos, e quanto maior mais negativo. É um dos
+   detalhes que somados fazem a tela "parecer Apple" em 1,5 segundo. */
+h1 {
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+  font-weight: 700;
+}
+h2 {
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  font-weight: 700;
+}
 h3,
 h4 {
-  font-family: var(--font-display), var(--font-body), sans-serif;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  line-height: 1.42;
   font-weight: 600;
 }
 
-/* Numeração tabular em toda tabela e em todo texto mono: coluna de número que
+/* Numeração tabular em toda tabela e todo texto mono: coluna de número que
    dança entre as linhas é erro de leitura, não de estética. */
 table,
 .font-mono,
@@ -99,13 +148,16 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* Rótulo de painel — a assinatura do tema. Mono, caixa alta, pequeno e afastado.
-   É o que diz "isto é uma leitura" antes mesmo de o número aparecer. */
+/* Rótulo secundário. Era mono, caixa alta e espaçado no tema anterior — a
+   assinatura de painel de instrumento. Na língua Apple isso é ruído: rótulo é
+   só texto pequeno e cinza, sem fantasia. */
 .meta {
-  font-family: var(--font-mono-tech), ui-monospace, monospace;
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.6;
+  /* `--neutral` (#86868b) dá ~3,6:1 no branco — a Apple usa, mas fica abaixo do
+     piso de 4,5:1 do checklist da própria skill. `--muted` dá ~4,9:1 e o rótulo
+     continua claramente secundário. */
   color: var(--muted);
 }
 
@@ -116,19 +168,11 @@ body {
   overflow-x: clip;
 }
 
-/* Easings nomeados — o `ease` padrão do browser não é usado em lugar nenhum. */
-:root {
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-fast: 110ms;
-  --dur-base: 160ms;
-}
-
 /* O anel de foco aparece instantaneamente — nunca animado. */
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -145,64 +189,104 @@ body {
 input[type="number"],
 input[type="date"],
 input[type="text"] {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--accent) 30%, transparent);
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
   color: var(--foreground);
 }
 
 * {
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--faint) transparent;
 }
 
-/* ===== painéis =====
- * Raio 6px, borda de fio, fundo chapado. Sem `backdrop-filter`: vidro fosco
- * pressupõe que existe algo interessante atrás, e aqui não existe — atrás só
- * tem fundo. Sem `translateY` no hover: o painel é uma chapa parafusada, não
- * um cartão flutuando. O hover só acende a borda. */
-.card {
-  border-radius: 6px;
-  border: 1px solid var(--rule-2);
+/* ===== vidro =====
+ * O ÚNICO lugar onde o app usa `backdrop-filter`: a nav fixa, que de fato tem
+ * conteúdo passando por baixo. A saturação de 180% é o que faz a cor por trás
+ * "acender" através do vidro em vez de virar cinza — sem ela é só um blur. */
+.glass-nav {
+  background: rgba(245, 245, 247, 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ===== painel unificado =====
+ * A estrutura central da língua Apple. Itens irmãos moram num painel branco só,
+ * separados por fio — não em cartões com borda e fundo cada um. Use `.panel`
+ * com `.panel-row` dentro; o fio entre linhas é automático. */
+.panel {
   background: var(--surface);
-  transition: border-color var(--dur-base) var(--ease-out);
+  border-radius: var(--r-panel);
+  box-shadow: var(--sh-panel);
+  overflow: hidden;
+}
+.panel-row {
+  padding: 1rem 1.25rem;
+}
+.panel-row + .panel-row {
+  border-top: 1px solid var(--border);
+}
+/* Sem `display: block` aqui: seletor de elemento + classe tem especificidade
+   maior que a utilitaria `.flex` do Tailwind, e a linha-link com layout flex
+   quebrava em duas. A linha so precisa ocupar a largura e alinhar a esquerda. */
+a.panel-row,
+button.panel-row {
+  width: 100%;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+a.panel-row:hover,
+button.panel-row:hover {
+  background: var(--hover);
+}
+
+/* ===== cartão =====
+ * Sobrevive para o caso legítimo: um bloco isolado que NÃO tem irmãos. Branco
+ * chapado, sem borda — a separação vem da sombra de duas camadas, não de um
+ * traço. Elevação suave no hover. */
+.card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-card);
+  transition: box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
 .card:hover {
-  border-color: var(--border);
+  box-shadow: var(--sh-lift);
+  transform: translateY(-3px);
 }
 
 /* ===== botões =====
- * Preenchimento chapado, sem gradiente e sem glow. O feedback de clique é
- * 1px de afundamento — o gesto físico de um botão de painel. */
+ * Pílula. É a forma de botão da Apple desde o iOS 7 e é o que o olho reconhece
+ * antes de ler qualquer coisa. */
 .btn-primary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid var(--accent);
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--accent-contrast);
-  font-weight: 600;
-  font-size: 0.875rem;
-  letter-spacing: -0.005em;
-  padding: 0.5rem 1rem;
+  font-weight: 500;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  padding: 0.6875rem 1.375rem;
+  min-height: 44px; /* alvo de toque mínimo da HIG */
   white-space: nowrap;
   transition: background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
     transform var(--dur-fast) var(--ease-out);
 }
 .btn-primary:hover {
   background: var(--accent-strong);
-  border-color: var(--accent-strong);
 }
 .btn-primary:active {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 .btn-primary:disabled {
-  background: var(--surface-raised);
-  border-color: var(--rule-2);
-  color: var(--neutral);
+  background: var(--track);
+  color: var(--placeholder);
   transform: none;
   cursor: not-allowed;
 }
@@ -210,101 +294,96 @@ input[type="text"] {
 .btn-secondary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--foreground-2);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--border);
   font-weight: 500;
-  font-size: 0.875rem;
-  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  padding: 0.6875rem 1.375rem;
+  min-height: 44px;
   white-space: nowrap;
   transition: background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+    transform var(--dur-fast) var(--ease-out);
 }
 .btn-secondary:hover {
-  background: var(--surface-raised);
-  border-color: var(--neutral);
-  color: var(--foreground);
+  background: var(--hover);
 }
 .btn-secondary:active {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 .btn-secondary:disabled {
-  color: var(--neutral);
-  border-color: var(--rule-2);
-  background: transparent;
+  color: var(--placeholder);
+  background: var(--surface);
   transform: none;
   cursor: not-allowed;
 }
 
 /* ===== etiqueta =====
- * Retangular, não pílula. Pílula é da escola macia; num painel a etiqueta é
- * uma placa de identificação, e placa tem canto. Mono porque quase toda
- * etiqueta aqui carrega um valor ou uma sigla de fase. */
+ * Pílula pequena em cinza. Sem borda: o preenchimento suave já separa. */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  border-radius: 3px;
-  border: 1px solid var(--rule-2);
-  padding: 0.1rem 0.4rem;
-  font-family: var(--font-mono-tech), ui-monospace, monospace;
-  font-size: 0.6875rem;
+  border-radius: var(--r-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
+  padding: 0.1875rem 0.625rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.03em;
   line-height: 1.5;
 }
 
 /* ===== campos =====
- * Fundo mais escuro que o painel: o campo é um poço onde se digita, não um
- * relevo. Foco troca a borda para o acento e acende um anel fino de 2px. */
+ * Preenchimento embutido, sem borda em repouso. O foco traz o anel azul —
+ * que é a mesma cor da ação primária, então "azul = agora é com você". */
 .input {
   width: 100%;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--background);
+  border-radius: var(--r-thumb);
+  border: 1px solid transparent;
+  background: var(--surface-raised);
   color: var(--foreground);
-  padding: 0.5rem 0.7rem;
-  font-size: 0.875rem;
+  padding: 0.6875rem 0.875rem;
+  font-size: 1rem;
+  min-height: 44px;
   font-variant-numeric: tabular-nums;
-  transition: border-color var(--dur-fast) var(--ease-out),
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
 }
 .input:hover:not(:focus) {
-  border-color: var(--neutral);
+  background: var(--track);
 }
 .input:focus {
   outline: none;
+  background: var(--surface);
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 3.5px rgba(0, 113, 227, 0.18);
 }
 .input::placeholder {
-  color: var(--neutral);
+  color: var(--placeholder);
 }
 .input:disabled {
-  color: var(--neutral);
-  background: var(--surface);
+  color: var(--placeholder);
   cursor: not-allowed;
 }
 
-/* ===== carregando =====
- * Pulso de opacidade, não varredura diagonal. A varredura imita "brilho
- * atravessando vidro" — de novo o vocabulário macio. O painel só pisca. */
+/* ===== carregando ===== */
 .skeleton {
-  border-radius: 6px;
-  background: var(--surface-raised);
-  border: 1px solid var(--rule-2);
-  animation: panelPulse 1.6s var(--ease-in-out) infinite;
+  border-radius: var(--r-thumb);
+  background: var(--track);
+  animation: skeletonPulse 1.8s var(--ease-in-out) infinite;
 }
-@keyframes panelPulse {
+@keyframes skeletonPulse {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.45;
+    opacity: 0.5;
   }
 }
 
@@ -317,17 +396,18 @@ input[type="text"] {
   animation: spinSlow 3s linear infinite;
 }
 
-/* `.animate-glow-pulse` sobrevive como pulso de borda, sem halo. O halo era
-   sombra colorida de 30px — a mesma família visual do gradiente que saiu. */
-@keyframes borderPulse {
-  0%,
-  100% {
-    border-color: var(--border);
+/* Ponto "ao vivo" da Apple — pulso que se expande e some. */
+@keyframes pulseDot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 113, 227, 0.45);
   }
-  50% {
-    border-color: var(--accent);
+  70% {
+    box-shadow: 0 0 0 7px rgba(0, 113, 227, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 113, 227, 0);
   }
 }
 .animate-glow-pulse {
-  animation: borderPulse 2s var(--ease-in-out) infinite;
+  animation: pulseDot 2s var(--ease-in-out) infinite;
 }

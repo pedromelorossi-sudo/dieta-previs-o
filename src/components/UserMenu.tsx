@@ -25,9 +25,9 @@ export function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-md border border-border bg-surface-raised/60 px-3 py-1.5 text-sm hover:border-neutral transition-colors"
+        className="flex items-center gap-2 rounded-[12px] border border-border bg-surface-raised/60 px-3 py-1.5 text-sm hover:border-neutral transition-colors"
       >
-        <span className="flex h-5 w-5 items-center justify-center rounded-[3px] bg-accent/20 text-accent text-[10px] font-semibold">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/10 text-accent text-[10px] font-semibold">
           {label.slice(0, 1).toUpperCase()}
         </span>
         {label}
@@ -42,33 +42,33 @@ export function UserMenu() {
             <div className="border-t border-border mt-1 pt-1 space-y-0.5">
               <Link
                 href="/fotos"
-                className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+                className="block rounded-[12px] px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
                 Fotos de progresso
               </Link>
               <Link
                 href="/analise"
-                className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+                className="block rounded-[12px] px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
                 Análise do Claude
               </Link>
               <Link
                 href="/perfil/questionario"
-                className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+                className="block rounded-[12px] px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
               >
                 Questionário de hábitos
               </Link>
               <div className="border-t border-border mt-1 pt-1">
-                <span className="block px-2 py-1 text-[10px] uppercase tracking-wide text-muted">Modo manual</span>
+                <span className="block px-2 py-1 text-[12px] text-neutral">Modo manual</span>
                 <Link
                   href="/previsao"
-                  className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+                  className="block rounded-[12px] px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
                 >
                   Nova previsão (sem foto)
                 </Link>
                 <Link
                   href="/ciclos/novo"
-                  className="block rounded-md px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
+                  className="block rounded-[12px] px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground transition-colors"
                 >
                   Registrar ciclo manualmente
                 </Link>
@@ -76,14 +76,14 @@ export function UserMenu() {
               {profile?.isAdmin && (
                 <Link
                   href="/admin"
-                  className="block rounded-md px-2 py-1.5 text-sm text-accent hover:bg-surface-raised transition-colors"
+                  className="block rounded-[12px] px-2 py-1.5 text-sm text-accent hover:bg-surface-raised transition-colors"
                 >
                   Painel de administrador
                 </Link>
               )}
               <button
                 onClick={handleSignOut}
-                className="w-full text-left rounded-md px-2 py-1.5 text-sm text-danger hover:bg-surface-raised transition-colors"
+                className="w-full text-left rounded-[12px] px-2 py-1.5 text-sm text-danger hover:bg-surface-raised transition-colors"
               >
                 Sair
               </button>

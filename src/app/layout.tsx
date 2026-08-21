@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import { NavLink } from "@/components/NavLink";
 import { UserMenu } from "@/components/UserMenu";
 import { SupabaseNotConfigured } from "@/components/SupabaseNotConfigured";
@@ -10,25 +9,11 @@ import "./globals.css";
 
 const supabaseConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-/* Pareamento do tema custom "instrumento" (ver design.md):
- * display em grotesk de traço técnico, corpo em sans neutra que some, números em mono.
- * Três famílias é o teto da disciplina 2+1 do Hallmark — display + corpo + a mono
- * que existe por função (alinhar coluna de número), não por estilo. */
-const displayFont = Space_Grotesk({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
-const bodyFont = Inter({
-  variable: "--font-body",
-  subsets: ["latin"],
-});
-
-const monoFont = JetBrains_Mono({
-  variable: "--font-mono-tech",
-  subsets: ["latin"],
-});
+/* Sem `next/font`. A skill apple-design proíbe Inter/Roboto como face de marca
+ * — fonte genérica é um dos tells que ela lista. A pilha do sistema entrega SF
+ * Pro no Mac e no iPhone do Pedro (que é onde ele abre isto), custa zero byte
+ * de download e é a única forma de a tipografia ser de fato a da Apple.
+ * A pilha vive em `--font-system`, em globals.css. */
 
 export const metadata: Metadata = {
   title: "Degrau",
@@ -39,18 +24,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable} h-full antialiased dark`}
+      className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col text-foreground">
         {!supabaseConfigured ? (
           <SupabaseNotConfigured />
         ) : (
           <AuthProvider>
-            <header className="sticky top-0 z-10 border-b border-rule-2 bg-background">
-              <div className="mx-auto max-w-5xl px-6 py-3 flex items-center justify-between gap-4">
-                <Link href="/" className="flex items-center gap-2 font-display font-semibold tracking-tight shrink-0 group">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-accent text-[color:var(--accent-contrast)] transition-colors duration-150 group-hover:bg-accent-strong">
-                    <IconPhysique className="h-3.5 w-3.5" />
+            <header className="glass-nav sticky top-0 z-50">
+              <div className="mx-auto max-w-5xl px-[22px] py-3 flex items-center justify-between gap-4">
+                <Link href="/" className="flex items-center gap-2 font-semibold tracking-[-0.01em] shrink-0 group">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-[6px] bg-accent text-[color:var(--accent-contrast)] transition-colors duration-200 group-hover:bg-accent-strong">
+                    <IconPhysique className="h-4 w-4" />
                   </span>
                   <span className="hidden sm:inline">Degrau</span>
                 </Link>
@@ -66,8 +51,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               </div>
             </header>
             <main className="flex-1">{children}</main>
-            <footer className="border-t border-rule-2">
-              <div className="mx-auto max-w-5xl px-6 py-6 text-xs text-muted">
+            <footer className="border-t border-border">
+              <div className="mx-auto max-w-5xl px-[22px] py-8 text-[13px] leading-relaxed text-neutral">
                 Modelo pessoal com poucos pontos de dado — hipóteses de trabalho, não leis confirmadas. Não substitui acompanhamento profissional.
               </div>
             </footer>

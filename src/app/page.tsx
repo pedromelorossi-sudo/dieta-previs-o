@@ -1,7 +1,7 @@
 "use client";
 
 /* Hallmark · macrostructure: Stat-Led · genre: modern-minimal · tone: technical
- * theme: instrumento (ciano oklch(76% .145 205) sobre papel frio) · enrichment: none
+ * theme: Apple Liquid Glass (azul #0071e3 sobre chão #f5f5f7) · enrichment: none
  * reveal: number-tick no número do herói apenas · nav: existente (layout.tsx)
  * sistema travado em design.md na raiz
  */
@@ -43,7 +43,7 @@ export default function DashboardPage() {
 
   if (!cycles) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-10 space-y-6">
+      <div className="mx-auto max-w-[1080px] px-[22px] py-12 space-y-6">
         <div className="skeleton h-32 w-full" />
         <div className="skeleton h-20 w-full" />
         <div className="skeleton h-48 w-full" />
@@ -52,13 +52,13 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-[1080px] px-[22px] py-12 space-y-[clamp(34px,6vw,56px)]">
       {/* ---- Herói Stat-Led: o número é o conteúdo, mas nunca aparece sozinho ---- */}
-      <section className="border-b border-border pb-10">
+      <section>
         {last ? (
           <>
             <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-              <span className="font-mono text-[clamp(3.5rem,12vw,7rem)] font-semibold leading-[0.85] tracking-[-0.04em] tabular-nums">
+              <span className="tabular-nums text-[clamp(3.5rem,12vw,7rem)] font-semibold leading-[0.85] tracking-[-0.04em] tabular-nums">
                 <AnimatedNumber value={last.kcal} decimals={0} />
               </span>
               <span className="pb-2 text-xl text-muted">kcal/dia</span>
@@ -103,13 +103,13 @@ export default function DashboardPage() {
 
       {/* ---- Recados do admin: hairline, não cartão brilhante ---- */}
       {comments.length > 0 && (
-        <section className="border-b border-border py-8">
-          <h2 className="text-xs uppercase tracking-[0.12em] text-muted">Recados do administrador</h2>
+        <section>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">Recados do administrador</h2>
           <div className="mt-4 space-y-4">
             {comments.map((c) => (
               <div key={c.id} className="border-l-2 border-accent/50 pl-4">
                 <p className="text-sm leading-relaxed">{c.body}</p>
-                <p className="mt-1.5 font-mono text-xs text-muted tabular-nums">
+                <p className="mt-1.5 tabular-nums text-xs text-muted tabular-nums">
                   {c.authorName ?? "Administrador"} · {fmtDate(c.createdAt.slice(0, 10))}
                 </p>
               </div>
@@ -120,14 +120,14 @@ export default function DashboardPage() {
 
       {/* ---- Blocos de estatística separados por régua, não cartões em grade ---- */}
       {rules && cycles.length > 0 && (
-        <section className="border-b border-border py-8">
-          <h2 className="text-xs uppercase tracking-[0.12em] text-muted">Regras extraídas do histórico</h2>
+        <section>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">Regras extraídas do histórico</h2>
           <p className="mt-2 max-w-xl text-sm text-muted leading-relaxed">
             Padrões que se mantiveram até aqui. São hipóteses de trabalho enquanto seguram, não leis confirmadas —
             cada ciclo novo testa se continuam valendo.
           </p>
 
-          <div className="mt-6 grid divide-y divide-border border-y border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="panel mt-6 grid divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <StatBlock
               label="Gordura"
               value={fmt(rules.fatPerKg, 2)}
@@ -164,20 +164,20 @@ export default function DashboardPage() {
 
       {/* ---- Histórico ---- */}
       {cycles.length > 0 && (
-        <section className="border-b border-border py-8">
+        <section>
           <div className="flex items-baseline justify-between gap-4">
-            <h2 className="text-xs uppercase tracking-[0.12em] text-muted">Histórico</h2>
-            <span className="font-mono text-xs text-muted tabular-nums">
+            <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">Histórico</h2>
+            <span className="tabular-nums text-xs text-muted tabular-nums">
               {cycles.length} {cycles.length === 1 ? "ciclo" : "ciclos"}
             </span>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
+          <div className="panel mt-4 overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm tabular-nums">
               <thead>
                 <tr className="border-b border-border text-left">
                   {["Data", "Peso", "%BF", "Kcal", "Kcal/kg", "Proteína", "Gordura", "Carbo", ""].map((h) => (
-                    <th key={h} className="py-2.5 pr-5 font-mono text-xs font-normal uppercase tracking-wider text-muted last:pr-0">
+                    <th key={h} className="py-2.5 pr-5 text-[13px] font-normal text-neutral first:pl-5 last:pr-5">
                       {h}
                     </th>
                   ))}
@@ -185,8 +185,8 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {cycles.map((c) => (
-                  <tr key={c.id} className="border-b border-border/60 last:border-0 hover:bg-surface-raised/50">
-                    <td className="whitespace-nowrap py-3 pr-5">
+                  <tr key={c.id} className="border-b border-border last:border-0 transition-colors hover:bg-hover">
+                    <td className="whitespace-nowrap py-3 pr-5 pl-5">
                       {fmtDate(c.date)}
                       {c.isPrediction && <span className="ml-2 badge bg-warn/15 text-warn">previsão</span>}
                     </td>
@@ -203,7 +203,7 @@ export default function DashboardPage() {
                       {fmt(c.fatG, 1)}g <span className="text-muted">({fmt(c.fatG / c.weightKg, 1)} g/kg)</span>
                     </td>
                     <td className="whitespace-nowrap py-3 pr-5">{fmt(c.carbG, 1)}g</td>
-                    <td className="whitespace-nowrap py-3 text-right">
+                    <td className="whitespace-nowrap py-3 pr-5 text-right">
                       <button
                         type="button"
                         onClick={() => handleDeleteCycle(c.id)}
@@ -222,8 +222,8 @@ export default function DashboardPage() {
       )}
 
       {/* ---- Limitações: nota de rodapé, não cartão de destaque ---- */}
-      <section className="py-8">
-        <h2 className="text-xs uppercase tracking-[0.12em] text-muted">O que este método não sabe</h2>
+      <section>
+        <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-foreground">O que este método não sabe</h2>
         <ul className="mt-4 max-w-2xl space-y-2.5 text-sm leading-relaxed text-muted">
           <li>
             Foi construído com poucos pontos de dado. Cada ciclo novo é um teste de se as regras seguram, não uma
@@ -234,7 +234,7 @@ export default function DashboardPage() {
             Captura a parte matemática. Adesão, aparência nas fotos e exame físico continuam sendo julgamento humano.
           </li>
           <li>
-            <span className="font-mono text-foreground">E</span> — a energia por quilo ganho — é inferido pela
+            <span className="tabular-nums text-foreground">E</span> — a energia por quilo ganho — é inferido pela
             estabilidade do %BF. Sem DEXA seriada, nunca é certo.
           </li>
         </ul>
@@ -247,7 +247,7 @@ export default function DashboardPage() {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="font-mono text-[11px] uppercase tracking-wider text-muted">{label}</dt>
+      <dt className="text-[13px] text-neutral">{label}</dt>
       <dd className="mt-0.5 font-medium tabular-nums">{value}</dd>
     </div>
   );
@@ -273,14 +273,14 @@ function StatBlock({
   return (
     <div className="px-0 py-5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-muted">{label}</span>
+        <span className="text-[13px] text-neutral">{label}</span>
         <span
           className={`h-1 w-1 rounded-full ${steady ? "bg-accent" : "bg-warn"}`}
           title={steady ? "Estável" : "Em observação"}
         />
       </div>
       <div className="mt-2 flex items-baseline gap-1.5">
-        <span className="font-mono text-3xl font-semibold tracking-tight tabular-nums">{value}</span>
+        <span className="tabular-nums text-3xl font-semibold tracking-tight tabular-nums">{value}</span>
         <span className="text-sm text-muted">{unit}</span>
       </div>
       <p className="mt-2 text-xs leading-relaxed text-muted">{note}</p>

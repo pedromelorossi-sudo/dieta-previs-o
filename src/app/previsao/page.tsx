@@ -153,7 +153,7 @@ export default function PrevisaoPage() {
           </Field>
         </div>
 
-        <label className="flex items-start gap-3 rounded-md border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
+        <label className="flex items-start gap-3 rounded-[12px] border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
           <input
             type="checkbox"
             checked={stabilityMode}
@@ -169,7 +169,7 @@ export default function PrevisaoPage() {
           </span>
         </label>
 
-        <label className="flex items-start gap-3 rounded-md border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
+        <label className="flex items-start gap-3 rounded-[12px] border border-border bg-surface-raised/50 p-3.5 text-sm cursor-pointer hover:border-accent/30 transition-colors">
           <input
             type="checkbox"
             checked={applyProteinStep}
@@ -224,7 +224,7 @@ export default function PrevisaoPage() {
 
           <div className="card p-6">
             <h2 className="text-sm font-semibold mb-5 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15 text-accent">
+              <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-accent/15 text-accent">
                 <IconTarget className="h-3.5 w-3.5" />
               </span>
               Prescrição prevista para o próximo ciclo
@@ -288,11 +288,11 @@ function StatCard({ icon, label, value, hint }: { icon: React.ReactNode; label: 
   return (
     <div className="card p-4">
       <div className="flex items-center gap-2 text-xs text-muted">
-        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-surface-raised text-muted">{icon}</span>
+        <span className="flex h-6 w-6 items-center justify-center rounded-[12px] bg-surface-raised text-muted">{icon}</span>
         {label}
       </div>
       <div className="mt-2 text-lg font-semibold tracking-tight">{value}</div>
-      <div className="mt-1 text-[10px] uppercase tracking-wide text-muted">{hint}</div>
+      <div className="mt-1 text-[12px] text-neutral">{hint}</div>
     </div>
   );
 }

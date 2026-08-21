@@ -243,7 +243,7 @@ function FoodTagPicker({
     <div className="space-y-2">
       {CATEGORIES.map((cat) => (
         <div key={cat} className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted w-20 shrink-0">{CATEGORY_LABEL[cat]}</span>
+          <span className="text-[12px] text-neutral w-20 shrink-0">{CATEGORY_LABEL[cat]}</span>
           {FOODS.filter((f) => f.category === cat).map((f) => {
             const active = selected.includes(f.id);
             return (
