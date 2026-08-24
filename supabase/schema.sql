@@ -19,8 +19,12 @@ returns boolean
 language sql
 security definer
 stable
+-- `search_path` vazio é obrigatório em SECURITY DEFINER: sem isso, quem chama a
+-- função pode manipular o search_path e fazer `profiles` resolver para uma
+-- tabela sob controle dele, com os privilégios do criador da função.
+set search_path = ''
 as $$
-  select coalesce((select is_admin from public.profiles where id = auth.uid()), false);
+  select coalesce((select is_admin from public.profiles where id = (select auth.uid())), false);
 $$;
 
 alter table public.profiles enable row level security;
@@ -28,13 +32,13 @@ alter table public.profiles enable row level security;
 drop policy if exists "profiles: select own" on public.profiles;
 drop policy if exists "profiles: select own or admin" on public.profiles;
 create policy "profiles: select own or admin" on public.profiles
-  for select using (auth.uid() = id or public.is_admin());
+  for select using ((select auth.uid()) = id or (select public.is_admin()));
 drop policy if exists "profiles: update own" on public.profiles;
 create policy "profiles: update own" on public.profiles
-  for update using (auth.uid() = id);
+  for update using ((select auth.uid()) = id);
 drop policy if exists "profiles: insert own" on public.profiles;
 create policy "profiles: insert own" on public.profiles
-  for insert with check (auth.uid() = id);
+  for insert with check ((select auth.uid()) = id);
 
 -- trava de segurança: a política de update acima não restringe colunas, então sem isso
 -- qualquer usuário logado poderia rodar update profiles set is_admin=true na própria linha
@@ -51,7 +55,7 @@ as $$
 begin
   if new.is_admin is distinct from old.is_admin
      and auth.uid() is not null
-     and not public.is_admin() then
+     and not (select public.is_admin()) then
     new.is_admin := old.is_admin;
   end if;
   return new;
@@ -120,16 +124,16 @@ alter table public.cycles enable row level security;
 drop policy if exists "cycles: all own" on public.cycles;
 drop policy if exists "cycles: select own or admin" on public.cycles;
 create policy "cycles: select own or admin" on public.cycles
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "cycles: insert own" on public.cycles;
 create policy "cycles: insert own" on public.cycles
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "cycles: update own" on public.cycles;
 create policy "cycles: update own" on public.cycles
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists "cycles: delete own" on public.cycles;
 create policy "cycles: delete own" on public.cycles
-  for delete using (auth.uid() = user_id);
+  for delete using ((select auth.uid()) = user_id);
 
 create index if not exists cycles_user_date_idx on public.cycles (user_id, date);
 
@@ -152,18 +156,18 @@ alter table public.diets enable row level security;
 drop policy if exists "diets: all own" on public.diets;
 drop policy if exists "diets: select own or admin" on public.diets;
 create policy "diets: select own or admin" on public.diets
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "diets: insert own" on public.diets;
 create policy "diets: insert own" on public.diets
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "diets: update own" on public.diets;
 drop policy if exists "diets: update own or admin" on public.diets;
 create policy "diets: update own or admin" on public.diets
-  for update using (auth.uid() = user_id or public.is_admin()) with check (auth.uid() = user_id or public.is_admin());
+  for update using ((select auth.uid()) = user_id or (select public.is_admin())) with check ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "diets: delete own" on public.diets;
 drop policy if exists "diets: delete own or admin" on public.diets;
 create policy "diets: delete own or admin" on public.diets
-  for delete using (auth.uid() = user_id or public.is_admin());
+  for delete using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- ============ ADMIN COMMENTS ============
 -- recados que o admin deixa pro usuário — só admin escreve/apaga, o próprio usuário só lê
@@ -179,16 +183,16 @@ alter table public.admin_comments enable row level security;
 
 drop policy if exists "admin_comments: select own or admin" on public.admin_comments;
 create policy "admin_comments: select own or admin" on public.admin_comments
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "admin_comments: admin insert" on public.admin_comments;
 create policy "admin_comments: admin insert" on public.admin_comments
-  for insert with check (public.is_admin());
+  for insert with check ((select public.is_admin()));
 drop policy if exists "admin_comments: admin update" on public.admin_comments;
 create policy "admin_comments: admin update" on public.admin_comments
-  for update using (public.is_admin());
+  for update using ((select public.is_admin()));
 drop policy if exists "admin_comments: admin delete" on public.admin_comments;
 create policy "admin_comments: admin delete" on public.admin_comments
-  for delete using (public.is_admin());
+  for delete using ((select public.is_admin()));
 
 create index if not exists admin_comments_user_idx on public.admin_comments (user_id, created_at);
 
@@ -221,16 +225,16 @@ alter table public.preferences enable row level security;
 drop policy if exists "preferences: all own" on public.preferences;
 drop policy if exists "preferences: select own or admin" on public.preferences;
 create policy "preferences: select own or admin" on public.preferences
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "preferences: insert own" on public.preferences;
 create policy "preferences: insert own" on public.preferences
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "preferences: update own" on public.preferences;
 create policy "preferences: update own" on public.preferences
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists "preferences: delete own" on public.preferences;
 create policy "preferences: delete own" on public.preferences
-  for delete using (auth.uid() = user_id);
+  for delete using ((select auth.uid()) = user_id);
 
 -- ============ PREDICTIONS (última previsão salva) ============
 create table if not exists public.predictions (
@@ -254,16 +258,16 @@ alter table public.predictions enable row level security;
 drop policy if exists "predictions: all own" on public.predictions;
 drop policy if exists "predictions: select own or admin" on public.predictions;
 create policy "predictions: select own or admin" on public.predictions
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "predictions: insert own" on public.predictions;
 create policy "predictions: insert own" on public.predictions
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "predictions: update own" on public.predictions;
 create policy "predictions: update own" on public.predictions
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists "predictions: delete own" on public.predictions;
 create policy "predictions: delete own" on public.predictions
-  for delete using (auth.uid() = user_id);
+  for delete using ((select auth.uid()) = user_id);
 
 -- ============ PROGRESS PHOTOS ============
 create table if not exists public.progress_photos (
@@ -286,16 +290,16 @@ alter table public.progress_photos enable row level security;
 drop policy if exists "progress_photos: all own" on public.progress_photos;
 drop policy if exists "progress_photos: select own or admin" on public.progress_photos;
 create policy "progress_photos: select own or admin" on public.progress_photos
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "progress_photos: insert own" on public.progress_photos;
 create policy "progress_photos: insert own" on public.progress_photos
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "progress_photos: update own" on public.progress_photos;
 create policy "progress_photos: update own" on public.progress_photos
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists "progress_photos: delete own" on public.progress_photos;
 create policy "progress_photos: delete own" on public.progress_photos
-  for delete using (auth.uid() = user_id);
+  for delete using ((select auth.uid()) = user_id);
 
 create index if not exists progress_photos_user_date_idx on public.progress_photos (user_id, date);
 
@@ -315,16 +319,16 @@ alter table public.training_programs enable row level security;
 
 drop policy if exists "training_programs: select own or admin" on public.training_programs;
 create policy "training_programs: select own or admin" on public.training_programs
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "training_programs: insert own" on public.training_programs;
 create policy "training_programs: insert own" on public.training_programs
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "training_programs: update own or admin" on public.training_programs;
 create policy "training_programs: update own or admin" on public.training_programs
-  for update using (auth.uid() = user_id or public.is_admin()) with check (auth.uid() = user_id or public.is_admin());
+  for update using ((select auth.uid()) = user_id or (select public.is_admin())) with check ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "training_programs: delete own or admin" on public.training_programs;
 create policy "training_programs: delete own or admin" on public.training_programs
-  for delete using (auth.uid() = user_id or public.is_admin());
+  for delete using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- ============ TRAINING LOGS ============
 -- registro de sessões efetivamente realizadas — sets_logged é jsonb no formato LoggedSet[] de
@@ -345,16 +349,16 @@ alter table public.training_logs enable row level security;
 
 drop policy if exists "training_logs: select own or admin" on public.training_logs;
 create policy "training_logs: select own or admin" on public.training_logs
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "training_logs: insert own" on public.training_logs;
 create policy "training_logs: insert own" on public.training_logs
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "training_logs: update own" on public.training_logs;
 create policy "training_logs: update own" on public.training_logs
-  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists "training_logs: delete own" on public.training_logs;
 create policy "training_logs: delete own" on public.training_logs
-  for delete using (auth.uid() = user_id);
+  for delete using ((select auth.uid()) = user_id);
 
 create index if not exists training_logs_user_date_idx on public.training_logs (user_id, date);
 
@@ -368,7 +372,7 @@ drop policy if exists "progress-photos: read own or admin" on storage.objects;
 create policy "progress-photos: read own or admin" on storage.objects
   for select using (
     bucket_id = 'progress-photos'
-    and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin())
+    and ((storage.foldername(name))[1] = auth.uid()::text or (select public.is_admin()))
   );
 drop policy if exists "progress-photos: insert own" on storage.objects;
 create policy "progress-photos: insert own" on storage.objects
@@ -404,13 +408,13 @@ alter table public.prediction_audit enable row level security;
 
 drop policy if exists "prediction_audit: select own or admin" on public.prediction_audit;
 create policy "prediction_audit: select own or admin" on public.prediction_audit
-  for select using (auth.uid() = user_id or public.is_admin());
+  for select using ((select auth.uid()) = user_id or (select public.is_admin()));
 drop policy if exists "prediction_audit: insert own" on public.prediction_audit;
 create policy "prediction_audit: insert own" on public.prediction_audit
-  for insert with check (auth.uid() = user_id);
+  for insert with check ((select auth.uid()) = user_id);
 drop policy if exists "prediction_audit: delete own" on public.prediction_audit;
 create policy "prediction_audit: delete own" on public.prediction_audit
-  for delete using (auth.uid() = user_id);
+  for delete using ((select auth.uid()) = user_id);
 
 -- Um ciclo auditado por dia por usuário. Sem isso, uma tentativa repetida (retry de rede, duplo clique)
 -- grava duas linhas do mesmo ciclo e DOBRA o peso dele na média ponderada da calibração de TDEE.
@@ -470,7 +474,7 @@ create unique index if not exists prediction_audit_user_date_uniq on public.pred
 -- que faltavam. O `insert` importa para o admin poder CRIAR em nome de alguém
 -- (ex: lançar o ciclo de uma consultoria que chegou por fora do app).
 --
--- A checagem é `public.is_admin()`, que lê `profiles.is_admin` do usuário
+-- A checagem é `(select public.is_admin())`, que lê `profiles.is_admin` do usuário
 -- autenticado — a autorização mora no BANCO, não no cliente. Uma tela de admin
 -- alcançada indevidamente continua esbarrando aqui.
 -- ============================================================================
@@ -479,91 +483,106 @@ create unique index if not exists prediction_audit_user_date_uniq on public.pred
 drop policy if exists "cycles: update own" on public.cycles;
 drop policy if exists "cycles: update own or admin" on public.cycles;
 create policy "cycles: update own or admin" on public.cycles
-  for update using (auth.uid() = user_id or public.is_admin());
+  for update using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "cycles: delete own" on public.cycles;
 drop policy if exists "cycles: delete own or admin" on public.cycles;
 create policy "cycles: delete own or admin" on public.cycles
-  for delete using (auth.uid() = user_id or public.is_admin());
+  for delete using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "cycles: insert own" on public.cycles;
 drop policy if exists "cycles: insert own or admin" on public.cycles;
 create policy "cycles: insert own or admin" on public.cycles
-  for insert with check (auth.uid() = user_id or public.is_admin());
+  for insert with check ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- preferences
 drop policy if exists "preferences: insert own" on public.preferences;
 drop policy if exists "preferences: insert own or admin" on public.preferences;
 create policy "preferences: insert own or admin" on public.preferences
-  for insert with check (auth.uid() = user_id or public.is_admin());
+  for insert with check ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "preferences: update own" on public.preferences;
 drop policy if exists "preferences: update own or admin" on public.preferences;
 create policy "preferences: update own or admin" on public.preferences
-  for update using (auth.uid() = user_id or public.is_admin());
+  for update using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- training_logs
 drop policy if exists "training_logs: insert own" on public.training_logs;
 drop policy if exists "training_logs: insert own or admin" on public.training_logs;
 create policy "training_logs: insert own or admin" on public.training_logs
-  for insert with check (auth.uid() = user_id or public.is_admin());
+  for insert with check ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "training_logs: update own" on public.training_logs;
 drop policy if exists "training_logs: update own or admin" on public.training_logs;
 create policy "training_logs: update own or admin" on public.training_logs
-  for update using (auth.uid() = user_id or public.is_admin());
+  for update using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "training_logs: delete own" on public.training_logs;
 drop policy if exists "training_logs: delete own or admin" on public.training_logs;
 create policy "training_logs: delete own or admin" on public.training_logs
-  for delete using (auth.uid() = user_id or public.is_admin());
+  for delete using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- training_programs: faltava o insert (update/delete já eram do admin)
 drop policy if exists "training_programs: insert own" on public.training_programs;
 drop policy if exists "training_programs: insert own or admin" on public.training_programs;
 create policy "training_programs: insert own or admin" on public.training_programs
-  for insert with check (auth.uid() = user_id or public.is_admin());
+  for insert with check ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- diets: faltava o insert (update/delete já eram do admin)
 drop policy if exists "diets: insert own" on public.diets;
 drop policy if exists "diets: insert own or admin" on public.diets;
 create policy "diets: insert own or admin" on public.diets
-  for insert with check (auth.uid() = user_id or public.is_admin());
+  for insert with check ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- predictions
 drop policy if exists "predictions: insert own" on public.predictions;
 drop policy if exists "predictions: insert own or admin" on public.predictions;
 create policy "predictions: insert own or admin" on public.predictions
-  for insert with check (auth.uid() = user_id or public.is_admin());
+  for insert with check ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "predictions: update own" on public.predictions;
 drop policy if exists "predictions: update own or admin" on public.predictions;
 create policy "predictions: update own or admin" on public.predictions
-  for update using (auth.uid() = user_id or public.is_admin());
+  for update using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "predictions: delete own" on public.predictions;
 drop policy if exists "predictions: delete own or admin" on public.predictions;
 create policy "predictions: delete own or admin" on public.predictions
-  for delete using (auth.uid() = user_id or public.is_admin());
+  for delete using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- progress_photos
 drop policy if exists "progress_photos: update own" on public.progress_photos;
 drop policy if exists "progress_photos: update own or admin" on public.progress_photos;
 create policy "progress_photos: update own or admin" on public.progress_photos
-  for update using (auth.uid() = user_id or public.is_admin());
+  for update using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 drop policy if exists "progress_photos: delete own" on public.progress_photos;
 drop policy if exists "progress_photos: delete own or admin" on public.progress_photos;
 create policy "progress_photos: delete own or admin" on public.progress_photos
-  for delete using (auth.uid() = user_id or public.is_admin());
+  for delete using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- profiles: admin pode corrigir o nome de alguém (e promover outro admin)
 drop policy if exists "profiles: update own" on public.profiles;
 drop policy if exists "profiles: update own or admin" on public.profiles;
 create policy "profiles: update own or admin" on public.profiles
-  for update using (auth.uid() = id or public.is_admin());
+  for update using ((select auth.uid()) = id or (select public.is_admin()));
 
 notify pgrst, 'reload schema';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ÍNDICES QUE FALTAVAM EM user_id  (2026-08-24)
+--
+-- Toda política de RLS deste schema filtra por `user_id`, e cinco tabelas não
+-- tinham índice nessa coluna: o Postgres varria a tabela inteira para decidir
+-- quais linhas o usuário pode ver. Regra da skill oficial da Supabase:
+-- "always add indexes on columns used in RLS policies".
+-- ═══════════════════════════════════════════════════════════════════════════
+
+create index if not exists diets_user_idx on public.diets (user_id, created_at desc);
+create index if not exists prediction_audit_user_date_idx on public.prediction_audit (user_id, date);
+create index if not exists predictions_user_idx on public.predictions (user_id, created_at desc);
+create index if not exists preferences_user_idx on public.preferences (user_id);
+create index if not exists training_programs_user_idx on public.training_programs (user_id, created_at desc);
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- %BF MEDIDO POR EXAME  (2026-08-21)
