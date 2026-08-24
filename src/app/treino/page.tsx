@@ -5,7 +5,7 @@
  * mesmo tipo — a fragmentação que a regra 1 proíbe. Viraram painel unificado.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { EXERCISE_LIBRARY, MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
 import { LoggedSetEntry, ReserveType, TrainingLog, TrainingProgram } from "@/lib/trainingBuilder";
@@ -77,6 +77,11 @@ export default function TreinoPage() {
   const [diasPorSemana, setDiasPorSemana] = useState(5);
   const [gerando, setGerando] = useState(false);
   const [erroGerar, setErroGerar] = useState<string | null>(null);
+  /* Trava da geração automática. Cada `upsertTrainingProgram` usa um UUID novo,
+     então gerar duas vezes cria DUAS linhas em vez de sobrescrever — e o
+     StrictMode roda o efeito duas vezes em desenvolvimento. Ref, e não estado:
+     precisa valer já na segunda execução, antes de qualquer re-render. */
+  const geracaoAutomaticaTentada = useRef(false);
 
   const [sessionLabel, setSessionLabel] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -86,14 +91,21 @@ export default function TreinoPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  async function refresh() {
+  /* Devolve o programa carregado além de guardá-lo no estado. Quem chama logo
+     depois do await precisa saber se existe programa AGORA — ler `programa` do
+     estado ali devolveria o valor do render anterior, sempre null na primeira
+     passada, e a geração automática dispararia até para quem já tem treino. */
+  async function refresh(): Promise<TrainingProgram | null> {
     try {
       const l = await loadTrainingLogs(8);
       setLogs(l);
       // o programa é acessório: se a tabela não existir, a página segue funcionando
       try {
         const progs = await loadTrainingPrograms();
-        setPrograma(progs[0] ?? null);
+        const atual = progs[0] ?? null;
+        setPrograma(atual);
+        setLoadError(null);
+        return atual;
       } catch {
         setPrograma(null);
       }
@@ -103,22 +115,43 @@ export default function TreinoPage() {
       setLoadError(e instanceof Error ? e.message : "Erro ao carregar treinos.");
       setLogs([]);
     }
+    return null;
   }
 
   useEffect(() => {
     if (!ready || !user) return;
     let cancelled = false;
     void (async () => {
-      await refresh();
+      const existente = await refresh();
       if (cancelled) return;
       // capturado junto com os logs, depois do await: fora do render e fora da fase síncrona do efeito
       setNowMs(Date.now());
       const cycles = await loadCycles();
       if (!cancelled) setMuscleEvolution(buildMuscleEvolution(cycles));
+
+      /* Quem ainda não tem programa ganha um na primeira visita.
+       *
+       * A geração já era automática no sentido de não pedir exercício por
+       * exercício, mas continuava dependendo de um clique em "Gerar treino" —
+       * e o resultado disso foi `training_programs` com ZERO linhas para sete
+       * usuários. Aluno que não clica ficava sem treino nenhum, e o painel do
+       * administrador não tinha o que mostrar.
+       *
+       * Só dispara quando não existe programa: quem já tem não é sobrescrito.
+       * O algoritmo do gerador não muda — muda apenas QUANDO ele roda. Trocar
+       * o número de dias e regerar continua sendo do usuário. */
+      if (!cancelled && !existente && !geracaoAutomaticaTentada.current) {
+        geracaoAutomaticaTentada.current = true;
+        await handleGerarTreino();
+      }
     })();
     return () => {
       cancelled = true;
     };
+    /* `handleGerarTreino` fica fora das dependências de propósito: é recriada a
+       cada render, então incluí-la faria este efeito recarregar logs e ciclos
+       sem parar. O efeito deve rodar quando a sessão fica pronta, e só. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, user]);
 
   async function handleGerarTreino() {

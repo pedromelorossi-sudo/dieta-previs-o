@@ -510,6 +510,64 @@ export default function PrevisaoIaPage() {
         muscleAssessment: data.muscleGroupAssessment?.length ? data.muscleGroupAssessment : null,
       });
       setCycles(sortByDate(await loadCycles()));
+
+      /* PERSISTÊNCIA DO QUE A IA ACABOU DE PRODUZIR.
+       *
+       * Preferências, foto e ciclo já eram gravados aqui. Previsão, dieta e
+       * programa de treino não eram: dependiam de três botões "Salvar"
+       * separados, espalhados mais abaixo na página. Quem fechasse a aba
+       * perdia tudo, e como ninguém clica nos três, o banco ficou com 7
+       * usuários, 2 previsões, 1 dieta e ZERO treinos — que é o que o
+       * administrador via como "não registra os treinos e dietas dos alunos".
+       *
+       * O app não deve pedir para a pessoa salvar aquilo que ele mesmo gerou.
+       * Os botões continuam existindo para regravar depois de editar.
+       *
+       * Bloco próprio porque falhar aqui não invalida a análise: o resultado já
+       * está na tela e o ciclo já foi gravado. O erro precisa aparecer, mas
+       * dizendo o que realmente aconteceu, e não "erro ao gerar previsão". */
+      try {
+        const alvo = new Date(date);
+        alvo.setDate(alvo.getDate() + Math.round(parseFloat(weeks) * 7));
+        await saveLastPrediction({
+          createdAt: new Date().toISOString(),
+          targetDate: alvo.toISOString().slice(0, 10),
+          kcal: data.ranges.kcal,
+          proteinG: data.ranges.protein,
+          fatG: data.ranges.fat,
+          carbG: data.ranges.carb,
+          weightKg: data.ranges.weight,
+        });
+        setSaved(true);
+
+        await upsertDiet({
+          id: crypto.randomUUID(),
+          name: `Plano ${fmtDate(date)}`,
+          createdAt: new Date().toISOString(),
+          targetKcal: data.recommendedKcal,
+          targetProteinG: data.recommendedProteinG,
+          targetFatG: data.recommendedFatG,
+          targetCarbG: data.recommendedCarbG,
+          meals: data.meals,
+        });
+        setDietSaved(true);
+
+        if (data.suggestedTrainingProgram?.length) {
+          await upsertTrainingProgram({
+            id: crypto.randomUUID(),
+            name: `Divisão sugerida ${fmtDate(date)}`,
+            createdAt: new Date().toISOString(),
+            sessions: data.suggestedTrainingProgram,
+          });
+          setProgramSaved(true);
+        }
+      } catch (err) {
+        setError(
+          `A análise funcionou, mas não consegui salvar o plano: ${
+            err instanceof Error ? err.message : "erro desconhecido"
+          }. Use os botões de salvar abaixo.`
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao gerar previsão.");
     } finally {
