@@ -19,6 +19,19 @@ export interface MuscleTarget {
   /** prioridade declarada (ex: consultoria real) — pesa mais que a leitura visual da foto, porque um
    * coach humano enxerga sinais que uma foto não capta (força estagnada, medidas, etc.) */
   isPriority?: boolean;
+  /** Quantas séries em CADA dia, por rótulo do dia ("Push", "Upper"…).
+   *
+   * Existe porque a divisão igual entre os dias do músculo era o que desperdiçava
+   * o orçamento. `computeMuscleTargets` calcula fatias assimétricas — o Push tem
+   * folga, o Upper não — e antes elas eram descartadas duas vezes: a meta semanal
+   * virava `min(fatias) × frequência` e o `buildSplit` redividia igualmente. O
+   * peito recebia 4+4 quando o Push comportava 7.
+   *
+   * Chaveado por RÓTULO e não por índice de propósito: se o template mudar entre
+   * o cálculo da meta e a montagem, um índice desalinhado atribuiria a fatia ao
+   * dia errado em silêncio, enquanto um rótulo ausente simplesmente cai de volta
+   * na divisão igual. */
+  perDayByLabel?: Record<string, number>;
 }
 
 // grupo lido como "atrás dos outros" na foto puxa a meta pra cima do MAV padrão (mais estímulo pra
@@ -175,6 +188,37 @@ export function estimarVolumeIndireto(metasDiretas: Map<MuscleGroup, number>): M
   return indireto;
 }
 
+/** Reparte `total` séries entre os dias, mantendo a proporção que a alocação
+ * calculou e fazendo a soma bater EXATAMENTE com o total.
+ *
+ * Maior resto, e não arredondamento independente: arredondar cada dia por conta
+ * própria faz a soma dos dias divergir da meta anunciada — o mesmo vazamento
+ * que o `floor` + distribuição de resto já corrigia na divisão igual. */
+function distribuirPorDia(total: number, fatias: { label: string; sets: number }[]): Record<string, number> {
+  const saida: Record<string, number> = {};
+  if (fatias.length === 0 || total <= 0) return saida;
+
+  const soma = fatias.reduce((n, f) => n + f.sets, 0);
+  // sem proporção utilizável (tudo zero): cai na divisão igual de sempre
+  const exatos =
+    soma > 0
+      ? fatias.map((f) => ({ label: f.label, exato: (f.sets / soma) * total }))
+      : fatias.map((f) => ({ label: f.label, exato: total / fatias.length }));
+
+  let atribuido = 0;
+  for (const e of exatos) {
+    const piso = Math.floor(e.exato);
+    saida[e.label] = piso;
+    atribuido += piso;
+  }
+
+  const porResto = [...exatos].sort((a, b) => (b.exato % 1) - (a.exato % 1));
+  for (let sobra = total - atribuido, i = 0; sobra > 0 && i < porResto.length; sobra--, i++) {
+    saida[porResto[i].label] += 1;
+  }
+  return saida;
+}
+
 export function computeMuscleTargets(
   assessment: MuscleAssessmentInput[] = [],
   priorityMuscles: MuscleGroup[] = [],
@@ -302,7 +346,7 @@ export function computeMuscleTargets(
    * A meta usa a fatia do dia MAIS APERTADO vezes a frequência. É conservador
    * de propósito: garante que todo dia consegue entregar o que foi prometido,
    * que é a única forma de meta e entrega baterem por construção. */
-  const fatiasPorMusculo = new Map<MuscleGroup, number[]>();
+  const fatiasPorMusculo = new Map<MuscleGroup, { label: string; sets: number }[]>();
 
   for (const dia of templateParaMeta) {
     const noDia = dia.muscles.map((m) => slotPorMusculo.get(m)).filter((sl): sl is Slot => !!sl && sl.ceiling > 0);
@@ -344,37 +388,60 @@ export function computeMuscleTargets(
     // com peso dobrado para prioridade. Aqui os grupos de MEV 0 entram.
     const faltaDe = (sl: Slot) => Math.max(0, Math.min(desejo.get(sl) ?? 0, tetoDoDia(sl)) - sl.sets / freqDe(sl));
     const somaPeso = noDia.reduce((n, sl) => n + faltaDe(sl) * (sl.isPriority ? 2 : 1), 0);
-    if (somaPeso <= 0 || disponivel <= 0) continue;
 
-    for (const sl of noDia) {
-      const peso = faltaDe(sl) * (sl.isPriority ? 2 : 1);
-      if (peso <= 0) continue;
-      sl.sets += Math.min(faltaDe(sl), (disponivel * peso) / somaPeso);
+    /* Era `continue` aqui, e o `continue` pulava o REGISTRO DA FATIA logo
+     * abaixo — não só a segunda rodada. Quando o orçamento do dia acabava já na
+     * primeira (arranjo de 1 e 2 dias, onde os pisos de MEV consomem a sessão
+     * inteira), o dia inteiro saía sem fatia registrada. Isso passou
+     * despercebido enquanto a meta era `min(fatias) × frequência`, porque o
+     * piso de MEV depois restaurava o valor; assim que a fatia passou a ser a
+     * fonte da meta, o mesmo caminho zerava o quadríceps. */
+    if (somaPeso > 0 && disponivel > 0) {
+      for (const sl of noDia) {
+        const peso = faltaDe(sl) * (sl.isPriority ? 2 : 1);
+        if (peso <= 0) continue;
+        sl.sets += Math.min(faltaDe(sl), (disponivel * peso) / somaPeso);
+      }
     }
 
     // registra a fatia deste dia (o `sl.sets` acumulado menos o que já havia)
     for (const sl of noDia) {
       const lista = fatiasPorMusculo.get(sl.landmark.muscle) ?? [];
-      const jaSomado = lista.reduce((n, v) => n + v, 0);
-      lista.push(Math.max(0, sl.sets - jaSomado));
+      const jaSomado = lista.reduce((n, v) => n + v.sets, 0);
+      lista.push({ label: dia.label, sets: Math.max(0, sl.sets - jaSomado) });
       fatiasPorMusculo.set(sl.landmark.muscle, lista);
     }
   }
 
-  // a meta é a fatia do dia mais apertado × frequência (ver comentário acima)
+  /* A meta é a SOMA das fatias — não mais `min(fatias) × frequência`.
+   *
+   * O `min` existia porque o `buildSplit` redividia o total igualmente entre os
+   * dias do músculo: prometer a soma de uma alocação assimétrica gerava um alvo
+   * que o dia apertado não entregava. Achatar tudo pelo dia mais apertado
+   * resolvia a coerência e pagava caro por ela — em 6 dias sobravam 39 séries
+   * de orçamento sem uso, com 7 grupos abaixo do MAV. Quem treinava 6 dias
+   * desperdiçava MAIS orçamento que quem treinava 5.
+   *
+   * Agora a fatia de cada dia atravessa até a montagem (`perDayByLabel`), então
+   * a assimetria é entregue em vez de descartada, e a soma é honesta. O teto
+   * por sessão continua sendo aplicado depois, nos dois lados. */
   for (const sl of slots) {
     const fatias = fatiasPorMusculo.get(sl.landmark.muscle) ?? [];
     if (fatias.length === 0) {
       sl.sets = 0;
       continue;
     }
-    sl.sets = Math.min(...fatias) * fatias.length;
+    sl.sets = fatias.reduce((n, f) => n + f.sets, 0);
   }
 
-  // arredonda no fim e garante o piso de MEV onde o teto físico permite
+  /* Arredonda e garante o piso de MEV onde o teto físico permite.
+   *
+   * Era `Math.round(sets / freq) * freq`, um múltiplo da frequência, porque a
+   * divisão igual precisava dividir exato. Com fatia por dia isso deixou de ser
+   * necessário — e forçar o múltiplo agora só arredondaria a meta para longe do
+   * que as sessões realmente comportam. */
   for (const sl of slots) {
-    const freq = Math.max(1, freqByMuscle.get(sl.landmark.muscle) ?? 1);
-    const alvo = Math.round(sl.sets / freq) * freq; // múltiplo da frequência: divide exato nos dias
+    const alvo = Math.round(sl.sets);
     sl.sets = sl.ceiling === 0 ? 0 : Math.max(Math.min(sl.landmark.mev, sl.ceiling), alvo);
   }
 
@@ -468,6 +535,63 @@ export function computeMuscleTargets(
         } — o ajuste é no volume total, não em um grupo isolado.`
       : "";
 
+  /* RECONCILIAÇÃO FINAL: nenhum dia promete mais do que cabe nele.
+   *
+   * Esta passada existe para preservar a propriedade que o antigo
+   * `min(fatias) × frequência` garantia de graça — meta e entrega batendo por
+   * construção — sem pagar o preço dele, que era achatar todos os dias pelo
+   * mais apertado e desperdiçar o orçamento dos outros.
+   *
+   * É necessária porque as etapas entre o cálculo das fatias e aqui (piso de
+   * MEV, teto corrigido pelo indireto, zeragem abaixo de 2/dia) mexem no total
+   * semanal sem saber como ele se reparte pelos dias. Sem reconciliar, o
+   * arranjo de 2 dias prometia 50 séries e entregava 46: o piso de MEV de sete
+   * grupos no Upper somava mais do que uma sessão de 24 comporta.
+   *
+   * A meta passa a ser a SOMA das fatias já ajustadas — o número anunciado é o
+   * número que as sessões conseguem entregar. */
+  const fatiaFinalPorMusculo = new Map<MuscleGroup, Record<string, number>>();
+  for (const sl of slots) {
+    let fatias = fatiasPorMusculo.get(sl.landmark.muscle) ?? [];
+    /* Sem fatia registrada, mas com meta: o grupo recebeu o piso de MEV depois
+       da alocação, ou o dia dele estourou o orçamento antes de chegar nele.
+       Divide igual pelos dias do template em vez de zerar — zerar aqui apagaria
+       justamente o piso de MEV que a etapa anterior acabou de garantir. */
+    if (fatias.length === 0) {
+      fatias = templateParaMeta
+        .filter((d) => d.muscles.includes(sl.landmark.muscle))
+        .map((d) => ({ label: d.label, sets: 1 }));
+    }
+    fatiaFinalPorMusculo.set(sl.landmark.muscle, distribuirPorDia(sl.sets, fatias));
+  }
+
+  for (const dia of templateParaMeta) {
+    const noDia = dia.muscles
+      .map((m) => ({ muscle: m, fatia: fatiaFinalPorMusculo.get(m) }))
+      .filter((e): e is { muscle: MuscleGroup; fatia: Record<string, number> } => !!e.fatia && e.fatia[dia.label] > 0);
+
+    let soma = noDia.reduce((n, e) => n + e.fatia[dia.label], 0);
+    if (soma <= orcamentoPorSessao) continue;
+
+    /* Corta do MAIOR primeiro, uma série por vez. É o corte que menos
+     * desequilibra: tirar proporcionalmente de todos pode derrubar um grupo
+     * pequeno para 1 série, que a montagem não prescreve e vira zero. */
+    const ordenado = [...noDia].sort((a, b) => b.fatia[dia.label] - a.fatia[dia.label]);
+    while (soma > orcamentoPorSessao) {
+      const alvo = ordenado.find((e) => e.fatia[dia.label] > 2) ?? ordenado.find((e) => e.fatia[dia.label] > 0);
+      if (!alvo) break;
+      alvo.fatia[dia.label] -= 1;
+      soma -= 1;
+      ordenado.sort((a, b) => b.fatia[dia.label] - a.fatia[dia.label]);
+    }
+  }
+
+  // a meta semanal passa a ser a soma das fatias reconciliadas
+  for (const sl of slots) {
+    const fatia = fatiaFinalPorMusculo.get(sl.landmark.muscle) ?? {};
+    sl.sets = Object.values(fatia).reduce((n, v) => n + v, 0);
+  }
+
   return slots.map((sl) => {
     const muscleLabel = MUSCLE_GROUP_LABEL[sl.landmark.muscle];
     const freq = freqByMuscle.get(sl.landmark.muscle) ?? 0;
@@ -498,7 +622,15 @@ export function computeMuscleTargets(
      * recuperação ruim, exibir "★ prioridade" num grupo abaixo do MEV
      * desinforma: a prioridade está suspensa, não em vigor. */
     const prioridadeEmVigor = sl.isPriority && sl.sets >= sl.landmark.mev;
-    return { muscle: sl.landmark.muscle, muscleLabel, weeklySets: sl.sets, reason, isPriority: prioridadeEmVigor || undefined };
+    const perDayByLabel = fatiaFinalPorMusculo.get(sl.landmark.muscle) ?? {};
+    return {
+      muscle: sl.landmark.muscle,
+      muscleLabel,
+      weeklySets: sl.sets,
+      reason,
+      isPriority: prioridadeEmVigor || undefined,
+      perDayByLabel,
+    };
   });
 }
 
@@ -1021,6 +1153,9 @@ export function buildSplit(
   const priorityMuscles = muscleTargets.filter((t) => t.isPriority).map((t) => t.muscle);
   const template = ensurePriorityFrequency(SPLIT_TEMPLATES[days], priorityMuscles);
   const targetByMuscle = new Map(muscleTargets.map((t) => [t.muscle, t.weeklySets]));
+  const perDayByMuscle = new Map(
+    muscleTargets.filter((t) => t.perDayByLabel).map((t) => [t.muscle, t.perDayByLabel as Record<string, number>])
+  );
   const priorityByMuscle = new Set(priorityMuscles);
 
   const frequencyByMuscle = new Map<MuscleGroup, number>();
@@ -1079,6 +1214,17 @@ export function buildSplit(
      * ficavam com zero. Escalar mantém todo mundo na sessão, só menor. */
     const desejadoPorGrupo = new Map<MuscleGroup, number>();
     for (const muscle of orderedMuscles) {
+      /* Fatia calculada para ESTE dia, quando existe.
+       *
+       * É o que permite o Push levar 7 séries de peito enquanto o Upper leva 4,
+       * em vez de 5 e 5. A divisão igual continua como reserva: uma meta vinda
+       * de outro caminho (ou um rótulo que não bate com o template) cai nela em
+       * vez de virar zero. */
+      const fatiaDoDia = perDayByMuscle.get(muscle)?.[day.label];
+      if (fatiaDoDia != null) {
+        desejadoPorGrupo.set(muscle, fatiaDoDia);
+        continue;
+      }
       const base = baseByMuscle.get(muscle) ?? 0;
       const sobra = restanteByMuscle.get(muscle) ?? 0;
       desejadoPorGrupo.set(muscle, base + (sobra > 0 ? 1 : 0));
@@ -1110,12 +1256,29 @@ export function buildSplit(
       }
     }
 
+    /* Orçamento que ainda resta NESTA sessão.
+     *
+     * O escalonamento acima faz a soma caber em teoria, mas cada grupo é
+     * arredondado por conta própria logo abaixo — e vários arredondando para
+     * cima estouram o teto de novo. Foi exatamente o que aconteceu quando a
+     * fatia por dia entrou: o Upper A do arranjo de 4 dias saiu com 25 séries
+     * num orçamento de 24.
+     *
+     * A trava fica aqui porque este é o último ponto antes de emitir a série de
+     * verdade — a verificação equivalente em `computeMuscleTargets` mede a
+     * divisão IGUAL, que deixou de ser o que a montagem entrega. Grupos
+     * prioritários já vêm primeiro em `orderedMuscles`, então quem cede quando
+     * o teto aperta continua sendo o grupo sem prioridade. */
+    let restanteNaSessao = SETS_PER_SESSION_BUDGET;
+
     for (const muscle of orderedMuscles) {
       const setsAjustado = Math.min(
         MAX_SETS_PER_MUSCLE_PER_SESSION,
-        Math.round((desejadoPorGrupo.get(muscle) ?? 0) * (escalaPorGrupo.get(muscle) ?? 1))
+        Math.round((desejadoPorGrupo.get(muscle) ?? 0) * (escalaPorGrupo.get(muscle) ?? 1)),
+        restanteNaSessao
       );
       if (setsAjustado <= 0) continue;
+      restanteNaSessao -= setsAjustado;
 
       const rotation = rotationByMuscle.get(muscle) ?? 0;
       rotationByMuscle.set(muscle, rotation + 1);
