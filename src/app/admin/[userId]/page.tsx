@@ -117,10 +117,14 @@ export default function AdminUserDetailPage() {
         <h2 className="text-lg font-semibold tracking-tight mb-4">Comentários</h2>
         <div className="card p-5 space-y-4">
           <div className="flex gap-2">
+            {/* `placeholder` não é rótulo: some quando a pessoa digita e não é
+                anunciado de forma confiável por leitor de tela. O aria-label é
+                o que dá nome ao campo. */}
             <input
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Escreva um recado para este usuário…"
+              aria-label="Recado para este usuário"
               className="input flex-1"
               onKeyDown={(e) => e.key === "Enter" && handlePostComment()}
             />

@@ -81,6 +81,7 @@ export function EditorDeTreino({
     <section className="space-y-[clamp(24px,4vw,36px)]">
       <SectionHeading
         title="Treino"
+                      aria-label="Treino"
         desc="Alterações aqui substituem o programa desta pessoa. O que ela vê na página de treino passa a ser isto."
       />
 
@@ -101,6 +102,7 @@ export function EditorDeTreino({
         <div key={`${sessao.label}-${iS}`} className="panel">
           <div className="panel-row flex flex-wrap items-center justify-between gap-3">
             <input
+              aria-label="Nome da sessão"
               className="input max-w-[240px]"
               value={sessao.label}
               onChange={(e) => alterarSessao(iS, (s) => ({ ...s, label: e.target.value }))}
@@ -123,6 +125,7 @@ export function EditorDeTreino({
               <div key={`${item.exerciseId}-${iI}`} className="panel-row space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <select
+                    aria-label="Exercício"
                     className="input max-w-[320px]"
                     value={item.exerciseId}
                     onChange={(e) => alterarItem(iS, iI, (it) => ({ ...it, exerciseId: e.target.value }))}
@@ -148,6 +151,7 @@ export function EditorDeTreino({
                 {item.blocks.map((b, iB) => (
                   <div key={iB} className="flex flex-wrap items-center gap-2 text-[13.5px]">
                     <select
+                      aria-label="Tipo de série"
                       className="input max-w-[140px]"
                       value={b.reserveType}
                       onChange={(e) =>
@@ -171,6 +175,7 @@ export function EditorDeTreino({
                       className="input max-w-[80px]"
                       value={b.sets}
                       title="séries"
+                      aria-label="séries"
                       onChange={(e) =>
                         alterarItem(iS, iI, (it) => ({
                           ...it,
@@ -185,6 +190,7 @@ export function EditorDeTreino({
                       className="input max-w-[100px]"
                       value={b.repRange}
                       title="repetições"
+                      aria-label="repetições"
                       onChange={(e) =>
                         alterarItem(iS, iI, (it) => ({
                           ...it,
@@ -198,6 +204,7 @@ export function EditorDeTreino({
                       value={b.rirTarget ?? ""}
                       placeholder="RIR"
                       title="repetições em reserva"
+                      aria-label="repetições em reserva"
                       onChange={(e) =>
                         alterarItem(iS, iI, (it) => ({
                           ...it,
@@ -213,6 +220,7 @@ export function EditorDeTreino({
                       value={b.loadKg ?? ""}
                       placeholder="kg"
                       title="carga"
+                      aria-label="carga"
                       onChange={(e) =>
                         alterarItem(iS, iI, (it) => ({
                           ...it,
@@ -228,6 +236,7 @@ export function EditorDeTreino({
                       value={b.restSeconds ?? ""}
                       placeholder="descanso s"
                       title="descanso em segundos"
+                      aria-label="descanso em segundos"
                       onChange={(e) =>
                         alterarItem(iS, iI, (it) => ({
                           ...it,

@@ -111,6 +111,7 @@ export function MealCard({
     <div className="card p-5">
       <div className="flex items-center justify-between mb-4">
         <input
+          aria-label="Nome da refeição"
           value={meal.name}
           onChange={(e) => onChange((m) => ({ ...m, name: e.target.value }))}
           disabled={readOnly}
@@ -138,6 +139,7 @@ export function MealCard({
             <div key={item.id} className="rounded-[12px] border border-border bg-surface-raised/40 p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <select
+                  aria-label="Alimento"
                   value={item.foodId}
                   onChange={(e) => updateItem(item.id, { foodId: e.target.value })}
                   disabled={readOnly}
@@ -155,6 +157,7 @@ export function MealCard({
                 </select>
                 <input
                   type="number"
+                  aria-label="Quantidade em gramas"
                   value={item.quantityG}
                   onChange={(e) => updateItem(item.id, { quantityG: parseFloat(e.target.value) || 0 })}
                   disabled={readOnly}

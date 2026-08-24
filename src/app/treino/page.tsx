@@ -414,6 +414,7 @@ export default function TreinoPage() {
               <div key={row.id} className="rounded-[12px] border border-border bg-surface-raised/40 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <select
+                    aria-label="Exercício"
                     value={row.exerciseId}
                     onChange={(e) => updateRow(row.id, { exerciseId: e.target.value })}
                     className="input flex-1 min-w-[220px]"
@@ -429,6 +430,7 @@ export default function TreinoPage() {
                     ))}
                   </select>
                   <select
+                    aria-label="Tipo de série"
                     value={row.reserveType}
                     onChange={(e) => updateRow(row.id, { reserveType: e.target.value as ReserveType })}
                     className="input w-32"
@@ -446,12 +448,14 @@ export default function TreinoPage() {
                     onChange={(e) => updateRow(row.id, { sets: parseInt(e.target.value) || 1 })}
                     className="input w-20"
                     placeholder="séries"
+                    aria-label="Número de séries"
                   />
                   <input
                     value={row.repRange}
                     onChange={(e) => updateRow(row.id, { repRange: e.target.value })}
                     className="input w-24"
                     placeholder="reps"
+                    aria-label="Repetições"
                   />
                   <input
                     type="number"
@@ -459,6 +463,7 @@ export default function TreinoPage() {
                     onChange={(e) => updateRow(row.id, { loadKg: e.target.value })}
                     className="input w-24"
                     placeholder="kg"
+                    aria-label="Carga em quilos"
                   />
                   <button type="button" onClick={() => removeRow(row.id)} className="text-xs text-muted hover:text-danger ml-auto">
                     ×

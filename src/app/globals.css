@@ -40,17 +40,32 @@
   /* ── texto: quatro degraus, todos cinza ── */
   --foreground: #1d1d1f;
   --foreground-2: #424245;
-  --muted: #6e6e73;
-  --neutral: #86868b;
-  --placeholder: #aeaeb2;
+  /* 4,46 sobre o fundo dos campos (#f0f0f3) ficava a um triz do piso de 4,5.
+     Três pontos mais escuro resolve e a hierarquia visual não muda. */
+  --muted: #6b6b70;
+  /* #86868b é o cinza terciário da Apple e falha em AA: 3,33 sobre o chão da
+     página, contra o mínimo de 4,5. São 37 usos como TEXTO neste app, não como
+     decoração. Escurecido para o valor mais claro que ainda passa. */
+  --neutral: #67676b;
+  /* Placeholder é texto e a WCAG não abre exceção para ele. Escurecido para
+     passar; a distinção visual contra texto preenchido continua clara, porque
+     preenchido é #1d1d1f. E nenhum campo depende do placeholder para se
+     explicar: `FormRow` sempre emite um <label> de verdade. */
+  --placeholder: #6b6b70;
 
   /* ── acentos: só ênfase, nunca decoração ── */
-  --accent: #0071e3; /* azul Apple — ação primária, link, foco */
-  --accent-strong: #0066cc;
+  /* O azul da Apple (#0071e3) dá 4,31 sobre o chão da página — abaixo dos 4,5
+     de AA, e ele é texto em 51 lugares (todo link do app). Um degrau mais
+     escuro resolve sem sair do azul. */
+  --accent: #0066cc; /* ação primária, link, foco */
+  --accent-strong: #005bb5;
   --accent-contrast: #ffffff;
   --focus: #0071e3;
-  --warn: #ff6b00; /* "heat" */
-  --warn-bg: rgba(255, 107, 0, 0.1);
+  /* Laranja "heat" da skill dá 2,34 sobre o trilho cinza — reprovado em AA por
+     larga margem, e é a cor das MENSAGENS DE ERRO em 19 lugares. Texto que a
+     pessoa precisa ler é justamente onde contraste não é negociável. */
+  --warn: #ad4900;
+  --warn-bg: rgba(173, 73, 0, 0.1);
   --danger: #d70015; /* vermelho escurecido: sobre branco precisa de 4.5:1 */
   --live: #30d158;
 

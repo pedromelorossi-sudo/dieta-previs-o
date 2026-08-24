@@ -1,6 +1,18 @@
 {
   "version": 1,
   "skills": {
+    "accessibility": {
+      "source": "addyosmani/web-quality-skills",
+      "sourceType": "github",
+      "skillPath": "skills/accessibility/SKILL.md",
+      "computedHash": "10e83284d3395ab5ec2f2db602b663480a37a4ff404d16510eefe86b034fcc1a"
+    },
+    "security-review": {
+      "source": "getsentry/skills",
+      "sourceType": "github",
+      "skillPath": "skills/security-review/SKILL.md",
+      "computedHash": "ec9792f5fd065e020c48ab5a57707c83435c286c449ba98dfa726d7b1842c868"
+    },
     "supabase-postgres-best-practices": {
       "source": "supabase/agent-skills",
       "sourceType": "github",
