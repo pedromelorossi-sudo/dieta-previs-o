@@ -6,7 +6,11 @@ import { ReactNode } from "react";
 
 export function NavLink({ href, children }: { href: string; children: ReactNode }) {
   const pathname = usePathname();
-  const active = pathname === href;
+  /* Sub-rota também acende a aba: /dieta/novo e /dieta/<id> pertencem à aba
+     "Dieta". Com igualdade exata, entrar numa sub-rota apagava a navegação
+     inteira e a pessoa perdia a referência de onde está. A raiz precisa do caso
+     à parte, senão "/" casaria com todo caminho do site. */
+  const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link
       href={href}

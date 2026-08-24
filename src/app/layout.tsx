@@ -41,7 +41,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 </Link>
                 <nav className="flex items-center gap-5 text-sm overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <NavLink href="/previsao-ia">Novo ciclo</NavLink>
-                  <NavLink href="/dieta/novo">Montar dieta</NavLink>
+                  <NavLink href="/dieta">Dieta</NavLink>
                   <NavLink href="/treino">Treino</NavLink>
                   <NavLink href="/">Histórico</NavLink>
                 </nav>

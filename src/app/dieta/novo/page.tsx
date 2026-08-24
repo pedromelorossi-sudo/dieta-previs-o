@@ -312,9 +312,23 @@ export default function NovaDietaPage() {
         </button>
         <button type="button" onClick={handleSave} className="btn-secondary">
           {saved ? <IconCheck className="h-4 w-4" /> : null}
-          {saved ? "Salvo" : "Salvar rascunho"}
+          {/* Era "Salvar rascunho". O plano vai para o banco e fica disponível
+              depois — chamar de rascunho fazia parecer descartável. */}
+          {saved ? "Salvo" : "Salvar dieta"}
         </button>
       </div>
+
+      {/* Sem esta linha, salvar não tinha consequência visível: a pessoa clicava,
+          o botão virava "Salvo" e não havia nada indicando ONDE o plano ficou. */}
+      {saved && (
+        <p className="text-[13.5px] text-muted">
+          Plano salvo.{" "}
+          <Link href="/dieta" className="text-accent hover:underline">
+            Ver minhas dietas
+          </Link>
+          .
+        </p>
+      )}
     </GridPage>
   );
 }
