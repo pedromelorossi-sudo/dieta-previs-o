@@ -275,8 +275,23 @@ export default function AdminUserDetailPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             {photos.map((photo) => (
               <div key={photo.id} className="card overflow-hidden">
+                {/* `<img>` cru de propósito: a URL vem assinada do Supabase e
+                    expira, então `next/image` não tem o que otimizar e ainda
+                    quebraria o cache. `loading="lazy"` porque a galeria cresce um
+                    card por ciclo — sem isso o navegador baixa TODAS as fotos de
+                    uma vez, competindo com o conteúdo visível pela banda. E
+                    `width`/`height` reservam o espaço antes da imagem chegar,
+                    evitando o salto de layout (CLS). */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.photoUrl} alt={`Foto de ${fmtDate(photo.date)}`} className="h-48 w-full object-cover" />
+                <img
+                  src={photo.photoUrl}
+                  alt={`Foto de ${fmtDate(photo.date)}`}
+                  loading="lazy"
+                  decoding="async"
+                  width={400}
+                  height={192}
+                  className="h-48 w-full object-cover"
+                />
                 <div className="p-3 space-y-1">
                   <div className="text-xs font-medium">{fmtDate(photo.date)}</div>
                   {photo.estimatedBfPercent != null && (

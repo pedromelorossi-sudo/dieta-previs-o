@@ -16,7 +16,6 @@ import { buildMuscleEvolution, MuscleEvolution } from "@/lib/muscleEvolution";
 import { loadCycles } from "@/lib/storage";
 import { fmtDate } from "@/lib/format";
 import { IconDumbbell, IconCheck, IconTrend, IconClipboard } from "@/components/icons";
-import { generateMetodologiaPdf } from "@/lib/pdf";
 
 const RESERVE_LABEL: Record<ReserveType, string> = {
   warmup: "Warm up",
@@ -279,7 +278,7 @@ export default function TreinoPage() {
           title="Guia de metodologia"
           desc="O que significa cada tipo de série, por que o RIR existe, como o volume é decidido, e as orientações de dieta — incluindo por que as refeições proteicas ficam a cada 3 horas."
         />
-        <button type="button" onClick={() => generateMetodologiaPdf()} className="btn-secondary">
+        <button type="button" onClick={async () => (await import("@/lib/pdf")).generateMetodologiaPdf()} className="btn-secondary">
           <IconClipboard className="h-4 w-4" />
           Baixar o guia em PDF
         </button>

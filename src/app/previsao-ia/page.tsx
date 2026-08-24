@@ -40,9 +40,7 @@ import { resizeImageToBase64 } from "@/lib/imageResize";
 import { Diet, DietMeal, dietTotals, mealTotals, itemMacros } from "@/lib/dietBuilder";
 import { getFood } from "@/lib/foods";
 import { upsertDiet } from "@/lib/dietStorage";
-import { generateDietPdf } from "@/lib/pdf";
 import { exerciseById, MUSCLE_GROUP_LABEL } from "@/lib/exerciseLibrary";
-import { generateTrainingPdf } from "@/lib/pdf";
 import { TrainingSession } from "@/lib/trainingBuilder";
 import { upsertTrainingProgram } from "@/lib/trainingStorage";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
@@ -580,7 +578,7 @@ export default function PrevisaoIaPage() {
   async function handleDownloadPdf() {
     const diet = dietFromResult();
     if (!diet) return;
-    generateDietPdf(diet);
+    (await import("@/lib/pdf")).generateDietPdf(diet);
     await handleSaveDiet();
   }
 
@@ -1454,7 +1452,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => generateTrainingPdf(result.suggestedTrainingProgram!, "Plano de treino")}
+                    onClick={async () => (await import("@/lib/pdf")).generateTrainingPdf(result.suggestedTrainingProgram!, "Plano de treino")}
                     className="btn-secondary text-xs py-1.5 px-3"
                   >
                     Baixar PDF
