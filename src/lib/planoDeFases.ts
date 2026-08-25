@@ -4,6 +4,7 @@ import {
   PATH_LABEL,
   classifyPathFromBf,
   macroTargetsForStrategy,
+  ajustarMacrosQueNaoCabem,
   bfThresholdsFor,
   estimateFfmi,
   monthlyLeanGainCeilingKg,
@@ -179,9 +180,12 @@ export function planejarFases(input: PlanoDeFasesInput): PlanoDeFases {
     const tdee = tdeeBase;
     const recommendedKcal = tdee * (1 + surplusPercent);
     const { proteinPerKg, fatPerKg } = macroTargetsForStrategy(path);
-    const proteinG = weightKg * proteinPerKg;
-    const fatG = weightKg * fatPerKg;
-    const carbG = Math.max(0, (recommendedKcal - proteinG * 4 - fatG * 9) / 4);
+    /* Mesmo ajuste de coerência da prescrição real: sem ele a projeção mostraria
+       meses cujos macros somam mais que as calorias do próprio mês. */
+    const macrosDoMes = ajustarMacrosQueNaoCabem(recommendedKcal, weightKg * proteinPerKg, weightKg * fatPerKg);
+    const proteinG = macrosDoMes.proteinG;
+    const fatG = macrosDoMes.fatG;
+    const carbG = macrosDoMes.carbG;
 
     // ---- avança o corpo um mês ----
     const balancoMes = tdee * surplusPercent * 7 * WEEKS_PER_MONTH;

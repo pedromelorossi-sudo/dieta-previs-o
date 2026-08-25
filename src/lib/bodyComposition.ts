@@ -333,6 +333,17 @@ const GANHO_MAGRO_MIN_KG_MES = 0.1;
 
 export function monthlyLeanGainCeilingKg(leanMassKg: number, heightCm: number): number {
   const ffmi = estimateFfmi(leanMassKg, heightCm);
+  /* NO TETO, O GANHO PARA.
+   *
+   * O piso de 0,1 kg/mês era aplicado sempre, inclusive acima do teto natural —
+   * então a projeção seguia somando massa magra indefinidamente. Varredura em
+   * 5.170 casos pegou FFMI final de 26,3 em 19 cenários, ou seja, o modelo
+   * projetava a pessoa ultrapassando o limite que ele mesmo declara como teto
+   * natural (Kouri et al. 1995).
+   *
+   * O piso existe para representar adaptação residual de quem AINDA tem margem,
+   * não para furar o limite. */
+  if (ffmi >= FFMI_TETO_NATURAL) return 0;
   const margemRestante =
     (FFMI_TETO_NATURAL - ffmi) / (FFMI_TETO_NATURAL - FFMI_INICIO_DA_DESACELERACAO);
   return Math.max(
@@ -599,26 +610,67 @@ export function classifyPathFromBf(
  * peso PROJETADO pelo peso MEDIDO de hoje e realimentava o resultado. Isso criava uma catraca — em
  * corte sustentado a proteína encolhia sozinha a cada ciclo, sem ninguém ter decidido isso. Proteína e
  * gordura são decisões de estratégia, não séries temporais a extrapolar. */
-/* Gordura por estratégia, não fixa em 0,7 g/kg.
+/* Proteína e gordura por kg de PESO TOTAL.
  *
- * 0,7 para todo mundo produzia 59 g num homem de 85 kg — abaixo da faixa usual
- * de 0,8-1,0 g/kg para atleta natural, e o carboidrato, que é só o resto da
- * conta, estourava em 559 g.
+ * Decisão do Pedro, e o argumento é bom: a massa magra é derivada da estimativa
+ * de %BF, que tem erro de 2 a 4 pontos percentuais — prescrever sobre ela é
+ * herdar essa imprecisão. Peso total é medido numa balança.
  *
- * A gordura sobe no DÉFICIT e desce no superávit de propósito. No déficit ela é
- * o macro que mais importa proteger: a produção de hormônios esteroides depende
- * dela, e é justamente no corte que a testosterona cai — Mitchell et al. 2018
- * mediu queda de 16,4 para 10,1 nmol/L numa preparação, APESAR de proteína
- * alta. No superávit há energia sobrando de qualquer forma, e o carboidrato
- * rende mais para o desempenho no treino.
+ * A gordura sobe no DÉFICIT: a produção de hormônios esteroides depende dela, e
+ * é no corte que a testosterona cai (Mitchell et al. 2018 mediu 16,4 → 10,1
+ * nmol/L numa preparação, apesar de proteína alta). A proteína segue a mesma
+ * lógica, para preservar massa magra quando o objetivo é justamente esse
+ * (Helms et al. 2014). No superávit há energia sobrando e o carboidrato rende
+ * mais no treino.
  *
- * A proteína segue a lógica inversa e já seguia: mais alta no corte, onde
- * preservar massa magra é todo o objetivo (Helms et al. 2014). */
+ * A consequência aceita: em quem tem MUITA gordura, o g/kg de peso total
+ * superestima a necessidade real. É por isso que existe o ajuste logo abaixo,
+ * em `ajustarMacrosQueNaoCabem` — sem ele a prescrição fica incoerente. */
 export function macroTargetsForStrategy(path: DietPath): { proteinPerKg: number; fatPerKg: number } {
   return {
     proteinPerKg: path === "cutting" ? 2.2 : path === "bulking" ? 1.9 : 2.0,
     fatPerKg: path === "cutting" ? 1.0 : path === "bulking" ? 0.8 : 0.9,
   };
+}
+
+/* Quando proteína + gordura não cabem nas calorias do dia.
+ *
+ * Achado por varredura, em 62 de 5.170 casos: mulher de 85kg com 55%BF em corte
+ * recebia 187g de proteína (748 kcal) e 85g de gordura (765 kcal) — 1.513 kcal
+ * só nesses dois, contra um alvo de 1.475. O carboidrato era zerado pelo clamp
+ * e a prescrição ficava se contradizendo: dizia "coma 1.475" e os macros
+ * somavam mais que isso.
+ *
+ * Não é caso raro: acontece com qualquer pessoa de %BF alto em déficit, porque
+ * o g/kg é sobre peso total e o alvo calórico é sobre o gasto — que não cresce
+ * na mesma proporção.
+ *
+ * O ajuste reserva uma fatia mínima para carboidrato e reparte o resto entre
+ * proteína e gordura MANTENDO a proporção entre elas. Cortar só um dos dois
+ * mudaria a estratégia por acidente aritmético. */
+const FRACAO_MINIMA_DE_CARBO = 0.1;
+
+export function ajustarMacrosQueNaoCabem(
+  targetKcal: number,
+  proteinG: number,
+  fatG: number
+): { proteinG: number; fatG: number; carbG: number; ajustado: boolean } {
+  const kcalDisponivelParaProteinaEGordura = targetKcal * (1 - FRACAO_MINIMA_DE_CARBO);
+  const kcalPedida = proteinG * 4 + fatG * 9;
+
+  if (kcalPedida <= kcalDisponivelParaProteinaEGordura) {
+    return {
+      proteinG,
+      fatG,
+      carbG: Math.max(0, (targetKcal - kcalPedida) / 4),
+      ajustado: false,
+    };
+  }
+
+  const escala = kcalDisponivelParaProteinaEGordura / kcalPedida;
+  const p = proteinG * escala;
+  const g = fatG * escala;
+  return { proteinG: p, fatG: g, carbG: Math.max(0, (targetKcal - p * 4 - g * 9) / 4), ajustado: true };
 }
 
 export function estimateBodyComposition(input: BodyCompositionInput): BodyCompositionResult {
@@ -686,9 +738,10 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
 
   const targetKcal = tdee * (1 + surplusPercent);
   const { proteinPerKg, fatPerKg } = macroTargetsForStrategy(path);
-  const targetProteinG = weightKg * proteinPerKg;
-  const targetFatG = weightKg * fatPerKg;
-  const targetCarbG = Math.max(0, (targetKcal - targetProteinG * 4 - targetFatG * 9) / 4);
+  const macros = ajustarMacrosQueNaoCabem(targetKcal, weightKg * proteinPerKg, weightKg * fatPerKg);
+  const targetProteinG = macros.proteinG;
+  const targetFatG = macros.fatG;
+  const targetCarbG = macros.carbG;
 
   return {
     bmi,

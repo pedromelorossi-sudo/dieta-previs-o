@@ -593,9 +593,48 @@ export function computeMuscleTargets(
    * escala menor. Zerar é mais honesto: o `reason` diz que o grupo não coube
    * nesse número de dias. */
   const freqPorMusculo = freqByMuscle;
+  /* O QUE A ZERAGEM LIBERA VOLTA PARA A MESA.
+   *
+   * Antes, zerar um grupo simplesmente descartava as séries dele. Medido numa
+   * varredura de 5.170 casos: no arranjo de 4 dias com recuperação ruim e
+   * adesão baixa, o orçamento era de 49 séries, a entrega ficava em 28 — 21
+   * séries jogadas fora — e SEIS grupos saíam zerados (ombro, deltoide
+   * posterior, bíceps, tríceps, glúteo, adutor). O braço e o ombro inteiros
+   * desapareciam da semana enquanto 43% do orçamento não era usado.
+   *
+   * Não era falta de capacidade: o mesmo arranjo com 3 dias e recuperação
+   * PÉSSIMA entregava 30 de 32 sem zerar ninguém. Era a zeragem sangrando
+   * orçamento em silêncio.
+   *
+   * A política continua a mesma — é melhor cobrir menos grupos direito do que
+   * todos abaixo do mínimo. O que muda é que o excedente liberado vai para quem
+   * ainda está abaixo do MEV, na ordem de quem está mais longe dele. */
+  let liberadoPelaZeragem = 0;
   for (const sl of slots) {
     const porDia = sl.sets / Math.max(1, freqPorMusculo.get(sl.landmark.muscle) ?? 1);
+    if (porDia < 2 && sl.sets > 0) liberadoPelaZeragem += sl.sets;
     if (porDia < 2) sl.sets = 0;
+  }
+
+  /* Redistribui o que a zeragem liberou.
+   *
+   * Vai primeiro para quem está proporcionalmente MAIS LONGE do próprio ideal —
+   * não para quem tem o maior número absoluto. Em múltiplos da frequência,
+   * porque sobra que não divide pelos dias do grupo não vira série na montagem
+   * e voltaria a ser desperdício por outro caminho. */
+  if (liberadoPelaZeragem > 0) {
+    const candidatos = slots
+      .filter((sl) => sl.sets > 0 && sl.sets < Math.min(sl.ideal, sl.ceiling))
+      .sort((a, b) => a.sets / Math.max(1, a.ideal) - b.sets / Math.max(1, b.ideal));
+    for (const sl of candidatos) {
+      if (liberadoPelaZeragem < 1) break;
+      const freq = Math.max(1, freqPorMusculo.get(sl.landmark.muscle) ?? 1);
+      const espaco = Math.min(sl.ideal, sl.ceiling) - sl.sets;
+      const emMultiplos = Math.floor(Math.min(espaco, liberadoPelaZeragem) / freq) * freq;
+      if (emMultiplos <= 0) continue;
+      sl.sets += emMultiplos;
+      liberadoPelaZeragem -= emMultiplos;
+    }
   }
 
   const budgetNote =
