@@ -728,7 +728,7 @@ export default function PrevisaoIaPage() {
             )}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 mt-4">
+          <div className="grid gap-4 lg:grid-cols-2 mt-4">
             <Field label="Com que frequência você treina hoje? (usado no cálculo de gasto)">
               <select value={exerciseFreq} onChange={(e) => setExerciseFreq(e.target.value as ExerciseFreq)} className="input">
                 <option value="" disabled>
@@ -782,7 +782,7 @@ export default function PrevisaoIaPage() {
           </div>
 
           {isFirstCycle && (
-            <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               <Field label="Quantas kcal você vem comendo, em média? (opcional)">
                 <input
                   type="number"
@@ -929,7 +929,7 @@ export default function PrevisaoIaPage() {
           </Field>
 
           {hasOtherSport === "sim" && (
-            <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               <Field label="Qual atividade?">
                 <select
                   value={otherSportActivity}
@@ -1032,7 +1032,7 @@ export default function PrevisaoIaPage() {
               precisa escolher.
             </p>
 
-            <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               <Field label={`Você seguiu de perto as ${fmt(last.kcal, 0)}kcal prescritas no último ciclo?`}>
                 <select value={adherence} onChange={(e) => setAdherence(e.target.value as typeof adherence)} className="input">
                   <option value="">Selecione…</option>
@@ -1399,7 +1399,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                 {result.confrontoDoPlano.dentroDoPlano ? "✓" : "⚠"} O plano anterior vs. o que aconteceu
               </div>
               <p className="text-sm mt-2 leading-relaxed">{result.confrontoDoPlano.veredito}</p>
-              <div className="grid gap-2 sm:grid-cols-2 mt-3 text-xs tabular-nums text-muted">
+              <div className="grid gap-2 lg:grid-cols-2 mt-3 text-xs tabular-nums text-muted">
                 <span>
                   Peso: projetado {fmt(result.confrontoDoPlano.pesoProjetado, 1)}kg · real{" "}
                   {fmt(result.confrontoDoPlano.pesoReal, 1)}kg

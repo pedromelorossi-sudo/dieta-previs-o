@@ -96,7 +96,7 @@ export default function QuestionarioPage() {
       </div>
 
       <div className="card p-6 space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <Field label="Objetivo principal">
             <select value={prefs.dietGoal} onChange={(e) => update("dietGoal", e.target.value as DietGoal)} className="input">
               {(Object.keys(GOAL_LABEL) as DietGoal[]).map((g) => (

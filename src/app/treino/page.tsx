@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { EXERCISE_LIBRARY, MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
-import { LoggedSetEntry, ReserveType, TrainingLog, TrainingProgram } from "@/lib/trainingBuilder";
+import { LoggedSetEntry, ReserveType, TrainingLog, TrainingProgram, TrainingSession, sessionToLoggedSets } from "@/lib/trainingBuilder";
 import { addTrainingLog, loadTrainingLogs, loadTrainingPrograms } from "@/lib/trainingStorage";
 import { readVolumeStatus, weeklyVolumeByMuscle, VolumeReading } from "@/lib/trainingVolume";
 import { recommendNextWeek, WeeklyRecommendation } from "@/lib/trainingPeriodization";
@@ -200,6 +200,33 @@ export default function TreinoPage() {
     if (!logs) return null;
     return recommendNextWeek({ logs });
   }, [logs]);
+
+  /* Converte a sessão prescrita em linhas do formulário de registro.
+   *
+   * Usa `sessionToLoggedSets`, que já fazia essa tradução e não tinha um único
+   * chamador — mesmo defeito de `loadDiets` e `loadTrainingPrograms`: a função
+   * que fecha o laço existe, funciona, e está desligada. */
+  function preencherDoPrograma(sessao: TrainingSession) {
+    const logged = sessionToLoggedSets(sessao).filter(
+      (l) => l.reserveType === "work" || l.reserveType === "topset"
+    );
+    if (logged.length === 0) return;
+    setSessionLabel(sessao.label);
+    setRows(
+      logged.map((l) => ({
+        id: crypto.randomUUID(),
+        exerciseId: l.exerciseId,
+        reserveType: l.reserveType,
+        sets: l.sets,
+        repRange: l.repRange ?? "6-8",
+        // carga fica VAZIA de propósito: é o único dado que só a execução
+        // conhece, e prefixá-la com o planejado convidaria a confirmar sem medir
+        loadKg: "",
+      }))
+    );
+    setSaved(false);
+    setSaveError(null);
+  }
 
   function updateRow(id: string, patch: Partial<DraftRow>) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -416,6 +443,39 @@ export default function TreinoPage() {
           <h2 className="text-lg font-semibold tracking-tight mb-1">Registrar sessão</h2>
           <p className="text-sm text-muted">O que você fez de verdade — carga real, não o planejado.</p>
         </div>
+
+        {/* PREENCHER A PARTIR DO PROGRAMA.
+            `sessionToLoggedSets` existia em trainingBuilder.ts desde sempre,
+            fazendo exatamente esta conversão, e NUNCA foi chamada. O resultado:
+            na mesma página onde o treino aparece gerado, a pessoa começava com
+            uma linha vazia e digitava exercício por exercício de volta — só
+            para dizer que fez o que já estava escrito acima.
+
+            O botão traz o prescrito; a pessoa então corrige carga e séries para
+            o que aconteceu de verdade, que é o ponto do registro. Aquecimento e
+            aproximação não entram: o volume efetivo conta só work e top set. */}
+        {programa && programa.sessions.length > 0 && (
+          <div className="panel">
+            <div className="panel-row">
+              <p className="text-[15px] font-medium">Preencher a partir do seu programa</p>
+              <p className="mt-0.5 text-[13px] leading-[1.45] text-neutral">
+                Traz os exercícios e séries prescritos. Depois é só ajustar a carga real.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {programa.sessions.map((sessao, i) => (
+                  <button
+                    key={`${sessao.label}-${i}`}
+                    type="button"
+                    onClick={() => preencherDoPrograma(sessao)}
+                    className="btn-secondary text-[13px]"
+                  >
+                    {sessao.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="panel">
           <FormRow label="Nome da sessão">

@@ -113,7 +113,7 @@ export default function PrevisaoPage() {
       </div>
 
       <form className="card p-6 space-y-5" onSubmit={(e) => e.preventDefault()}>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <Field label="Peso atual (kg)">
             <input
               type="number"
@@ -189,7 +189,7 @@ export default function PrevisaoPage() {
 
       {result && (
         <section className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             <StatCard
               icon={<IconTrend className="h-4 w-4" />}
               label="Taxa observada"
