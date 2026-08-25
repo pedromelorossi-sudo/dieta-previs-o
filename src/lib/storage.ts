@@ -1,6 +1,26 @@
 import { createClient } from "./supabase/client";
 import { Cycle, CycleMuscleAssessment } from "./types";
 
+/* FILTRO EXPLÍCITO POR DONO — a RLS é rede de segurança, não filtro de negócio.
+ *
+ * A política é `auth.uid() = user_id OR is_admin()`. Para usuário comum ela
+ * isola corretamente (verificado com JWT real). Para ADMIN ela não isola nada —
+ * e essas funções são chamadas nas telas normais, não só no painel. Efeito
+ * medido: o administrador abre /previsao-ia, `loadCycles()` traz os ciclos dos
+ * alunos, `isFirstCycle` vira false, e o formulário passa a perguntar sobre
+ * adesão a um ciclo de OUTRA pessoa. Os gráficos plotam peso alheio como se
+ * fosse dele.
+ *
+ * As variantes `admin*(userId)` logo abaixo existem justamente para o acesso
+ * cruzado ser explícito. Aqui o dono é sempre quem está logado. */
+async function idDoUsuarioLogado(supabase: ReturnType<typeof createClient>): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado");
+  return user.id;
+}
+
 interface CycleRow {
   id: string;
   date: string;
@@ -41,7 +61,11 @@ function rowToCycle(row: CycleRow): Cycle {
 
 export async function loadCycles(): Promise<Cycle[]> {
   const supabase = createClient();
-  const { data, error } = await supabase.from("cycles").select("*").order("date", { ascending: true });
+  const { data, error } = await supabase
+    .from("cycles")
+    .select("*")
+    .eq("user_id", await idDoUsuarioLogado(supabase))
+    .order("date", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(rowToCycle);
 }

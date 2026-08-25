@@ -342,7 +342,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Peso, altura e idade são obrigatórios." }, { status: 400 });
   }
 
-  const [{ data: cycleRows, error: cyclesError }, { data: prefsRow }, previousPhoto] = await Promise.all([
+  const [{ data: cycleRows, error: cyclesError }, { data: prefsRow, error: prefsError }, previousPhoto] = await Promise.all([
     supabase
       .from("cycles")
       .select("id,date,weight_kg,body_fat_percent,kcal,protein_g,fat_g,carb_g,is_prediction,actual_kcal,path")
@@ -357,6 +357,33 @@ export async function POST(request: Request) {
   ]);
   if (cyclesError) {
     return NextResponse.json({ error: cyclesError.message }, { status: 500 });
+  }
+  /* FALHA AO LER PREFERÊNCIAS NÃO PODE VIRAR "SEM RESTRIÇÃO".
+   *
+   * O erro desta consulta era descartado — só o de `cycles`, na MESMA
+   * expressão, era tratado. Com `prefsRow` nulo, as linhas abaixo aplicam os
+   * defaults: `restrictions: []` e `excludedFoodIds: []`. Um vegano ou celíaco
+   * receberia uma dieta com carne e glúten liberados, HTTP 200, sem aviso
+   * nenhum. `priority_muscles` cai junto, e o foco declarado pela consultoria
+   * some do treino.
+   *
+   * Não é hipotético: o gatilho mais provável é o cache de schema do PostgREST.
+   * `priority_muscles` foi acrescentada por `alter table`; enquanto o cache
+   * está velho, selecionar essa coluna faz o PostgREST recusar a consulta
+   * INTEIRA — o mesmo mecanismo documentado na migração 0004, onde o sintoma
+   * foi perder o ciclo. Aqui seria perder a restrição alimentar.
+   *
+   * Restrição alimentar é o único dado deste app cujo erro pode fazer mal de
+   * verdade a alguém. Falha alto. */
+  if (prefsError) {
+    return NextResponse.json(
+      {
+        error:
+          `Não consegui ler suas preferências alimentares (${prefsError.message}). A análise foi interrompida de propósito: ` +
+          `gerar dieta sem elas significaria ignorar restrições e alimentos excluídos, sem você perceber.`,
+      },
+      { status: 500 }
+    );
   }
 
   const prefs = prefsRow as PreferencesRow | null;

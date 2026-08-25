@@ -1,6 +1,26 @@
 import { createClient } from "./supabase/client";
 import { TrainingProgram, TrainingSession, TrainingLog, LoggedSetEntry } from "./trainingBuilder";
 
+/* FILTRO EXPLÍCITO POR DONO — a RLS é rede de segurança, não filtro de negócio.
+ *
+ * A política é `auth.uid() = user_id OR is_admin()`. Para usuário comum ela
+ * isola corretamente (verificado com JWT real). Para ADMIN ela não isola nada —
+ * e essas funções são chamadas nas telas normais, não só no painel. Efeito
+ * medido: o administrador abre /previsao-ia, `loadCycles()` traz os ciclos dos
+ * alunos, `isFirstCycle` vira false, e o formulário passa a perguntar sobre
+ * adesão a um ciclo de OUTRA pessoa. Os gráficos plotam peso alheio como se
+ * fosse dele.
+ *
+ * As variantes `admin*(userId)` logo abaixo existem justamente para o acesso
+ * cruzado ser explícito. Aqui o dono é sempre quem está logado. */
+async function idDoUsuarioLogado(supabase: ReturnType<typeof createClient>): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado");
+  return user.id;
+}
+
 interface TrainingProgramRow {
   id: string;
   name: string;
@@ -19,7 +39,11 @@ function rowToProgram(row: TrainingProgramRow): TrainingProgram {
 
 export async function loadTrainingPrograms(): Promise<TrainingProgram[]> {
   const supabase = createClient();
-  const { data, error } = await supabase.from("training_programs").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("training_programs")
+    .select("*")
+    .eq("user_id", await idDoUsuarioLogado(supabase))
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map(rowToProgram);
 }
@@ -106,6 +130,7 @@ export async function loadTrainingLogs(weeksBack = 8): Promise<TrainingLog[]> {
   const { data, error } = await supabase
     .from("training_logs")
     .select("*")
+    .eq("user_id", await idDoUsuarioLogado(supabase))
     .gte("date", since.toISOString().slice(0, 10))
     .order("date", { ascending: true });
   if (error) throw error;

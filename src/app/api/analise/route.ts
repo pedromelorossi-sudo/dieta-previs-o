@@ -110,13 +110,19 @@ export async function POST() {
     );
   }
 
+  /* As quatro consultas filtram por dono. Duas delas não filtravam — `cycles` e
+     `progress_photos` — enquanto `predictions` e `preferences`, na MESMA
+     expressão, filtravam. Para o administrador, cuja política de RLS é
+     `auth.uid() = user_id OR is_admin()`, isso fazia o resumo enviado ao modelo
+     misturar peso, %BF e fotos de vários usuários numa análise só. */
   const [{ data: cycles }, { data: prediction }, { data: prefs }, { data: photos }] = await Promise.all([
-    supabase.from("cycles").select("*").order("date", { ascending: true }),
+    supabase.from("cycles").select("*").eq("user_id", user.id).order("date", { ascending: true }),
     supabase.from("predictions").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("preferences").select("*").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("progress_photos")
       .select("date, estimated_bf_percent, notes")
+      .eq("user_id", user.id)
       .order("date", { ascending: true })
       .limit(10),
   ]);
