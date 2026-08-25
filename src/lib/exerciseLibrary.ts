@@ -9,6 +9,7 @@ export type MuscleGroup =
   | "quadriceps"
   | "posterior_coxa"
   | "gluteo"
+  | "adutor"
   | "panturrilha"
   | "abdominal"
   | "lombar";
@@ -24,6 +25,7 @@ export const MUSCLE_GROUP_LABEL: Record<MuscleGroup, string> = {
   quadriceps: "Quadríceps",
   posterior_coxa: "Posterior de coxa",
   gluteo: "Glúteo",
+  adutor: "Adutor",
   panturrilha: "Panturrilha",
   abdominal: "Abdominal",
   lombar: "Lombar",
@@ -134,6 +136,10 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "rosca-direta-polia-baixa-corda", name: "Rosca Direta na Polia Baixa com Corda", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-direta", equipment: "polia" },
   { id: "rosca-martelo-halteres", name: "Rosca Martelo com Halteres", primaryMuscle: "biceps", secondaryMuscles: ["antebraco"], pattern: "isolado", movementFamily: "rosca-neutra", equipment: "halteres" },
   { id: "rosca-scott-barra-w", name: "Rosca Scott na Barra W", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-apoiada", equipment: "barra" },
+
+  // adutor — grupo que o programa real treina 2×/semana e o app não tinha
+  { id: "cadeira-adutora", name: "Cadeira Adutora", primaryMuscle: "adutor", secondaryMuscles: [], pattern: "isolado", movementFamily: "aducao-quadril", equipment: "maquina" },
+  { id: "aducao-polia-baixa", name: "Adução de Quadril na Polia Baixa", primaryMuscle: "adutor", secondaryMuscles: [], pattern: "isolado", movementFamily: "aducao-polia", equipment: "polia", unilateral: true },
 
   // quadríceps
   { id: "agachamento-livre", name: "Agachamento Livre", primaryMuscle: "quadriceps", secondaryMuscles: ["gluteo", "lombar"], pattern: "composto", movementFamily: "agachamento", equipment: "barra" },

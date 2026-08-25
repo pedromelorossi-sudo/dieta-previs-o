@@ -47,6 +47,12 @@ export const VOLUME_LANDMARKS: VolumeLandmark[] = [
   { muscle: "posterior_coxa", mev: 6, mav: 12, mrv: 20 },
   { muscle: "gluteo", mev: 4, mav: 10, mrv: 18 },
   { muscle: "panturrilha", mev: 6, mav: 12, mrv: 20 },
+  /* Adutor: o programa real prescreve 2 séries em cada dia de inferior, 4 na
+   * semana. MEV 2 e não 0: com MEV 0 o grupo só recebe do excedente do dia, e
+   * o excedente acabava antes — o adutor não aparecia em nenhum arranjo, que é
+   * o mesmo defeito que zerava o abdominal. O piso 2 é o que o programa real
+   * prescreve de fato em cada dia de inferior. */
+  { muscle: "adutor", mev: 4, mav: 6, mrv: 8 },
   { muscle: "abdominal", mev: 0, mav: 10, mrv: 20 },
   { muscle: "lombar", mev: 0, mav: 6, mrv: 12 },
 ];
@@ -155,6 +161,7 @@ const ATROPHY_RATE_PER_WEEK: Record<MuscleGroup, number> = {
   quadriceps: 0.023,
   posterior_coxa: 0.016,
   gluteo: 0.016,
+  adutor: 0.016, // mesma ordem do glúteo — musculatura de quadril, sustenta peso
   lombar: 0.012,
   costas: 0.012,
   peito: 0.012,

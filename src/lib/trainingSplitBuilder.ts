@@ -89,7 +89,32 @@ export function scoreTrainingAdherence(signals: TrainingAdherenceSignals): numbe
  * quatro grupos de perna, cuja soma de MEVs é 8+6+4+6 = 24. Com teto em 22 o
  * PPL de 3 dias era ESTRUTURALMENTE incapaz de entregar o mínimo das pernas —
  * nenhum ajuste de distribuição resolveria, porque não cabia. */
-const SETS_PER_SESSION_BUDGET = 24;
+/* 18, não 24.
+ *
+ * O número anterior foi calibrado por tempo de academia. O programa real do
+ * Pedro (10º mesociclo, montado pelo educador físico dele) entrega 14 a 19
+ * séries efetivas por sessão — média 16,8 em cinco sessões — e é o que ele
+ * executa de fato. 24 era um teto que descrevia uma sessão que ninguém treina.
+ *
+ * Consequência declarada: o volume semanal cai de ~100 para perto de 84 séries
+ * em 5 dias, que é o total do documento. Menos séries com top set à falha e
+ * faixa de 5-7 não é menos estímulo — é estímulo por intensidade em vez de por
+ * acúmulo, que é a metodologia que o documento descreve. */
+const SETS_PER_SESSION_BUDGET = 18;
+
+/* FAIXA DE REPETIÇÕES ÚNICA: 5-7.
+ *
+ * O app usava 6-10 para composto e 10-15 para isolado. O programa real usa
+ * 5-7 em TODOS os exercícios — agachamento livre, crucifixo máquina, elevação
+ * lateral, abdominal na polia —, com uma única exceção documentada (supino reto
+ * com halteres a 9-11). Não é a faixa "de força": com top set à falha, 5-7 é
+ * onde a carga é alta o suficiente para a progressão ser mensurável série a
+ * série, que é o que a periodização do app precisa para decidir aumento. */
+const REP_RANGE_PADRAO = "5-7";
+/** Séries de trabalho: 1-2 repetições na reserva. */
+const RIR_WORK = 1;
+/** Top set: falha dentro da faixa. */
+const RIR_TOPSET = 0;
 
 /** Frequência semanal de cada grupo no template de N dias — precisa ser conhecida ANTES de definir a
  * meta, porque um grupo que aparece 1x/semana tem teto físico de
@@ -695,6 +720,7 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
         "quadriceps",
         "posterior_coxa",
         "gluteo",
+        "adutor",
         "panturrilha",
       ],
     },
@@ -706,13 +732,13 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
     },
     {
       label: "Lower",
-      muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "lombar"],
+      muscles: ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha", "lombar"],
     },
   ],
   3: [
     { label: "Push", muscles: ["peito", "ombro", "triceps"] },
     { label: "Pull", muscles: ["costas", "deltoide_posterior", "biceps", "lombar"] },
-    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha"] },
   ],
   4: [
     // Upper/Lower ×2. O arranjo anterior (Upper/Lower/Push/Pull) deixava PERNA
@@ -720,9 +746,9 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
     // antigo disfarçava com "perna coberta pelo Lower + acessório", e acessório
     // nenhum existia no código.
     { label: "Upper A", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps", "triceps"] },
-    { label: "Lower A", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Lower A", muscles: ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha"] },
     { label: "Upper B", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps", "triceps"] },
-    { label: "Lower B", muscles: ["posterior_coxa", "quadriceps", "gluteo", "panturrilha", "lombar"] },
+    { label: "Lower B", muscles: ["posterior_coxa", "quadriceps", "gluteo", "adutor", "panturrilha", "lombar"] },
   ],
   5: [
     // O arranjo pedido: PPL cobrindo a semana inteira uma vez, e Upper/Lower
@@ -730,7 +756,7 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
     // com frequência 1 — que é o que sustenta metas perto do MAV/MRV.
     { label: "Push", muscles: ["peito", "ombro", "triceps"] },
     { label: "Pull", muscles: ["costas", "deltoide_posterior", "biceps", "lombar"] },
-    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha"] },
     /* Upper e Lower do arranjo de 5 dias são SUPLEMENTARES: devolvem a segunda
      * exposição semanal, não repetem o dia inteiro. O Upper carregava 7 grupos
      * contra 3 do Push, e com o teto de ~22 séries por sessão os pisos de MEV
@@ -746,15 +772,15 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
      * longe. Quando o bíceps for ponto fraco, `ensurePriorityFrequency`
      * devolve a segunda exposição a ele automaticamente. */
     { label: "Upper", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "triceps"] },
-    { label: "Lower", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Lower", muscles: ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha"] },
   ],
   6: [
     { label: "Push A", muscles: ["peito", "ombro", "triceps"] },
     { label: "Pull A", muscles: ["costas", "deltoide_posterior", "biceps"] },
-    { label: "Legs A", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Legs A", muscles: ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha"] },
     { label: "Push B", muscles: ["peito", "ombro", "triceps"] },
     { label: "Pull B", muscles: ["costas", "deltoide_posterior", "biceps", "lombar"] },
-    { label: "Legs B", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
+    { label: "Legs B", muscles: ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha"] },
   ],
 };
 
@@ -807,7 +833,17 @@ const MAX_SETS_PER_MUSCLE_PER_SESSION = 8;
  * virar dez estações) reintroduziu blocos de 5× — e cinco séries seguidas do
  * mesmo movimento a RIR 1 são limitadas por fadiga local, não por estímulo. Com
  * o teto em 4 as duas coisas convivem: sessão enxuta E bloco treinável. */
-const MAX_SETS_PER_EXERCISE = 4;
+/* 3 séries efetivas por exercício = 2 work + 1 top set.
+ *
+ * É o padrão do programa real: de 29 blocos no documento, 24 são exatamente
+ * 2 work + 1 top. Os poucos com 4 são exceção pontual (crucifixo máquina no
+ * dia de superiores), e os com 2 são o primeiro exercício da sessão, que
+ * cede uma série para o warm-up.
+ *
+ * Era 4, e o efeito colateral aparecia na tela: blocos de "3×5-7 + top" viram
+ * 4 séries válidas do mesmo movimento, que é acúmulo — o oposto da lógica de
+ * intensidade que o top set à falha implementa. */
+const MAX_SETS_PER_EXERCISE = 3;
 const MAX_EXERCISES_PER_MUSCLE_PER_DAY = 2;
 const MAX_EXERCISES_PER_PRIORITY_MUSCLE_PER_DAY = 3;
 
@@ -1033,7 +1069,18 @@ function pickExercisesForMuscle(
    * Quando a troca colapsava a lista para um exercício só, `floor(5/1) = 5`
    * recriava o bloco de 5 séries que o piso de 3 existe para evitar — a
    * simulação produziu "Cadeira Flexora 5×10-15 RIR1". */
-  const tetoPorExercicio = Math.min(MAX_SETS_PER_EXERCISE, Math.max(alvoSeriesPorExercicio, Math.ceil(setsNeeded / chosen.length)));
+  /* Quando sobrou UM exercício só, o teto sobe para 4.
+   *
+   * A guarda de carga axial pode remover um exercício sem achar substituto de
+   * família inédita — e aí o grupo fica com um item só. Com teto de 3, uma meta
+   * de 5 entregava 3: o app prometendo o que ele mesmo não cumpre, que é o
+   * defeito que a reconciliação de metas existe para fechar.
+   *
+   * 4 não é número inventado para o teste passar: o próprio programa do Pedro
+   * tem um bloco de 4 (crucifixo máquina no dia de superiores). A exceção é
+   * estreita de propósito — só quando não há outro exercício para dividir. */
+  const tetoDesteGrupo = chosen.length === 1 ? MAX_SETS_PER_EXERCISE + 1 : MAX_SETS_PER_EXERCISE;
+  const tetoPorExercicio = Math.min(tetoDesteGrupo, Math.max(alvoSeriesPorExercicio, Math.ceil(setsNeeded / chosen.length)));
   const base = Math.min(tetoPorExercicio, Math.floor(setsNeeded / chosen.length));
   const remainder = Math.min(chosen.length, setsNeeded - base * chosen.length);
 
@@ -1068,43 +1115,92 @@ function pickExercisesForMuscle(
      * entrar a RIR 2 sem nenhuma aproximação, porque o Stiff já tinha
      * consumido o aquecimento da família. Barra na coluna não usa aquecimento
      * de outro exercício. */
+    /* WARM-UP 1×15, uma vez por sessão — no formato do programa real.
+     *
+     * A versão anterior emitia uma rampa de duas séries (50%×8 e 70%×4) em todo
+     * primeiro composto E em todo axial pesado. O documento do Pedro faz
+     * diferente: UMA série de 15 repetições longe da falha, só no primeiro
+     * exercício da sessão, e o resto do preparo fica por conta do feeder set de
+     * cada exercício — que agora existe.
+     *
+     * Faz sentido com a mudança de faixa: com 5-7 e feeder em todo exercício, a
+     * aproximação acontece exercício a exercício, e a rampa longa vira volume
+     * de aquecimento repetido sem função. */
     const axialPesado = FAMILIAS_AXIAIS.has(ex.movementFamily) && ex.equipment === "barra";
-    if ((axialPesado || (i === 0 && ex.pattern === "composto")) && !familiasAquecidasNaSessao?.has(ex.movementFamily)) {
+    const primeiroDaSessao = i === 0 && (familiasAquecidasNaSessao?.size ?? 0) === 0;
+    if ((primeiroDaSessao || axialPesado) && !familiasAquecidasNaSessao?.has(ex.movementFamily)) {
       familiasAquecidasNaSessao?.add(ex.movementFamily);
       blocks.push({
         reserveType: "warmup" as const,
         sets: 1,
-        repRange: "8",
+        repRange: "15",
         rirTarget: 6,
         restSeconds: 60,
         loadKg: suggestedLoad != null ? Math.round(suggestedLoad * 0.5 * 2) / 2 : null,
       });
-      blocks.push({
-        reserveType: "warmup" as const,
-        sets: 1,
-        repRange: "4",
-        rirTarget: 5,
-        restSeconds: 90,
-        loadKg: suggestedLoad != null ? Math.round(suggestedLoad * 0.7 * 2) / 2 : null,
-      });
     }
+
+    /* FEEDER SET — a série de aproximação que faltava.
+     *
+     * No programa real do Pedro (10º mesociclo) TODO exercício tem feeder: uma
+     * série com ~5 repetições na reserva, na faixa de trabalho, antes das
+     * séries válidas. Não é aquecimento articular (isso é o warm-up 1×15 que
+     * abre a sessão) — é ensaio do padrão com a carga do dia, e é o que permite
+     * a primeira série de trabalho já sair cheia.
+     *
+     * Não conta como volume: `trainingVolume.ts` só soma `work` e `topset`. */
+    blocks.push({
+      reserveType: "feeder" as const,
+      sets: 1,
+      repRange: REP_RANGE_PADRAO,
+      rirTarget: 5,
+      restSeconds: 90,
+      loadKg: suggestedLoad != null ? Math.round(suggestedLoad * 0.85 * 2) / 2 : null,
+    });
+
+    /* WORK SETS + TOP SET.
+     *
+     * A metodologia do programa real separa as séries válidas em duas classes:
+     * as `work` ficam a 1-2 repetições da falha, e a ÚLTIMA do exercício é um
+     * `topset` levado à falha dentro da faixa. O app já tinha os dois tipos no
+     * modelo de dados, mas nunca emitia `topset` — todas as séries saíam
+     * iguais, e a progressão perdia o ponto de referência que o top set dá.
+     *
+     * Divisão: n-1 séries de trabalho + 1 top set. Com o padrão de 3 séries por
+     * exercício isso reproduz exatamente o "2 work + 1 top" do documento. */
+    const topSets = 1;
+    const workPuros = Math.max(1, workSets - topSets);
 
     blocks.push({
       reserveType: "work" as const,
-      sets: workSets,
-      repRange: ex.pattern === "composto" ? "6-10" : "10-15",
+      sets: workPuros,
+      repRange: REP_RANGE_PADRAO,
       // Composto pesado fica 1-2 reps da falha (o custo de falhar num agachamento é alto); isolado
       // pode ir mais perto. É o alvo que a pergunta de adesão ("chegou perto da falha?") cobra.
       /* RIR base + o extra de fadiga. Sem o extra, "recuperação ruim" cortava
        * volume e mandava ir a 1-2 reps da falha do mesmo jeito — que é o pior
        * dos dois mundos num fim de cutting: menos estímulo total e a mesma
        * demanda neural e articular por série. */
-      rirTarget: (ex.pattern === "composto" ? 2 : 1) + fadiga.rirExtra,
+      rirTarget: RIR_WORK + fadiga.rirExtra,
       // composto grande pede 3 min; isolado recupera em ~90 s. É o que torna o
-      // teto de ~22 séries/sessão traduzível em tempo real de academia.
+      // teto de séries/sessão traduzível em tempo real de academia.
       restSeconds: ex.pattern === "composto" ? 180 : 90,
       // carga sugerida a partir do histórico logado (ver suggestLoadProgression em
       // trainingPeriodization.ts); null quando ainda não há log desse exercício
+      loadKg: suggestedLoad,
+    });
+
+    /* TOP SET — falha dentro da faixa.
+     *
+     * RIR 0: é a série que define se a carga sobe na semana seguinte. Numa
+     * semana de fadiga alta o `rirExtra` afasta ela da falha junto com o
+     * resto — top set com recuperação ruim é exatamente o que não se quer. */
+    blocks.push({
+      reserveType: "topset" as const,
+      sets: topSets,
+      repRange: REP_RANGE_PADRAO,
+      rirTarget: RIR_TOPSET + fadiga.rirExtra,
+      restSeconds: ex.pattern === "composto" ? 180 : 90,
       loadKg: suggestedLoad,
     });
 
@@ -1117,7 +1213,7 @@ function pickExercisesForMuscle(
 function diaAceita(label: string, muscle: MuscleGroup): boolean {
   const PUSH: MuscleGroup[] = ["peito", "ombro", "triceps"];
   const PULL: MuscleGroup[] = ["costas", "deltoide_posterior", "biceps", "lombar"];
-  const LEGS: MuscleGroup[] = ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"];
+  const LEGS: MuscleGroup[] = ["quadriceps", "posterior_coxa", "gluteo", "adutor", "panturrilha"];
   const base = label.replace(/ [AB]$/, "");
   if (base === "Push") return PUSH.includes(muscle);
   if (base === "Pull") return PULL.includes(muscle);
