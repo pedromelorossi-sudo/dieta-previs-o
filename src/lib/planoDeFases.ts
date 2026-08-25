@@ -163,7 +163,17 @@ export function planejarFases(input: PlanoDeFasesInput): PlanoDeFases {
     const weightKg = fatKg + leanKg;
     const bfPercent = (fatKg / weightKg) * 100;
 
-    const { path, surplusPercent } = classifyPathFromBf(bfPercent, sex, recoveryScore, previousPath);
+    /* O FFMI muda A CADA MÊS conforme a massa magra sobe — então a janela de
+       recomposição se fecha sozinha ao longo da projeção, que é o comportamento
+       certo: quem recompõe hoje vai precisar alternar fases mais adiante. */
+    const { path, surplusPercent } = classifyPathFromBf(
+      bfPercent,
+      sex,
+      recoveryScore,
+      previousPath,
+      "alta",
+      estimateFfmi(leanKg, heightCm)
+    );
     previousPath = path;
 
     const tdee = tdeeBase;

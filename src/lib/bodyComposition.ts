@@ -273,6 +273,19 @@ function estimateTdeeFromComponents(
  * superávit mais longas antes do corte de retorno — e é o que a prática de
  * fisiculturismo natural costuma usar. Continua bem abaixo do ponto em que a
  * partição piora de forma relevante, e o corte de retorno segue mirando 13%. */
+/* Até que FFMI a recomposição ainda é a aposta melhor que cortar.
+ *
+ * 19 no homem: acima da média do não-treinado (~17-18) e abaixo de quem já
+ * treina consistentemente (20+). Mulher em 15,5 pela mesma lógica, ajustada
+ * para a composição corporal de base ser diferente.
+ *
+ * Não é um limiar medido — é a fronteira declarada entre "ainda há muito
+ * músculo fácil a ganhar" e "os dois objetivos começam a brigar". */
+const FFMI_ATE_ONDE_VALE_RECOMPOR: Record<Sex, number> = {
+  masculino: 19,
+  feminino: 15.5,
+};
+
 const BF_THRESHOLDS: Record<Sex, { bulkBelow: number; cutAbove: number }> = {
   masculino: { bulkBelow: 13, cutAbove: 17 },
   feminino: { bulkBelow: 21, cutAbove: 24 },
@@ -442,7 +455,10 @@ export function classifyPathFromBf(
   previousPath?: DietPath,
   /** confiança da leitura visual de %BF que gerou `bodyFatPercent`. Uma leitura marcada como "baixa"
    * pela própria IA não pode ter o mesmo peso que uma "alta" — ver RAMP_HALF_WIDTH_PP. */
-  bfConfidence: "baixa" | "media" | "alta" = "alta"
+  bfConfidence: "baixa" | "media" | "alta" = "alta",
+  /** FFMI atual — quão longe a pessoa está do teto natural. Decide a janela de
+   * recomposição; ver `FFMI_ATE_ONDE_VALE_RECOMPOR`. */
+  ffmi?: number
 ): PathClassification {
   const { bulkBelow, cutAbove } = BF_THRESHOLDS[sex];
 
@@ -508,6 +524,37 @@ export function classifyPathFromBf(
   // peso (3,9% vs 1,5%), mas o ganho de MASSA MAGRA não diferiu entre os grupos — enquanto a massa
   // GORDA subiu 15±4% contra 3±3%. Superávit maior comprou cinco vezes mais gordura e nenhum músculo.
   const MAX_SURPLUS = 0.12;
+
+  /* RECOMPOSIÇÃO PARA POUCO TREINADO COM %BF ALTO.
+   *
+   * Até aqui a estratégia saía SÓ do %BF, e isso trata como iguais dois casos
+   * opostos. Um usuário real de 1,70m e 64kg com 21%BF tem 50,6kg de massa
+   * magra — FFMI 17,5, quase 8 pontos abaixo do teto natural de ~25. Ele
+   * recebia déficit de 18%, que tira o pouco de músculo que ele tem e o deixa
+   * magro e fraco. Outro, com o mesmo 21% mas FFMI 23, está de fato precisando
+   * cortar: não sobra margem para construir.
+   *
+   * Ganhar músculo e perder gordura ao mesmo tempo é possível justamente nessa
+   * janela — pouco treinado, gordura sobrando como substrato, proteína
+   * adequada. Quem já está perto do teto natural não tem esse luxo: para ele os
+   * dois objetivos brigam, e por isso alternar fases é a única saída.
+   *
+   * A recomposição é prescrita como NORMOCALÓRICO: o déficit vem do próprio
+   * tecido adiposo, que é abundante nesse perfil, não da comida. */
+  const dentroDaJanelaDeRecomposicao =
+    ffmi != null && ffmi < FFMI_ATE_ONDE_VALE_RECOMPOR[sex] && cutFraction > 0;
+
+  if (dentroDaJanelaDeRecomposicao) {
+    return {
+      path: "normocalorico",
+      surplusPercent: 0,
+      pathReason:
+        `%BF (${bodyFatPercent}%) está acima da faixa de ganho, MAS o FFMI de ${ffmi.toFixed(1)} mostra bastante margem até o teto natural (~25) — ` +
+        `então a resposta aqui não é cortar, é RECOMPOR: manutenção calórica com proteína alta, ganhando músculo e perdendo gordura ao mesmo tempo. ` +
+        `Cortar quem tem pouca massa magra tira justamente o que falta construir. Essa janela fecha conforme o FFMI sobe: ` +
+        `a partir de ${FFMI_ATE_ONDE_VALE_RECOMPOR[sex]}, os dois objetivos passam a brigar e alternar fases vira a saída.`,
+    };
+  }
 
   const surplusDeCada = MAX_SURPLUS * bulkFraction + MAX_DEFICIT * cutFraction;
   let surplusPercent = surplusDeCada;
@@ -632,7 +679,9 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
     sex,
     input.recoveryScore ?? 0,
     input.previousPath,
-    input.bfConfidence ?? "alta"
+    input.bfConfidence ?? "alta",
+    // FFMI da composição de AGORA — é ele que abre ou fecha a janela de recomposição
+    estimateFfmi(weightKg * (1 - bodyFatPercent / 100), heightCm)
   );
 
   const targetKcal = tdee * (1 + surplusPercent);

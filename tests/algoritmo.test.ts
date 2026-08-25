@@ -693,3 +693,32 @@ test("BF: erro sempre no mesmo sentido é diagnosticado como viés corrigível",
   assert.match(t!.diagnostico, /erra consistentemente para cima/);
   assert.match(t!.diagnostico, /corrigível/);
 });
+
+test("RECOMP: mesmo %BF alto, decisão oposta conforme o FFMI", () => {
+  // Dois homens com 21%BF. O que tem pouca massa magra ainda constrói; o que já
+  // está perto do teto natural não — e cortar quem tem pouco músculo tira
+  // justamente o que falta. Sem o FFMI, o algoritmo tratava os dois igual.
+  const poucoTreinado = classifyPathFromBf(21, "masculino", 0, undefined, "media", 17.5);
+  const jaTreinado = classifyPathFromBf(21, "masculino", 0, undefined, "media", 23);
+
+  assert.equal(poucoTreinado.path, "normocalorico", "FFMI 17,5 com 21%BF deveria RECOMPOR");
+  assert.equal(poucoTreinado.surplusPercent, 0, "recomposição é manutenção calórica");
+  assert.match(poucoTreinado.pathReason, /RECOMPOR/);
+
+  assert.equal(jaTreinado.path, "cutting", "FFMI 23 com 21%BF deveria CORTAR");
+  assert.ok(jaTreinado.surplusPercent < -0.1, "corte de verdade, não simbólico");
+});
+
+test("RECOMP: a janela não se abre para quem está no %BF de ganho", () => {
+  // FFMI baixo E %BF já na faixa de bulking: aí a resposta é comer mais, não
+  // recompor. A janela só existe onde o corte seria prescrito.
+  const magroEDestreinado = classifyPathFromBf(11, "masculino", 0, undefined, "media", 17);
+  assert.equal(magroEDestreinado.path, "bulking", "11%BF com FFMI 17 é caso de superávit");
+});
+
+test("RECOMP: o limiar é por sexo, não um número só", () => {
+  // Mulher com 30%BF: FFMI 15,4 recompõe, 17 corta. O limiar feminino é mais
+  // baixo porque a composição corporal de base é diferente.
+  assert.equal(classifyPathFromBf(30, "feminino", 0, undefined, "media", 15.4).path, "normocalorico");
+  assert.equal(classifyPathFromBf(30, "feminino", 0, undefined, "media", 17).path, "cutting");
+});

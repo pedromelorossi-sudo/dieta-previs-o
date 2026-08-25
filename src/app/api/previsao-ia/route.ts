@@ -9,6 +9,7 @@ import {
   macroTargetsForStrategy,
   PATH_LABEL,
   DietPath,
+  estimateFfmi,
 } from "@/lib/bodyComposition";
 import { applySafetyLimits } from "@/lib/safety";
 import { generateDietMeals } from "@/lib/dietGenerator";
@@ -1274,7 +1275,8 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     sex,
     recoveryScore,
     previousPath,
-    vision.bfConfidence
+    vision.bfConfidence,
+    estimateFfmi(currentWeightKg * (1 - bfPercentVisual / 100), heightCm)
   );
 
   const cardioPrescription = prescribeCardio({ strategy, strengthDaysPerWeek: daysPerWeek, recoveryScore, weightKg: currentWeightKg, cardioDaysPerWeek });
