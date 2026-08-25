@@ -20,15 +20,26 @@ import type { Cycle } from "../src/lib/types";
 
 /** Volume EFETIVO da divisão — work + topset apenas, mesma regra de `isEffective` em trainingVolume.ts.
  * Aquecimento existe na sessão mas não é estímulo, e não pode inflar a contagem. */
+/* Séries efetivas, EXCLUINDO abdominal.
+ *
+ * Abdominal saiu da contabilidade de volume por decisão de projeto: é
+ * prescrito como bloco fixo (2 sessões de 3×12) que não disputa o orçamento da
+ * sessão nem entra nas metas por grupo. Contá-lo aqui compararia uma entrega
+ * que inclui o bloco fixo contra uma meta que o exclui — e o teste acusaria
+ * "entregou mais que a meta" justamente porque a regra nova está funcionando.
+ *
+ * O que este helper mede continua sendo o que os testes de meta×entrega
+ * precisam medir: o volume que o algoritmo distribui. */
 function seriesEfetivas(sessions: ReturnType<typeof buildSplit>): number {
   return sessions.reduce(
     (total, dia) =>
       total +
-      dia.items.reduce(
-        (porDia, item) =>
-          porDia + item.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset").reduce((s, b) => s + b.sets, 0),
-        0
-      ),
+      dia.items.reduce((porDia, item) => {
+        if (exerciseById(item.exerciseId)?.primaryMuscle === "abdominal") return porDia;
+        return (
+          porDia + item.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset").reduce((s, b) => s + b.sets, 0)
+        );
+      }, 0),
     0
   );
 }

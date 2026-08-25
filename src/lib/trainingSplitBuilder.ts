@@ -597,7 +597,14 @@ export function computeMuscleTargets(
     const freq = freqByMuscle.get(sl.landmark.muscle) ?? 0;
 
     let reason: string;
-    if (sl.ceiling === 0) {
+    if (sl.landmark.muscle === "abdominal") {
+      /* Meta zero aqui NÃO quer dizer "não treina" — quer dizer "não entra na
+         contabilidade". O bloco fixo é anexado em `adicionarAbdominal`, depois
+         que as sessões estão montadas. Sem esta frase, a tela mostraria
+         abdominal com 0 séries ao lado da mensagem genérica de grupo que não
+         cabe na divisão, que descreveria errado o que está acontecendo. */
+      reason = `Fora da contabilidade de volume, por decisão de projeto. Prescrito como bloco fixo — ${ABDOMINAL_SESSOES_POR_SEMANA} sessões por semana de ${ABDOMINAL_SERIES}×${ABDOMINAL_REPS} — que não disputa o orçamento de séries com os outros grupos.`;
+    } else if (sl.ceiling === 0) {
       reason =
         exercisesByMuscle(sl.landmark.muscle).length === 0
           ? `Sem exercício desse grupo no catálogo — o estímulo vem indireto de outros movimentos (ex: lombar em stiff, terra e agachamento). Meta direta zerada de propósito, em vez de exibir um alvo que nenhuma sessão pode cumprir.`
@@ -680,14 +687,13 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
         "posterior_coxa",
         "gluteo",
         "panturrilha",
-        "abdominal",
       ],
     },
   ],
   2: [
     {
       label: "Upper",
-      muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps", "triceps", "abdominal"],
+      muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps", "triceps"],
     },
     {
       label: "Lower",
@@ -697,7 +703,7 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
   3: [
     { label: "Push", muscles: ["peito", "ombro", "triceps"] },
     { label: "Pull", muscles: ["costas", "deltoide_posterior", "biceps", "antebraco", "lombar"] },
-    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
+    { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
   ],
   4: [
     // Upper/Lower ×2. O arranjo anterior (Upper/Lower/Push/Pull) deixava PERNA
@@ -706,7 +712,7 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
     // nenhum existia no código.
     { label: "Upper A", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps", "triceps"] },
     { label: "Lower A", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
-    { label: "Upper B", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps", "triceps", "abdominal"] },
+    { label: "Upper B", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "biceps", "triceps"] },
     { label: "Lower B", muscles: ["posterior_coxa", "quadriceps", "gluteo", "panturrilha", "lombar"] },
   ],
   5: [
@@ -731,15 +737,15 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
      * longe. Quando o bíceps for ponto fraco, `ensurePriorityFrequency`
      * devolve a segunda exposição a ele automaticamente. */
     { label: "Upper", muscles: ["peito", "costas", "ombro", "deltoide_posterior", "triceps"] },
-    { label: "Lower", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
+    { label: "Lower", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
   ],
   6: [
     { label: "Push A", muscles: ["peito", "ombro", "triceps"] },
     { label: "Pull A", muscles: ["costas", "deltoide_posterior", "biceps", "antebraco"] },
     { label: "Legs A", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
-    { label: "Push B", muscles: ["peito", "ombro", "triceps", "abdominal"] },
+    { label: "Push B", muscles: ["peito", "ombro", "triceps"] },
     { label: "Pull B", muscles: ["costas", "deltoide_posterior", "biceps", "antebraco", "lombar"] },
-    { label: "Legs B", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha", "abdominal"] },
+    { label: "Legs B", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
   ],
 };
 
@@ -1143,6 +1149,69 @@ export interface AjusteDeFadiga {
   semCargaAxialPesada: boolean;
 }
 
+/* ── ABDOMINAL: bloco fixo, fora da contabilidade de volume ──────────────────
+ *
+ * Decisão do Pedro (24/08/2026): abdominal não entra no volume de treino e é
+ * prescrito como bloco fixo — 2 sessões por semana, 3 séries de 12.
+ *
+ * Por que FORA do orçamento e não só com meta própria: enquanto abdominal
+ * disputava as 24 séries da sessão, ele perdia sempre. Grupos de MEV 0 só
+ * recebem do excedente, e nos arranjos de 3 e 4 dias o excedente acabava antes
+ * — o abdominal saía com ZERO. Tirar da disputa é o que faz a prescrição
+ * acontecer de verdade; deixá-lo competindo com uma meta pequena só recriaria o
+ * mesmo zero por outro caminho.
+ *
+ * A consequência aceita: as séries de abdominal não contam no teto de 24 nem
+ * nas metas por grupo. É intencional — é isso que "não contabilizar no volume"
+ * quer dizer. Trabalho de core a 12 repetições custa pouca fadiga sistêmica
+ * perto de um agachamento, então não competir pelo mesmo orçamento é defensável
+ * além de ser o que foi pedido. */
+const ABDOMINAL_SESSOES_POR_SEMANA = 2;
+const ABDOMINAL_SERIES = 3;
+const ABDOMINAL_REPS = "12";
+const ABDOMINAL_DESCANSO_S = 60;
+
+function adicionarAbdominal(sessoes: TrainingSession[]): TrainingSession[] {
+  if (sessoes.length === 0) return sessoes;
+
+  const catalogo = exercisesByMuscle("abdominal");
+  if (catalogo.length === 0) return sessoes;
+
+  /* Espalha as sessões de abdominal pela semana em vez de empilhar nos
+     primeiros dias: com 5 dias, cai no 1º e no 3º, não no 1º e no 2º. */
+  const quantas = Math.min(ABDOMINAL_SESSOES_POR_SEMANA, sessoes.length);
+  const diasComAbdominal = new Set<number>();
+  for (let i = 0; i < quantas; i++) {
+    diasComAbdominal.add(Math.round((i * sessoes.length) / quantas));
+  }
+
+  let voltaDoCatalogo = 0;
+  return sessoes.map((sessao, i) => {
+    if (!diasComAbdominal.has(i)) return sessao;
+    // exercício diferente em cada sessão, para as duas não serem iguais
+    const exercicio = catalogo[voltaDoCatalogo % catalogo.length];
+    voltaDoCatalogo++;
+    return {
+      ...sessao,
+      items: [
+        ...sessao.items,
+        {
+          exerciseId: exercicio.id,
+          blocks: [
+            {
+              reserveType: "work" as const,
+              sets: ABDOMINAL_SERIES,
+              repRange: ABDOMINAL_REPS,
+              rirTarget: 1,
+              restSeconds: ABDOMINAL_DESCANSO_S,
+            },
+          ],
+        },
+      ],
+    };
+  });
+}
+
 export function buildSplit(
   daysPerWeek: number,
   muscleTargets: MuscleTarget[],
@@ -1190,7 +1259,7 @@ export function buildSplit(
   const exerciciosDaSemana = new Set<string>();
   const axiaisNaSemana = { n: fadiga.semCargaAxialPesada ? MAX_EXERCICIOS_AXIAIS_PESADOS_POR_SEMANA : 0 };
 
-  return template.map((day) => {
+  const sessoes = template.map((day) => {
     // grupos prioritários primeiro na lista — treinados enquanto a pessoa ainda está fresca na sessão
     const orderedMuscles = [...day.muscles].sort((a, b) => {
       const pa = priorityByMuscle.has(a) ? 0 : 1;
@@ -1321,6 +1390,8 @@ export function buildSplit(
 
     return { label: day.label, items: ordenados };
   });
+
+  return adicionarAbdominal(sessoes);
 }
 
 export interface WeekVolumePlan {
