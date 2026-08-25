@@ -202,13 +202,6 @@ const VISUAL_MUSCLE_PROTOCOL = `PROTOCOLO DE LEITURA VISUAL POR GRUPO MUSCULAR (
 // então ele deixava NaN passar inteiro, e uma leitura de %BF inválida virava `classifyPathFromBf(NaN)`
 // -> "normocalórico" com superávit 0 — uma prescrição de aparência normal a partir de lixo, com HTTP 200.
 
-/** O %BF é o único número que a IA de visão decide e que atravessa TODO o resto do cálculo
- * (estratégia, macros, projeção de 6 meses). Se ele não vier como número finito, a requisição falha
- * explicitamente em vez de produzir uma prescrição plausível a partir de nada. */
-function assertFiniteBf(value: unknown): number | null {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? Math.min(60, Math.max(3, n)) : null;
-}
 
 const GAIN_COMPOSITION_LABEL: Record<GainComposition, string> = Object.fromEntries(
   E_SCENARIOS.map((s) => [s.key, s.label])
@@ -268,7 +261,7 @@ function evolutionImageBlock(prev: PreviousPhoto | null): Anthropic.ContentBlock
   ];
 }
 
-import { aferirLeituraVisual, analisarTendencia, type MetodoMedicaoBf } from "@/lib/bfMedido";
+import { aferirLeituraVisual, analisarTendencia, assertFiniteBf, type MetodoMedicaoBf } from "@/lib/bfMedido";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -469,13 +462,31 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
     };
     const leituraMuscular = bfRaw.muscleGroupAssessment ?? [];
 
-    const bfPercentFirstCycle = assertFiniteBf(bfRaw.bfPercentVisual);
-    if (bfPercentFirstCycle == null) {
+    const bfVisualPrimeiroCiclo = assertFiniteBf(bfRaw.bfPercentVisual);
+    if (bfVisualPrimeiroCiclo == null) {
       return NextResponse.json(
         { error: "A leitura de %BF voltou inválida do modelo. Tente de novo — se persistir, use fotos mais nítidas ou outro ângulo." },
         { status: 422 }
       );
     }
+
+    /* %BF MEDIDO POR EXAME também vale no PRIMEIRO ciclo.
+     *
+     * `bfMedido` só era definido no caminho dos ciclos seguintes — o primeiro
+     * ciclo lia `bfRaw.bfPercentVisual` e pronto. Ou seja: usuário novo que fez
+     * DEXA preenchia o exame e o app ignorava, usando a estimativa por foto
+     * para calcular tudo. O recurso existia e não alcançava quem chega agora.
+     *
+     * Como nos ciclos seguintes: o MEDIDO entra na conta, a estimativa VISUAL
+     * continua sendo produzida e as duas são confrontadas — é assim que a
+     * leitura por foto aprende. A auditoria grava sempre a visual. */
+    const bfMedidoPrimeiroCiclo = assertFiniteBf(body.bfMedidoPercent ?? null);
+    const metodoMedicaoPrimeiroCiclo = body.bfMedidoMetodo ?? null;
+    const afericaoPrimeiroCiclo =
+      bfMedidoPrimeiroCiclo != null && metodoMedicaoPrimeiroCiclo != null
+        ? aferirLeituraVisual(bfVisualPrimeiroCiclo, bfMedidoPrimeiroCiclo, metodoMedicaoPrimeiroCiclo)
+        : null;
+    const bfPercentFirstCycle = bfMedidoPrimeiroCiclo ?? bfVisualPrimeiroCiclo;
 
     /* FASE EM CURSO, quando não há ciclo anterior no app.
      *
@@ -664,7 +675,70 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
       initialPath: comp.path,
     });
 
+    /* PRIMEIRO ELO DA CADEIA DE APRENDIZADO.
+     *
+     * O primeiro ciclo retornava aqui, ANTES da gravação da auditoria lá
+     * embaixo (o `insert` em prediction_audit está a centenas de linhas daqui,
+     * no caminho dos ciclos seguintes). Resultado medido no banco: ZERO linhas
+     * de auditoria para TODOS os usuários, inclusive os que completaram um
+     * ciclo. A calibração de TDEE — que é o mecanismo central de o app ficar
+     * mais preciso a cada ciclo — nunca teve um único dado para aprender.
+     *
+     * O que se perdia:
+     *   - o par (fórmula, empírico) do 1º ciclo. Ele EXISTE: a fórmula vem do
+     *     Mifflin/Katch e o empírico vem de quanto a pessoa come e como o peso
+     *     responde — pergunta que agora é obrigatória.
+     *   - o %BF estimado por foto no 1º ciclo, que é o que um DEXA futuro
+     *     auditaria. Sem gravar, a primeira leitura nunca pode ser conferida.
+     *
+     * Como a calibração exige 2 pares limpos, perder o primeiro adiava o
+     * aprendizado do ciclo 2 para o ciclo 3.
+     *
+     * `diet_clean`/`training_clean` aqui NÃO julgam execução de ciclo anterior
+     * (não há um). Julgam se o par empírico é confiável: a pessoa sabe quanto
+     * comeu e viu o peso se mexer numa direção definida. Sem isso, o par é
+     * palpite e não deve calibrar nada. */
+    const parEmpiricoConfiavel =
+      empiricalTdee != null && weightTrend != null && weightTrend !== "nao_sei";
 
+    const { error: primeiroAuditError } = await supabase.from("prediction_audit").insert({
+      user_id: user.id,
+      date,
+      formula_tdee: comp.tdee,
+      empirical_tdee: empiricalTdee,
+      /* SEMPRE a leitura por foto, nunca o valor medido — mesma razão do insert
+         dos ciclos seguintes: gravar o medido faria a aferição comparar o exame
+         consigo mesmo e mostrar erro zero para sempre. */
+      bf_percent_visual: bfRaw.bfPercentVisual,
+      bf_confidence: bfRaw.bfConfidence,
+      bf_medido_percent: bfMedidoPrimeiroCiclo,
+      bf_medido_metodo: metodoMedicaoPrimeiroCiclo,
+      bf_erro_pp: afericaoPrimeiroCiclo?.erroPp ?? null,
+      gain_composition: null,
+      weight_delta_kg: null,
+      diet_clean: parEmpiricoConfiavel,
+      training_clean: parEmpiricoConfiavel,
+      bf_consistent: null,
+      notes: parEmpiricoConfiavel
+        ? []
+        : ["Primeiro ciclo sem ingestão informada ou sem tendência de peso definida — o par não calibra a fórmula."],
+      bf_reasoning: bfRaw.bfReasoning ?? null,
+      evolution_note: bfRaw.evolutionNote ?? null,
+      plano_projetado: planoDeFases.meses.slice(0, 6).map((m) => ({
+        mes: m.monthIndex,
+        pesoFimKg: m.endWeightKg,
+        bfFimPercent: m.endBfPercent,
+        magraFimKg: m.leanMassKg,
+        kcal: m.recommendedKcal,
+        fase: m.phase,
+      })),
+    });
+    /* Falha aqui NÃO derruba a análise: a pessoa recebe o plano do mesmo jeito.
+       Mas fica registrado, porque auditoria que falha em silêncio é como a que
+       não existe — e foi assim que a cadeia ficou vazia sem ninguém notar. */
+    if (primeiroAuditError) {
+      console.error("[previsao-ia] auditoria do primeiro ciclo não gravou:", primeiroAuditError.message);
+    }
 
     return NextResponse.json({
       isFirstCycle: true,

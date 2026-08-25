@@ -12,7 +12,7 @@ import { compareVolumeToTarget, VOLUME_LANDMARKS, landmarkFor } from "../src/lib
 import { confrontarPlano } from "../src/lib/planoDeFases";
 import { suggestLoadProgression } from "../src/lib/trainingPeriodization";
 import { exerciseById } from "../src/lib/exerciseLibrary";
-import { aferirLeituraVisual, analisarTendencia } from "../src/lib/bfMedido";
+import { aferirLeituraVisual, analisarTendencia, assertFiniteBf } from "../src/lib/bfMedido";
 import { computeTdeeCalibration } from "../src/lib/calibration";
 import type { Cycle } from "../src/lib/types";
 
@@ -721,4 +721,22 @@ test("RECOMP: o limiar é por sexo, não um número só", () => {
   // baixo porque a composição corporal de base é diferente.
   assert.equal(classifyPathFromBf(30, "feminino", 0, undefined, "media", 15.4).path, "normocalorico");
   assert.equal(classifyPathFromBf(30, "feminino", 0, undefined, "media", 17).path, "cutting");
+});
+
+test("BF: ausência de exame NÃO vira 3% — Number(null) é 0, não NaN", () => {
+  // O consumo é `bfMedido ?? bfPercentVisualRaw`. Se a ausência virar 3 em vez
+  // de null, o `??` nunca cai para a leitura da foto e a dieta inteira sai
+  // calculada sobre 3%BF. Falha silenciosa: nenhum erro, número plausível na
+  // coluna, prescrição absurda.
+  assert.equal(assertFiniteBf(null), null, "null tem que ser null, não 3");
+  assert.equal(assertFiniteBf(undefined), null);
+  assert.equal(assertFiniteBf(""), null);
+
+  // o clamp continua valendo para leitura implausível DO MODELO, que é o que
+  // ele existe para conter
+  assert.equal(assertFiniteBf(1), 3, "leitura abaixo do piso fisiológico sobe para 3");
+  assert.equal(assertFiniteBf(70), 60);
+  assert.equal(assertFiniteBf(13.5), 13.5);
+  assert.equal(assertFiniteBf("21"), 21, "número em string continua aceito");
+  assert.equal(assertFiniteBf("abc"), null);
 });

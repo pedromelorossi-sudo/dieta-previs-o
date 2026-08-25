@@ -136,3 +136,23 @@ export function analisarTendencia(historico: HistoricoAfericao[]): TendenciaAfer
 
   return { n, viesPp, erroMedioAbsPp, diagnostico };
 }
+
+/** O %BF é o único número que a IA de visão decide e que atravessa TODO o resto do cálculo
+ * (estratégia, macros, projeção de 6 meses). Se ele não vier como número finito, a requisição falha
+ * explicitamente em vez de produzir uma prescrição plausível a partir de nada. */
+export function assertFiniteBf(value: unknown): number | null {
+  /* AUSENTE É AUSENTE — não é zero.
+   *
+   * `Number(null)` é 0, não NaN. Sem esta guarda, `assertFiniteBf(null)` passava
+   * pelo `isFinite`, batia no piso do clamp e devolvia **3**. Quem não fez exame
+   * saía com "3% de gordura medido", e como o consumo é
+   * `bfMedido ?? bfPercentVisualRaw`, o `??` nunca caía para a leitura da foto:
+   * dieta, estratégia e projeção inteiras seriam calculadas sobre 3%BF.
+   *
+   * Só não explodiu ainda porque esse caminho roda a partir do SEGUNDO ciclo e
+   * nenhum usuário tinha chegado lá. O clamp existe para conter leitura
+   * implausível do modelo, não para inventar valor onde não há dado. */
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? Math.min(60, Math.max(3, n)) : null;
+}
