@@ -348,6 +348,12 @@ export default function PrevisaoIaPage() {
   const ultimoFoiPrescricao = last != null && last.origin !== "estimativa";
   const mostrarPerguntasDeAdesao = !isFirstCycle && last != null && ultimoFoiPrescricao;
 
+  /* O par só está respondido quando as duas metades chegam — ou quando a pessoa
+     declara que não acompanha. Metade do par não serve para nada: a rota só
+     calcula o TDEE empírico quando a tendência é subindo/descendo/estável. */
+  const parReconhecido =
+    weightTrend === "nao_sei" || (!!currentIntakeKcal && parseFloat(currentIntakeKcal) > 0 && !!weightTrend);
+
   const canSubmit = useMemo(() => {
     return (
       !!files.frente &&
@@ -358,11 +364,13 @@ export default function PrevisaoIaPage() {
       neatComplete &&
       otherSportComplete &&
       (exerciseFreq === "0" || !!sessionDuration) &&
+      // ver comentário do par ingestão × tendência, mais abaixo no formulário
+      (!isFirstCycle || parReconhecido) &&
       parseFloat(weight) > 0 &&
       parseFloat(heightCm) > 0 &&
       parseFloat(age) > 0
     );
-  }, [files, weight, heightCm, age, exerciseFreq, sessionDuration, neatComplete, otherSportComplete]);
+  }, [files, weight, heightCm, age, exerciseFreq, sessionDuration, neatComplete, otherSportComplete, isFirstCycle, parReconhecido]);
 
   function handleFileChange(angle: Angle, f: File | null) {
     setFiles((prev) => ({ ...prev, [angle]: f ?? undefined }));
@@ -783,18 +791,26 @@ export default function PrevisaoIaPage() {
 
           {isFirstCycle && (
             <div className="grid gap-4 lg:grid-cols-2 mt-4">
-              {/* DEIXOU DE SER OPCIONAL.
-                  Este par — quanto você come e como o peso responde — é o único
-                  dado que corrige o erro da fórmula, e ele é grande: num caso
-                  real, Mifflin devolveu 3.147 kcal para quem ganhava peso
-                  comendo 2.970, ou seja, 400 kcal acima do TDEE verdadeiro.
-                  Enquanto o campo era opcional, quem pulava recebia uma
-                  prescrição construída sobre a média populacional. */}
-              <Field label="Quantas kcal você vem comendo, em média?" hint="Se não souber, deixe em branco — mas então a conta usa só a fórmula, que erra 10-15% e pode estar centenas de kcal fora para você.">
+              {/* O PAR VALE JUNTO, OU NENHUM DOS DOIS.
+                  Quanto você come + como o peso responde é o único dado que
+                  corrige o erro da fórmula, e ele é grande: num caso real,
+                  Mifflin devolveu 3.147 kcal para quem GANHAVA peso comendo
+                  2.970 — 400 kcal acima do TDEE verdadeiro.
+
+                  A primeira tentativa foi pôr `required` só neste campo. Errado
+                  por três motivos: a dica ao lado mandava deixar em branco, o
+                  `canSubmit` não o incluía (então o botão ficava habilitado e o
+                  navegador cancelava o envio com um balão nativo, sem mensagem
+                  do app), e a metade que DECIDE — a tendência de peso — ficava
+                  livre. Sem ela a rota nem calcula o TDEE empírico.
+
+                  Agora: ou os dois vêm preenchidos, ou a pessoa declara em
+                  "Não sei / não acompanhei". Quem não conta caloria não fica
+                  travado fora do app; só recebe o aviso do tamanho do erro. */}
+              <Field label="Quantas kcal você vem comendo, em média?" hint="É o dado que mais melhora a conta. Se você não acompanha, responda &quot;Não sei&quot; no campo ao lado.">
                 <input
                   type="number"
                   step="1"
-                  required
                   value={currentIntakeKcal}
                   onChange={(e) => setCurrentIntakeKcal(e.target.value)}
                   className="input"
@@ -811,8 +827,11 @@ export default function PrevisaoIaPage() {
                 </select>
               </Field>
               <p className="text-xs text-muted sm:col-span-2">
-                Com isso o TDEE calculado fica um meio-termo entre a fórmula e sua resposta real — não obrigatório,
-                mas deixa a primeira estimativa mais precisa.
+                {parReconhecido
+                  ? currentIntakeKcal
+                    ? "Com esses dois, o TDEE sai da sua resposta real e não da média populacional — é o que mais melhora a precisão da primeira estimativa."
+                    : "Sem esses dois, a conta usa só a fórmula, que tem erro documentado de 10-15% e pode ficar centenas de kcal fora para você. Dá para seguir assim e corrigir no próximo ciclo."
+                  : "Responda os dois campos acima — ou marque \"Não sei\" — para continuar. É o par que corrige o erro da fórmula."}
               </p>
             </div>
           )}

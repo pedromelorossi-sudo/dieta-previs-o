@@ -1482,11 +1482,28 @@ export function buildSplit(
    * cai na divisão igual — que respeita `weeklySets`. Falha ruidosa em vez de
    * silenciosa: o pior caso passa a ser perder a assimetria por dia, não
    * perder o ajuste inteiro. */
+  const rotulosDoTemplate = new Set(template.map((d) => d.label));
   const perDayByMuscle = new Map<MuscleGroup, Record<string, number>>();
   for (const t of muscleTargets) {
     if (!t.perDayByLabel) continue;
     const soma = Object.values(t.perDayByLabel).reduce((n, v) => n + v, 0);
-    if (soma === t.weeklySets) perDayByMuscle.set(t.muscle, t.perDayByLabel);
+    if (soma !== t.weeklySets) continue;
+    /* O RÓTULO TAMBÉM PRECISA EXISTIR NESTE TEMPLATE.
+     *
+     * Validar só a soma não bastava, e o modo de falha real era justamente
+     * este. O deload troca o template (`Math.min(3, daysPerWeek)`): num plano
+     * de 5 dias a fatia tem {Push, Upper, Pull, Legs, Lower} e o template do
+     * deload tem {Push, Pull, Legs}. A soma batia, a fatia era aceita, e as
+     * fatias de Upper e Lower eram DESCARTADAS sem aviso — o deload entregava
+     * 31 séries contra uma meta anunciada de 46.
+     *
+     * Rótulo estranho ao template significa que a fatia foi calculada para
+     * outra divisão. Aí ela inteira é inválida, e a divisão igual (que respeita
+     * `weeklySets`) é a resposta certa. */
+    const todosOsRotulosCabem = Object.keys(t.perDayByLabel).every(
+      (label) => rotulosDoTemplate.has(label) || t.perDayByLabel![label] === 0
+    );
+    if (todosOsRotulosCabem) perDayByMuscle.set(t.muscle, t.perDayByLabel);
   }
   const priorityByMuscle = new Set(priorityMuscles);
 
@@ -1732,7 +1749,26 @@ export function planTrainingPeriodization(
        * que é a razão de `perDayByLabel` existir. O invariante
        * `weeklySets === soma(perDayByLabel)` é mantido distribuindo o total
        * rampado pelas proporções originais. */
-      const alvo = Math.max(0, rampedSets);
+      /* PISO DE PRESCRIÇÃO NO DELOAD.
+       *
+       * `pickExercisesForMuscle` não prescreve exercício com menos de 2 séries.
+       * Com 1 dia/semana, metade de ~21 séries dividida por 11 grupos dá 1 cada
+       * — abaixo do piso — e QUASE TUDO é descartado: o deload entregava 3
+       * séries, um corte de 86% onde a tela promete metade.
+       *
+       * Grupo que tinha volume prescrito não vai a zero por arredondamento do
+       * deload. Quando o piso impede o corte de 50%, o alívio vem do RIR (+2 em
+       * tudo) e da retirada da carga axial, que já valem na mesma semana — e
+       * numa rotina de uma sessão semanal esse é o alívio que faz sentido, já
+       * que o volume total já é baixo. */
+      const freqDoGrupo = Math.max(1, Object.values(t.perDayByLabel ?? { x: 1 }).filter((v) => v > 0).length);
+      /* O piso só vale no arranjo de 1 dia. Com 2+ dias o orçamento já comporta
+         o corte sem derrubar grupo abaixo do mínimo — aplicar o piso ali só
+         enfraqueceria o deload (medido: 4 dias iam de 43 para 48 séries sem
+         necessidade, e 2 dias já cortava corretamente para 67%). */
+      const pisoPrescritivel =
+        daysPerWeek <= 1 && t.weeklySets >= 2 * freqDoGrupo ? 2 * freqDoGrupo : 0;
+      const alvo = Math.max(0, Math.max(rampedSets, pisoPrescritivel));
       if (!t.perDayByLabel) return { ...t, weeklySets: alvo };
       const fatias = Object.entries(t.perDayByLabel).map(([label, sets]) => ({ label, sets }));
       const perDayByLabel = distribuirPorDia(alvo, fatias);
@@ -1752,8 +1788,18 @@ export function planTrainingPeriodization(
     const totalMev = muscleTargets.reduce((sum, t) => sum + (t.weeklySets > 0 ? landmarkFor(t.muscle).mev : 0), 0);
     const rampIsFlat = totalTarget <= totalMev * 1.15;
 
+    /* Com 1-2 dias/semana o volume não cai no deload: metade da meta jogaria
+       quase todo grupo abaixo do mínimo de prescrição, e o resultado seria uma
+       semana de 3 séries. Aí o alívio vem do RIR e da retirada do axial — que é
+       o alívio que faz sentido para quem já treina pouco. O texto precisa dizer
+       isso, em vez de prometer um corte de volume que não acontece.
+
+       Vale só para 1 dia: com 2 dias o corte já sai correto (67% do pico). */
+    const deloadCortaVolume = daysPerWeek > 1;
     const focusNote = isDeload
-      ? "Semana de deload — volume pela metade, RIR 2 pontos mais longe da falha, sem agachamento nem levantamento terra com barra, e concentrada em 3 sessões. Cortar série mantendo RIR 1 não recupera nada: é uma semana normal mais curta."
+      ? deloadCortaVolume
+        ? "Semana de deload — volume pela metade, RIR 2 pontos mais longe da falha, sem agachamento nem levantamento terra com barra, e concentrada em 3 sessões. Cortar série mantendo RIR 1 não recupera nada: é uma semana normal mais curta."
+        : "Semana de deload — o volume SEGUE o mesmo, porque com esta frequência cortá-lo pela metade deixaria quase todo grupo abaixo do mínimo produtivo. O alívio vem da intensidade: RIR 2 pontos mais longe da falha e nenhum agachamento ou levantamento terra com barra. Numa rotina de poucas sessões, é a fadiga por série que precisa recuar, não a contagem."
       : rampIsFlat
         ? "Volume praticamente constante nesta semana: com os dias de treino disponíveis, o orçamento semanal já fica perto do mínimo produtivo e não sobra margem pra rampa de volume. A progressão deste mesociclo é de CARGA — repetir a mesma série com mais peso —, não de séries. Pra ter rampa de volume, é preciso mais dias de treino."
         : cyclePosition === 1
