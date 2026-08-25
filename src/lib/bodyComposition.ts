@@ -33,6 +33,27 @@ export interface BodyCompositionInput {
   otherSportSessionsPerWeek?: number;
   otherSportMinutesPerSession?: number;
   otherSportTalkTest?: TalkTestIntensity;
+  /* ── O QUE FALTAVA CHEGAR ATÉ `classifyPathFromBf` ──
+   *
+   * A função aceita cinco parâmetros e recebia dois. O resultado, num usuário
+   * real de 1,90m/85kg lido em 14,0%BF: superávit ZERO, rótulo "normocalórico",
+   * e um roteiro de 24 meses para ganhar 0,7kg — porque a fase de manutenção
+   * tem alvo igual ao %BF de partida e nunca termina, então roda até o teto do
+   * horizonte.
+   *
+   * A conta que produzia isso:
+   *   bulkFraction = 1 − rampFraction(14, 13, 1,0) = 1 − (14−12)/2 = 0
+   * Com 13,9%BF teria dado superávit; com 14,0% deu exatamente zero. A pessoa
+   * caía na borda da rampa e a histerese — que existe justamente para impedir
+   * isso — nunca era consultada. */
+  /** Fase do ciclo anterior. É o que faz a sequência FECHAR: quem já está em
+   * superávit segue até `cutAbove` em vez de parar na borda de entrada. */
+  previousPath?: DietPath;
+  /** Confiança da leitura visual — decide a largura da rampa. Sem isso o
+   * default "alta" usava 1,0 mesmo quando a IA declarou "media" (1,4). */
+  bfConfidence?: "baixa" | "media" | "alta";
+  /** Sinais de recuperação ruim suavizam ou zeram o déficit. */
+  recoveryScore?: number;
 }
 
 export interface BodyCompositionResult {
@@ -246,8 +267,14 @@ function estimateTdeeFromComponents(
  * O ciclo: entra em superávit em `bulkBelow`, acumula até `cutAbove`, e corta de volta até `bulkBelow`.
  * Os dois pontos são reusados nos dois sentidos e é a FASE ANTERIOR que decide qual está valendo.
  */
+/* Teto do bulking a 17% no homem (era 16), por decisão do Pedro.
+ *
+ * Aumenta a janela de ganho de 3 para 4 pontos percentuais, o que dá fases de
+ * superávit mais longas antes do corte de retorno — e é o que a prática de
+ * fisiculturismo natural costuma usar. Continua bem abaixo do ponto em que a
+ * partição piora de forma relevante, e o corte de retorno segue mirando 13%. */
 const BF_THRESHOLDS: Record<Sex, { bulkBelow: number; cutAbove: number }> = {
-  masculino: { bulkBelow: 13, cutAbove: 16 },
+  masculino: { bulkBelow: 13, cutAbove: 17 },
   feminino: { bulkBelow: 21, cutAbove: 24 },
 };
 
@@ -560,7 +587,13 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
   const eatKcal = components ? components.eat : 0;
   const activityLevelDisplay = activityLevelFromPAL(tdee, bmr);
 
-  const { path, pathReason, surplusPercent } = classifyPathFromBf(bodyFatPercent, sex);
+  const { path, pathReason, surplusPercent } = classifyPathFromBf(
+    bodyFatPercent,
+    sex,
+    input.recoveryScore ?? 0,
+    input.previousPath,
+    input.bfConfidence ?? "alta"
+  );
 
   const targetKcal = tdee * (1 + surplusPercent);
   const { proteinPerKg, fatPerKg } = macroTargetsForStrategy(path);

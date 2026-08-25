@@ -16,7 +16,7 @@ import { planejarFases, confrontarPlano, MesProjetado } from "@/lib/planoDeFases
 import { MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from "@/lib/exerciseLibrary";
 import { LoggedSet, weeklyVolumeByMuscle, readVolumeStatus, compareVolumeToTarget, VolumeStatus } from "@/lib/trainingVolume";
 import { TrainingLog, LoggedSetEntry } from "@/lib/trainingBuilder";
-import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence, ajusteDeFadigaPara, diasEfetivosPara } from "@/lib/trainingSplitBuilder";
+import { computeMuscleTargets, buildSplit, planTrainingPeriodization, scoreTrainingAdherence, ajusteDeFadigaPara, diasEfetivosPara, MuscleAssessmentInput } from "@/lib/trainingSplitBuilder";
 import { suggestLoadProgression } from "@/lib/trainingPeriodization";
 import { assessDietCleanliness, assessTrainingCleanliness, checkBfConsistency, computeTdeeCalibration, CalibrationAuditRow } from "@/lib/calibration";
 import { prescribeCardio } from "@/lib/cardioPrescription";
@@ -386,9 +386,11 @@ export async function POST(request: Request) {
         system: [
           {
             type: "text",
-            text: `Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis. Responda só pela ferramenta fornecida, em português.
+            text: `Você estima %BF (percentual de gordura corporal) visualmente a partir de fotos de físico (frente, costas, laterais), cruzando os ângulos disponíveis, e avalia o desenvolvimento por grupo muscular. Responda só pela ferramenta fornecida, em português.
 
-${VISUAL_BF_PROTOCOL}`,
+${VISUAL_BF_PROTOCOL}
+
+${VISUAL_MUSCLE_PROTOCOL}`,
             cache_control: { type: "ephemeral" },
           },
         ],
@@ -403,8 +405,30 @@ ${VISUAL_BF_PROTOCOL}`,
                 bfConfidence: { type: "string", enum: ["baixa", "media", "alta"] },
                 bfReasoning: { type: "string", description: "1-2 frases explicando a leitura visual." },
                 evolutionNote: { type: "string" },
+                /* A leitura por grupo FALTAVA aqui — o primeiro ciclo pedia só
+                   %BF. Consequência: o treino de todo usuário NOVO saía sem
+                   ponto fraco, porque `computeMuscleTargets` recebia array
+                   vazio, e a diferenciação por foto só começava a valer no
+                   segundo ciclo. O usuário que mais precisa de direção é
+                   justamente o que ainda não tem histórico. */
+                muscleGroupAssessment: {
+                  type: "array",
+                  description:
+                    "Um item por grupo muscular visível nos ângulos enviados. Não force grupos que a foto não mostra — use confidence 'baixa' em vez de omitir quando a leitura for incerta.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      muscle: { type: "string", enum: Object.keys(MUSCLE_GROUP_LABEL) },
+                      relativeDevelopment: { type: "string", enum: ["atras_dos_outros", "proporcional", "destaque"] },
+                      developmentNote: { type: "string" },
+                      symmetryNote: { type: "string" },
+                      confidence: { type: "string", enum: ["baixa", "media", "alta"] },
+                    },
+                    required: ["muscle", "relativeDevelopment", "developmentNote", "symmetryNote", "confidence"],
+                  },
+                },
               },
-              required: ["bfPercentVisual", "bfConfidence", "bfReasoning", "evolutionNote"],
+              required: ["bfPercentVisual", "bfConfidence", "bfReasoning", "evolutionNote", "muscleGroupAssessment"],
             },
           },
         ],
@@ -435,7 +459,14 @@ ${VISUAL_BF_PROTOCOL}`,
     if (!bfBlock || bfBlock.type !== "tool_use") {
       return NextResponse.json({ error: "O modelo não retornou uma estimativa de %BF válida." }, { status: 422 });
     }
-    const bfRaw = bfBlock.input as { bfPercentVisual: number; bfConfidence: "baixa" | "media" | "alta"; bfReasoning: string; evolutionNote: string };
+    const bfRaw = bfBlock.input as {
+      bfPercentVisual: number;
+      bfConfidence: "baixa" | "media" | "alta";
+      bfReasoning: string;
+      evolutionNote: string;
+      muscleGroupAssessment?: MuscleAssessmentInput[];
+    };
+    const leituraMuscular = bfRaw.muscleGroupAssessment ?? [];
 
     const bfPercentFirstCycle = assertFiniteBf(bfRaw.bfPercentVisual);
     if (bfPercentFirstCycle == null) {
@@ -445,12 +476,28 @@ ${VISUAL_BF_PROTOCOL}`,
       );
     }
 
+    /* FASE EM CURSO, quando não há ciclo anterior no app.
+     *
+     * Sem isto, o primeiro ciclo sempre entra sem histerese e a pessoa é
+     * jogada na faixa morta entre `bulkBelow` e `cutAbove` — foi o que
+     * devolveu "normocalórico" e um roteiro de 24 meses para 0,7kg a quem
+     * estava em superávit declarado.
+     *
+     * "Peso subindo há semanas" É a evidência de um bulking em curso, mesmo
+     * que o app não tenha registrado o ciclo: a pessoa não começou a existir
+     * agora. Mesma leitura para "descendo". "Estável" e "não sei" continuam
+     * sem fase anterior, porque aí realmente não há sinal. */
+    const faseEmCurso =
+      weightTrend === "subindo" ? "bulking" : weightTrend === "descendo" ? "cutting" : undefined;
+
     const comp = estimateBodyComposition({
       weightKg: currentWeightKg,
       heightCm,
       bodyFatPercent: bfPercentFirstCycle,
       age,
       sex,
+      previousPath: faseEmCurso,
+      bfConfidence: bfRaw.bfConfidence,
       activityLevel,
       exerciseFreq,
       sessionDuration,
@@ -493,7 +540,7 @@ ${VISUAL_BF_PROTOCOL}`,
     // projeção de 6 meses, e zero séries. Não havia razão pra isso: a divisão não depende de histórico,
     // só dos dias/semana disponíveis (leitura visual por grupo e adesão apenas REFINAM a meta).
     const firstCycleMuscleTargets =
-      firstCycleDaysPerWeek > 0 ? computeMuscleTargets([], prefs?.priority_muscles ?? [], 0, firstCycleDaysPerWeek, 0, false, sex) : null;
+      firstCycleDaysPerWeek > 0 ? computeMuscleTargets(leituraMuscular, prefs?.priority_muscles ?? [], 0, firstCycleDaysPerWeek, 0, false, sex) : null;
     const firstCycleProgram = firstCycleMuscleTargets ? buildSplit(firstCycleDaysPerWeek, firstCycleMuscleTargets) : null;
     const firstCyclePeriodization = firstCycleMuscleTargets
       ? planTrainingPeriodization(firstCycleMuscleTargets, firstCycleDaysPerWeek, 5)
@@ -569,6 +616,16 @@ ${VISUAL_BF_PROTOCOL}`,
     // a pessoa manda as fotos e recebe o roteiro de onde vai chegar e o que dispara cada mudança, não
     // só a dieta do mês. 24 meses porque um ciclo completo (ganho + retorno) leva ~8 meses, então esse
     // horizonte mostra o padrão se repetindo em vez de um pedaço solto dele.
+    /* `initialPath` FALTAVA aqui — e é ele que dá a histerese ao roteiro.
+     *
+     * O caminho dos ciclos seguintes (mais abaixo) já passava `initialPath:
+     * strategy`. Este, o do PRIMEIRO ciclo, não passava nada — então o
+     * planejador reclassificava mês a mês sem fase de partida, caía na faixa
+     * morta entre 13% e 16% e produzia "Normocalórico até 15%BF (~24m)": uma
+     * fase cujo alvo é o %BF de partida, que nunca termina e roda até o teto do
+     * horizonte. Daí os "24 meses para ganhar 0,7kg".
+     *
+     * A estratégia decidida logo acima é justamente a fase de partida certa. */
     const planoDeFases = planejarFases({
       currentWeightKg,
       currentBfPercent: bfPercentFirstCycle,
@@ -576,6 +633,7 @@ ${VISUAL_BF_PROTOCOL}`,
       sex,
       tdee: blendedTdee,
       monthsAhead: 24,
+      initialPath: comp.path,
     });
 
 
@@ -589,6 +647,7 @@ ${VISUAL_BF_PROTOCOL}`,
       activityLevelDisplay: comp.activityLevelDisplay,
       bfPercentVisual: bfPercentFirstCycle,
       bfConfidence: bfRaw.bfConfidence,
+      muscleGroupAssessment: leituraMuscular,
       bfReasoning: bfRaw.bfReasoning,
       evolutionNote: bfRaw.evolutionNote || null,
       strategy: comp.path,
@@ -1160,8 +1219,29 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // em si é suavizado/zerado automaticamente se recoveryScore indicar que o ciclo anterior foi pesado demais.
   // A fase do ciclo anterior alimenta a histerese de classifyPathFromBf — sem ela, alguém parado em
   // cima do limiar de %BF alterna de fase todo ciclo só pelo ruído da leitura de foto.
+  /* A TENDÊNCIA DECLARADA MANDA MAIS QUE A RECLASSIFICAÇÃO DO %BF.
+   *
+   * Antes, `previousPath` saía de reclassificar o %BF do ciclo anterior
+   * SOZINHO — sem o previousPath DELE. Isso perde a corrente: um ciclo que foi
+   * de bulking, mas cujo %BF isolado cai na faixa do meio, volta como
+   * "normocalorico", e a histerese abaixo só trata "bulking" e "cutting". O
+   * resultado era a pessoa cair na faixa morta entre 13% e 16% de novo, ciclo
+   * após ciclo, e o erro do primeiro ciclo se propagar para sempre.
+   *
+   * "Peso subindo nas últimas semanas" é FATO OBSERVADO sobre a fase em curso;
+   * reclassificar %BF é inferência. O fato vem primeiro. */
+  const faseDeclarada: DietPath | undefined =
+    weightTrend === "subindo" ? "bulking" : weightTrend === "descendo" ? "cutting" : undefined;
   const previousPath: DietPath | undefined =
-    lastCycle?.bodyFatPercent != null ? classifyPathFromBf(lastCycle.bodyFatPercent, sex).path : undefined;
+    /* 1º: a fase GRAVADA no ciclo anterior. É o único dado que não se degrada —
+       reclassificar %BF perde a corrente, e a tendência declarada só existe no
+       formulário do primeiro ciclo. */
+    (lastCycle?.path as DietPath | undefined) ??
+    /* 2º: tendência de peso declarada, quando o formulário a pede. */
+    faseDeclarada ??
+    /* 3º: último recurso — reclassificar o %BF anterior. Mantido para ciclos
+       gravados antes da migração 0005, que não têm `path`. */
+    (lastCycle?.bodyFatPercent != null ? classifyPathFromBf(lastCycle.bodyFatPercent, sex).path : undefined);
   const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(
     bfPercentVisual,
     sex,

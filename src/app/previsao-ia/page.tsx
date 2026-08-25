@@ -508,6 +508,10 @@ export default function PrevisaoIaPage() {
         isPrediction: true,
         origin: "ia",
         muscleAssessment: data.muscleGroupAssessment?.length ? data.muscleGroupAssessment : null,
+        /* Guarda a estratégia decidida. Sem isto o ciclo seguinte readivinha a
+           fase pelo %BF sozinho e a histerese nunca fecha — foi o que produziu
+           "normocalórico" com 24 meses para 0,7kg em quem estava em superávit. */
+        path: data.strategy ?? null,
       });
       setCycles(sortByDate(await loadCycles()));
 

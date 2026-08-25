@@ -31,4 +31,8 @@ export interface Cycle {
   /** leitura visual por grupo muscular desse ciclo (da análise de foto) — usada pra montar a evolução
    * por grupo ao longo do tempo (ver muscleEvolution.ts) */
   muscleAssessment?: CycleMuscleAssessment[] | null;
+  /** Estratégia prescrita NESTE ciclo. É o que alimenta a histerese no ciclo
+   * seguinte — sem guardar, a fase é readivinhada pelo %BF sozinho e a
+   * sequência não fecha (ver migração 0005). */
+  path?: "bulking" | "cutting" | "normocalorico" | null;
 }
