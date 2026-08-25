@@ -156,6 +156,15 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "cadeira-abdutora", name: "Cadeira Abdutora", primaryMuscle: "gluteo", secondaryMuscles: [], pattern: "isolado", movementFamily: "abducao-quadril", equipment: "maquina" },
   { id: "coice-polia", name: "Coice na Polia", primaryMuscle: "gluteo", secondaryMuscles: ["posterior_coxa"], pattern: "isolado", movementFamily: "extensao-quadril-unilateral", equipment: "polia", unilateral: true },
   { id: "afundo-passada-halteres", name: "Afundo com Passada (Halteres)", primaryMuscle: "gluteo", secondaryMuscles: ["quadriceps", "posterior_coxa"], pattern: "composto", movementFamily: "afundo", equipment: "halteres", unilateral: true },
+  /* Isolados de glúteo acrescentados para o programa feminino.
+   *
+   * O catálogo tinha 2 isolados (cadeira abdutora, coice na polia) contra 2
+   * compostos. Com o volume de glúteo subindo para mulher, dois isolados não
+   * dão variedade suficiente: a regra de uma família por dia esgotava as
+   * opções e a meta caía em composto de quadril, que é o que o agachamento e
+   * o afundo já fazem. Famílias distintas de propósito. */
+  { id: "abducao-quadril-polia", name: "Abdução de Quadril na Polia", primaryMuscle: "gluteo", secondaryMuscles: [], pattern: "isolado", movementFamily: "abducao-polia", equipment: "polia", unilateral: true },
+  { id: "extensao-quadril-maquina", name: "Extensão de Quadril na Máquina", primaryMuscle: "gluteo", secondaryMuscles: ["posterior_coxa"], pattern: "isolado", movementFamily: "extensao-quadril-maquina", equipment: "maquina", unilateral: true },
 
   // panturrilha
   { id: "panturrilha-leg-press-45", name: "Panturrilha no Leg Press 45°", primaryMuscle: "panturrilha", secondaryMuscles: [], pattern: "isolado", movementFamily: "panturrilha-em-pe", equipment: "maquina" },

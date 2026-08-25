@@ -111,6 +111,16 @@ const SETS_PER_SESSION_BUDGET = 18;
  * onde a carga é alta o suficiente para a progressão ser mensurável série a
  * série, que é o que a periodização do app precisa para decidir aumento. */
 const REP_RANGE_PADRAO = "5-7";
+
+/** Multiplicador do piso e do alvo de glúteo quando o sexo declarado é
+ * feminino: 2×. MEV 4 → 8 e MAV 10 → 20, limitado depois pelo MRV de 18.
+ *
+ * O 8 de piso é o número que importa: com frequência 2 ele vira 4 séries por
+ * dia de perna, que é o mínimo para caberem DOIS exercícios (2+2). Com um
+ * exercício só o gerador escolhe o composto — elevação pélvica ou afundo — e o
+ * isolado nunca entra. Com 1,5× o piso dava 3 por dia e era exatamente isso que
+ * acontecia: 1 isolado na semana inteira. */
+const AJUSTE_GLUTEO_FEMININO = 2;
 /** Séries de trabalho: 1-2 repetições na reserva. */
 const RIR_WORK = 1;
 /** Top set: falha dentro da faixa. */
@@ -254,7 +264,11 @@ export function computeMuscleTargets(
    * `diasEfetivosPara`). Precisa ser explícito: inferir a partir de
    * `daysPerWeek <= 3` puniria de menos quem genuinamente treina 3 dias e está
    * mal recuperado — a pessoa não concentrou nada, sempre foi 3. */
-  diasJaConcentrados = false
+  diasJaConcentrados = false,
+  /** Sexo declarado no questionário. Só muda a meta de GLÚTEO — ver
+   * `AJUSTE_GLUTEO_FEMININO`. `null` quando ainda não foi respondido: nesse
+   * caso vale o padrão, sem inferir nada. */
+  sexo: "masculino" | "feminino" | null = null
 ): MuscleTarget[] {
   const freqByMuscle = frequencyByMuscleFor(daysPerWeek, priorityMuscles);
 
@@ -290,7 +304,26 @@ export function computeMuscleTargets(
     indiretoEstimado?: number;
   }
 
-  const slots: Slot[] = VOLUME_LANDMARKS.map((landmark) => {
+  const slots: Slot[] = VOLUME_LANDMARKS.map((landmarkOriginal) => {
+    /* GLÚTEO COM PISO MAIOR QUANDO O SEXO DECLARADO É FEMININO.
+     *
+     * Elevar só o `ideal` não muda nada: o `ideal` disputa o EXCEDENTE do
+     * orçamento e o glúteo perde essa disputa — a meta continuava em 6 séries,
+     * atendidas por elevação pélvica e afundo, sem nenhum isolado. Quem decide
+     * é o PISO, que é distribuído antes de tudo. Mesma lição que o adutor e o
+     * abdominal já tinham dado neste arquivo.
+     *
+     * MEV 4 → 8 e MAV 10 → 15, ainda abaixo do MRV de 18. Com 8 séries de piso
+     * repartidas em 2 dias, cabem 2 exercícios por dia — e aí o isolado entra,
+     * porque a regra de uma família por dia impede dois compostos de quadril. */
+    const landmark =
+      sexo === "feminino" && landmarkOriginal.muscle === "gluteo"
+        ? {
+            ...landmarkOriginal,
+            mev: Math.round(landmarkOriginal.mev * AJUSTE_GLUTEO_FEMININO),
+            mav: Math.round(landmarkOriginal.mav * AJUSTE_GLUTEO_FEMININO),
+          }
+        : landmarkOriginal;
     const isDeclared = priorityMuscles.includes(landmark.muscle);
     const assessed = assessment.find((x) => x.muscle === landmark.muscle && x.confidence !== "baixa");
 
@@ -335,8 +368,20 @@ export function computeMuscleTargets(
     /* Prioridade declarada por humano mira o MRV; ponto fraco lido na foto mira
      * 1,25× o MAV — mais que o 1,15 de antes, e ainda abaixo do MRV, porque a
      * foto é um sinal mais fraco que um coach olhando a pessoa. */
-    const desired = isDeclared ? landmark.mrv : lidoAtrasado ? landmark.mav * 1.25 : landmark.mav * adjustment;
-    const ideal = Math.min(ceiling, Math.round(desired));
+    const desiredBase = isDeclared ? landmark.mrv : lidoAtrasado ? landmark.mav * 1.25 : landmark.mav * adjustment;
+    /* GLÚTEO RECEBE TRABALHO ISOLADO QUANDO O USUÁRIO É MULHER.
+     *
+     * Não é ajuste fisiológico: a resposta ao volume não difere por sexo de
+     * forma que justifique um multiplicador. É de OBJETIVO — glúteo costuma ser
+     * grupo-alvo declarado no público feminino, e o padrão do app (MAV 10,
+     * atendido quase todo por agachamento, afundo e elevação pélvica) entrega
+     * quadril como subproduto de perna, quase sem isolamento.
+     *
+     * Fica visível no `reason` do grupo, para a pessoa saber por que a meta
+     * dela difere — meta que muda sem explicação é o que o app evita em todo o
+     * resto. E vale só com sexo DECLARADO: sem resposta no questionário, o
+     * padrão continua valendo, sem inferir. */
+    const ideal = Math.min(ceiling, Math.round(desiredBase));
 
     return { landmark, isPriority, isDeclared, assessed, ceiling, ideal, sets: Math.min(ceiling, landmark.mev) };
   });
@@ -631,7 +676,9 @@ export function computeMuscleTargets(
     const freq = freqByMuscle.get(sl.landmark.muscle) ?? 0;
 
     let reason: string;
-    if (sl.landmark.muscle === "abdominal") {
+    if (sl.landmark.muscle === "gluteo" && sexo === "feminino") {
+      reason = `${sl.sets} séries/semana, o dobro do piso padrão — com trabalho ISOLADO de quadril (abdução, coice, extensão na máquina) e não só agachamento, afundo e elevação pélvica. O ajuste vale porque o sexo declarado é feminino e glúteo costuma ser grupo-alvo; a meta continua abaixo do teto recuperável (MRV ${sl.landmark.mrv}).${budgetNote}`;
+    } else if (sl.landmark.muscle === "abdominal") {
       /* Meta zero aqui NÃO quer dizer "não treina" — quer dizer "não entra na
          contabilidade". O bloco fixo é anexado em `adicionarAbdominal`, depois
          que as sessões estão montadas. Sem esta frase, a tela mostraria

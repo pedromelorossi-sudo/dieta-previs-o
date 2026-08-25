@@ -493,7 +493,7 @@ ${VISUAL_BF_PROTOCOL}`,
     // projeção de 6 meses, e zero séries. Não havia razão pra isso: a divisão não depende de histórico,
     // só dos dias/semana disponíveis (leitura visual por grupo e adesão apenas REFINAM a meta).
     const firstCycleMuscleTargets =
-      firstCycleDaysPerWeek > 0 ? computeMuscleTargets([], prefs?.priority_muscles ?? [], 0, firstCycleDaysPerWeek, 0) : null;
+      firstCycleDaysPerWeek > 0 ? computeMuscleTargets([], prefs?.priority_muscles ?? [], 0, firstCycleDaysPerWeek, 0, false, sex) : null;
     const firstCycleProgram = firstCycleMuscleTargets ? buildSplit(firstCycleDaysPerWeek, firstCycleMuscleTargets) : null;
     const firstCyclePeriodization = firstCycleMuscleTargets
       ? planTrainingPeriodization(firstCycleMuscleTargets, firstCycleDaysPerWeek, 5)
@@ -990,7 +990,8 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       trainingAdherenceScore,
       diasEfetivos,
       recoveryScore,
-      diasEfetivos < daysPerWeek
+      diasEfetivos < daysPerWeek,
+      sex
     );
     suggestedTrainingProgram = buildSplit(
       diasEfetivos,

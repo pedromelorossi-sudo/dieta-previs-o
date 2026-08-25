@@ -171,7 +171,7 @@ export default function TreinoPage() {
       }));
 
       const dias = diasEfetivosPara(diasPorSemana, 0);
-      const alvos = computeMuscleTargets(leitura, prefs.priorityMuscles ?? [], 0, dias, 0, dias < diasPorSemana);
+      const alvos = computeMuscleTargets(leitura, prefs.priorityMuscles ?? [], 0, dias, 0, dias < diasPorSemana, prefs.sex);
       const sessions = buildSplit(dias, alvos, undefined, ajusteDeFadigaPara(0));
 
       await upsertTrainingProgram({
