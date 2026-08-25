@@ -120,6 +120,12 @@ interface CycleRow {
   carb_g: number;
   is_prediction: boolean;
   actual_kcal: number | null;
+  /* Estratégia prescrita neste ciclo, criada pela migração 0005 para a
+     histerese fechar entre ciclos. Faltava aqui, no `select` e no
+     `rowToCycle` — e o cast `as DietPath | undefined` no consumo fazia o
+     compilador aceitar `lastCycle.path` sempre `undefined`. O dado entrava no
+     banco e nunca voltava, então a migração inteira era decorativa. */
+  path: string | null;
 }
 
 interface PreferencesRow {
@@ -144,6 +150,7 @@ function rowToCycle(row: CycleRow): Cycle {
     carbG: Number(row.carb_g),
     isPrediction: row.is_prediction,
     actualKcal: row.actual_kcal != null ? Number(row.actual_kcal) : null,
+    path: (row.path as Cycle["path"]) ?? null,
   };
 }
 
@@ -261,7 +268,7 @@ function evolutionImageBlock(prev: PreviousPhoto | null): Anthropic.ContentBlock
   ];
 }
 
-import { aferirLeituraVisual, analisarTendencia, assertFiniteBf, type MetodoMedicaoBf } from "@/lib/bfMedido";
+import { aferirLeituraVisual, analisarTendencia, assertFiniteBf, validarBfMedido, validarMetodoMedicao, type MetodoMedicaoBf } from "@/lib/bfMedido";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -338,7 +345,7 @@ export async function POST(request: Request) {
   const [{ data: cycleRows, error: cyclesError }, { data: prefsRow }, previousPhoto] = await Promise.all([
     supabase
       .from("cycles")
-      .select("id,date,weight_kg,body_fat_percent,kcal,protein_g,fat_g,carb_g,is_prediction,actual_kcal")
+      .select("id,date,weight_kg,body_fat_percent,kcal,protein_g,fat_g,carb_g,is_prediction,actual_kcal,path")
       .eq("user_id", user.id)
       .order("date", { ascending: true }),
     supabase
@@ -480,8 +487,21 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
      * Como nos ciclos seguintes: o MEDIDO entra na conta, a estimativa VISUAL
      * continua sendo produzida e as duas são confrontadas — é assim que a
      * leitura por foto aprende. A auditoria grava sempre a visual. */
-    const bfMedidoPrimeiroCiclo = assertFiniteBf(body.bfMedidoPercent ?? null);
-    const metodoMedicaoPrimeiroCiclo = body.bfMedidoMetodo ?? null;
+    const validacaoBf = validarBfMedido(body.bfMedidoPercent ?? null);
+    if (!validacaoBf.ok) {
+      return NextResponse.json({ error: validacaoBf.erro }, { status: 400 });
+    }
+    const bfMedidoPrimeiroCiclo = validacaoBf.valor;
+    /* Valor e método andam juntos. Aceitar o valor sem o método fazia o exame
+       mandar no cálculo e a aferição sumir sem uma palavra — e um método fora
+       do enum imprimia "margem típica de undefined" na tela. */
+    if (bfMedidoPrimeiroCiclo != null && !validarMetodoMedicao(body.bfMedidoMetodo)) {
+      return NextResponse.json(
+        { error: "Informe também qual exame mediu esse %BF (DEXA, bioimpedância, adipometria, ultrassom ou outro)." },
+        { status: 400 }
+      );
+    }
+    const metodoMedicaoPrimeiroCiclo = bfMedidoPrimeiroCiclo != null ? body.bfMedidoMetodo! : null;
     const afericaoPrimeiroCiclo =
       bfMedidoPrimeiroCiclo != null && metodoMedicaoPrimeiroCiclo != null
         ? aferirLeituraVisual(bfVisualPrimeiroCiclo, bfMedidoPrimeiroCiclo, metodoMedicaoPrimeiroCiclo)
@@ -1190,8 +1210,18 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
    * A ordem importa: a estimativa visual é feita ANTES e sem conhecer o exame —
    * se o Claude soubesse do valor medido, a comparação não valeria nada, porque
    * ele tenderia a concordar. O prompt de visão não recebe `bfMedidoPercent`. */
-  const bfMedido = assertFiniteBf(body.bfMedidoPercent ?? null);
-  const metodoMedicao = body.bfMedidoMetodo ?? null;
+  const validacaoBfCiclo = validarBfMedido(body.bfMedidoPercent ?? null);
+  if (!validacaoBfCiclo.ok) {
+    return NextResponse.json({ error: validacaoBfCiclo.erro }, { status: 400 });
+  }
+  const bfMedido = validacaoBfCiclo.valor;
+  if (bfMedido != null && !validarMetodoMedicao(body.bfMedidoMetodo)) {
+    return NextResponse.json(
+      { error: "Informe também qual exame mediu esse %BF (DEXA, bioimpedância, adipometria, ultrassom ou outro)." },
+      { status: 400 }
+    );
+  }
+  const metodoMedicao = bfMedido != null ? body.bfMedidoMetodo! : null;
   const afericao =
     bfMedido != null && metodoMedicao != null
       ? aferirLeituraVisual(bfPercentVisualRaw, bfMedido, metodoMedicao)
@@ -1338,7 +1368,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     /* 1º: a fase GRAVADA no ciclo anterior. É o único dado que não se degrada —
        reclassificar %BF perde a corrente, e a tendência declarada só existe no
        formulário do primeiro ciclo. */
-    (lastCycle?.path as DietPath | undefined) ??
+    lastCycle?.path ??
     /* 2º: tendência de peso declarada, quando o formulário a pede. */
     faseDeclarada ??
     /* 3º: último recurso — reclassificar o %BF anterior. Mantido para ciclos

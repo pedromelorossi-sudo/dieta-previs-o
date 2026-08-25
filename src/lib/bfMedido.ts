@@ -156,3 +156,44 @@ export function assertFiniteBf(value: unknown): number | null {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? Math.min(60, Math.max(3, n)) : null;
 }
+
+/** Faixa fisiologicamente possível de %BF em humano vivo. */
+export const BF_MIN_PLAUSIVEL = 3;
+export const BF_MAX_PLAUSIVEL = 60;
+
+/* Valor MEDIDO por exame: rejeita em vez de aparar.
+ *
+ * `assertFiniteBf` apara para dentro de [3, 60] — correto para conter uma
+ * leitura implausível DO MODELO, que é ruído de estimativa. Aplicado ao número
+ * que a PESSOA digita, o mesmo clamp vira fábrica de dado falso: "0" e "1"
+ * viram 3, e "-40" também. Medido no motor real, homem de 1,90m e 85kg:
+ *
+ *   %BF 16 (foto)      → normocalórico, 2952 kcal
+ *   %BF 3  ("medido")  → BULKING,       3644 kcal
+ *
+ * 692 kcal/dia de diferença e inversão de fase, a partir de uma vírgula no
+ * lugar errado — com HTTP 200 e nenhum aviso. E o banco já tem uma linha
+ * assim: `bf_medido_percent = 3`.
+ *
+ * Erro de digitação tem de falhar alto, não virar prescrição plausível. */
+export function validarBfMedido(value: unknown): { ok: true; valor: number | null } | { ok: false; erro: string } {
+  if (value == null || value === "") return { ok: true, valor: null };
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    return { ok: false, erro: "O %BF do exame precisa ser um número." };
+  }
+  if (n < BF_MIN_PLAUSIVEL || n > BF_MAX_PLAUSIVEL) {
+    return {
+      ok: false,
+      erro: `%BF de ${n}% está fora da faixa possível (${BF_MIN_PLAUSIVEL}% a ${BF_MAX_PLAUSIVEL}%). Confira o valor do exame — um ponto no lugar errado muda a dieta inteira.`,
+    };
+  }
+  return { ok: true, valor: n };
+}
+
+/** O método é obrigatório junto com o valor: sem ele não há margem de erro para
+ * comparar, e a aferição da leitura visual — a razão de o campo existir —
+ * simplesmente não roda, em silêncio. */
+export function validarMetodoMedicao(metodo: unknown): metodo is MetodoMedicaoBf {
+  return typeof metodo === "string" && metodo in ERRO_TIPICO_PP;
+}

@@ -1470,9 +1470,24 @@ export function buildSplit(
   const priorityMuscles = muscleTargets.filter((t) => t.isPriority).map((t) => t.muscle);
   const template = ensurePriorityFrequency(SPLIT_TEMPLATES[days], priorityMuscles);
   const targetByMuscle = new Map(muscleTargets.map((t) => [t.muscle, t.weeklySets]));
-  const perDayByMuscle = new Map(
-    muscleTargets.filter((t) => t.perDayByLabel).map((t) => [t.muscle, t.perDayByLabel as Record<string, number>])
-  );
+  /* A FATIA SÓ VALE SE FOR COERENTE COM A META.
+   *
+   * `perDayByLabel` tem precedência sobre `weeklySets` — e essa precedência já
+   * matou a rampa do mesociclo e o deload inteiro, porque a periodização
+   * escalava a meta e a fatia sobrevivia intacta. O bug foi corrigido na
+   * origem, mas a armadilha continuava: qualquer código futuro que ajuste
+   * `weeklySets` sem reescrever a fatia é ignorado EM SILÊNCIO.
+   *
+   * Agora a fatia é aceita apenas quando soma exatamente a meta. Divergiu,
+   * cai na divisão igual — que respeita `weeklySets`. Falha ruidosa em vez de
+   * silenciosa: o pior caso passa a ser perder a assimetria por dia, não
+   * perder o ajuste inteiro. */
+  const perDayByMuscle = new Map<MuscleGroup, Record<string, number>>();
+  for (const t of muscleTargets) {
+    if (!t.perDayByLabel) continue;
+    const soma = Object.values(t.perDayByLabel).reduce((n, v) => n + v, 0);
+    if (soma === t.weeklySets) perDayByMuscle.set(t.muscle, t.perDayByLabel);
+  }
   const priorityByMuscle = new Set(priorityMuscles);
 
   const frequencyByMuscle = new Map<MuscleGroup, number>();
@@ -1697,7 +1712,35 @@ export function planTrainingPeriodization(
       const rampedSets = isDeload
         ? Math.round(t.weeklySets * 0.5)
         : Math.max(landmark.mev > 0 ? Math.min(landmark.mev, t.weeklySets) : 0, Math.round(t.weeklySets * fracaoAcumulo));
-      return { ...t, weeklySets: Math.max(0, rampedSets) };
+      /* A FATIA POR DIA TEM DE SER ESCALADA JUNTO.
+       *
+       * `{...t}` carregava `perDayByLabel` de PICO intacto — e em `buildSplit`
+       * a fatia tem precedência absoluta sobre `weeklySets`, que nem chega a
+       * ser lido quando ela existe. Efeito medido antes desta correção:
+       *
+       *   rampa 1 dia  60/60/60/60  deload 60   (deload = 100% do pico)
+       *   rampa 3 dias 60/60/60/60  deload 60   (idem)
+       *   rampa 5 dias 83/83/83/83  deload 52
+       *
+       * A rampa estava PLANA nos seis arranjos — semana 1 igual à semana 4 — e
+       * o deload era 100% inerte em 1, 2 e 3 dias. Em 4/5/6 dias ele só
+       * funcionava por acidente: o deload troca o template
+       * (`Math.min(3, daysPerWeek)`) e os rótulos novos não batem com os
+       * antigos, então o lookup falha e cai no fallback de divisão igual.
+       *
+       * Escalar a fatia, em vez de removê-la, preserva a assimetria por dia —
+       * que é a razão de `perDayByLabel` existir. O invariante
+       * `weeklySets === soma(perDayByLabel)` é mantido distribuindo o total
+       * rampado pelas proporções originais. */
+      const alvo = Math.max(0, rampedSets);
+      if (!t.perDayByLabel) return { ...t, weeklySets: alvo };
+      const fatias = Object.entries(t.perDayByLabel).map(([label, sets]) => ({ label, sets }));
+      const perDayByLabel = distribuirPorDia(alvo, fatias);
+      return {
+        ...t,
+        weeklySets: Object.values(perDayByLabel).reduce((n, v) => n + v, 0),
+        perDayByLabel,
+      };
     });
 
     // Quando o orçamento semanal mal cobre o MEV (caso típico de 3 dias/semana), a "rampa" de volume é

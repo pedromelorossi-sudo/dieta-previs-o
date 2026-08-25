@@ -11,7 +11,7 @@
  */
 
 const B = new URL("../.test-build/src/lib/", import.meta.url).pathname;
-const { estimateBodyComposition, classifyPathFromBf, estimateFfmi, macroTargetsForStrategy } = await import(B + "bodyComposition.js");
+const { estimateBodyComposition, classifyPathFromBf, estimateFfmi } = await import(B + "bodyComposition.js");
 const { planejarFases } = await import(B + "planoDeFases.js");
 const { computeMuscleTargets, buildSplit, ajusteDeFadigaPara, diasEfetivosPara } = await import(B + "trainingSplitBuilder.js");
 const { landmarkFor, VOLUME_LANDMARKS } = await import(B + "trainingVolume.js");

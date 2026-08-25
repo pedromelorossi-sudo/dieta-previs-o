@@ -552,8 +552,24 @@ export function classifyPathFromBf(
    *
    * A recomposição é prescrita como NORMOCALÓRICO: o déficit vem do próprio
    * tecido adiposo, que é abundante nesse perfil, não da comida. */
+  /* A janela só substitui um CORTE DE VERDADE, nunca um superávit em curso.
+   *
+   * A condição era `cutFraction > 0`, e isso disparava também na rampa de SAÍDA
+   * de um bulking — momento em que a fração de corte já é positiva mas a
+   * prescrição líquida ainda é superávit. Efeito medido: alguém com 16,5%BF e
+   * FFMI 18,8 vindo de bulking virava "normocalórico"; o ciclo seguinte gravava
+   * essa fase, a janela reabria, e a pessoa nunca mais saía — 24 meses de
+   * manutenção para ganhar 0,7kg. Exatamente a patologia que a histerese existe
+   * para impedir, recriada por outro caminho.
+   *
+   * Pior: quem tinha MAIS margem até o teto natural era justamente quem era
+   * jogado fora do superávit (FFMI 20,5 continuava ganhando; 18,8 não).
+   *
+   * Usar o superávit líquido resolve: só é recomposição quando a prescrição
+   * seria negativa. */
+  const surplusLiquido = MAX_SURPLUS * bulkFraction + MAX_DEFICIT * cutFraction;
   const dentroDaJanelaDeRecomposicao =
-    ffmi != null && ffmi < FFMI_ATE_ONDE_VALE_RECOMPOR[sex] && cutFraction > 0;
+    ffmi != null && ffmi < FFMI_ATE_ONDE_VALE_RECOMPOR[sex] && surplusLiquido < 0;
 
   if (dentroDaJanelaDeRecomposicao) {
     return {
@@ -567,7 +583,7 @@ export function classifyPathFromBf(
     };
   }
 
-  const surplusDeCada = MAX_SURPLUS * bulkFraction + MAX_DEFICIT * cutFraction;
+  const surplusDeCada = surplusLiquido;
   let surplusPercent = surplusDeCada;
 
   const reasonCore =
