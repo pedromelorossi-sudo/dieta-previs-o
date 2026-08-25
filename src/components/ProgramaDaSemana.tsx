@@ -9,16 +9,9 @@
  * programa gerado pelo algoritmo, a página renderiza igual.
  */
 
-import { TrainingSession, ReserveType } from "@/lib/trainingBuilder";
+import { TrainingSession } from "@/lib/trainingBuilder";
 import { exerciseById } from "@/lib/exerciseLibrary";
 import { SectionHeading } from "@/components/apple";
-
-const RESERVE_LABEL: Record<ReserveType, string> = {
-  warmup: "Aquecimento",
-  feeder: "Aproximação",
-  work: "Trabalho",
-  topset: "Top set",
-};
 
 function seriesEfetivas(sessao: TrainingSession): number {
   return sessao.items.reduce(
@@ -74,21 +67,61 @@ export function ProgramaDaSemana({ sessions }: { sessions: TrainingSession[] }) 
                       QUANTO, não a taxonomia por trás da escolha. A análise por
                       grupo continua existindo, mais abaixo na página. */}
                   <span className="text-[15px] font-medium">{ex?.name ?? item.exerciseId}</span>
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] tabular-nums text-muted">
-                    {item.blocks.map((b, k) => (
-                      <span key={k}>
-                        <span className="text-neutral">{RESERVE_LABEL[b.reserveType]}</span> {b.sets}×{b.repRange}
-                        {b.rirTarget != null && <span className="text-neutral"> · RIR {b.rirTarget}</span>}
-                        {b.restSeconds != null && (
-                          <span className="text-neutral">
-                            {" "}
-                            · {b.restSeconds >= 60 ? `${b.restSeconds / 60} min` : `${b.restSeconds}s`}
-                          </span>
+                  {/* SÉRIES × REPETIÇÕES EM PRIMEIRO PLANO.
+                      Antes, aquecimento e trabalho saíam lado a lado no mesmo
+                      tamanho e na mesma cor — "Aquecimento 2×6-10 · RIR 4 · 90s
+                      Trabalho 4×6-10 · RIR 2 · 3 min" —, e o número que a pessoa
+                      precisa para executar ficava perdido entre quatro outros.
+                      Agora o bloco de trabalho vem grande e sozinho; RIR e
+                      descanso descem para uma linha de apoio; e o aquecimento
+                      vira nota discreta, porque é preparação e não volume. */}
+                  {(() => {
+                    const trabalho = item.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset");
+                    const aquecimento = item.blocks.filter((b) => b.reserveType === "warmup" || b.reserveType === "feeder");
+                    const seriesTrabalho = trabalho.reduce((n, b) => n + b.sets, 0);
+                    const faixa = trabalho[0]?.repRange;
+                    const rir = trabalho.find((b) => b.rirTarget != null)?.rirTarget;
+                    const descanso = trabalho.find((b) => b.restSeconds != null)?.restSeconds;
+                    const carga = trabalho.find((b) => b.loadKg != null)?.loadKg;
+                    const seriesAquecimento = aquecimento.reduce((n, b) => n + b.sets, 0);
+                    return (
+                      <>
+                        {seriesTrabalho > 0 && (
+                          <div className="mt-1 text-[17px] font-semibold tabular-nums tracking-[-0.01em]">
+                            {seriesTrabalho}{" "}
+                            <span className="text-[13.5px] font-normal text-neutral">
+                              {seriesTrabalho === 1 ? "série de" : "séries de"}
+                            </span>{" "}
+                            {faixa}{" "}
+                            <span className="text-[13.5px] font-normal text-neutral">repetições</span>
+                            {carga != null && <span className="text-[15px] font-medium text-accent"> · {carga} kg</span>}
+                          </div>
                         )}
-                        {b.loadKg != null && <span className="text-foreground"> · {b.loadKg} kg</span>}
-                      </span>
-                    ))}
-                  </div>
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] tabular-nums text-muted">
+                          {rir != null && (
+                            <span>
+                              deixando <span className="text-foreground">{rir}</span>{" "}
+                              {rir === 1 ? "repetição" : "repetições"} na reserva
+                            </span>
+                          )}
+                          {descanso != null && (
+                            <span>
+                              descanso{" "}
+                              <span className="text-foreground">
+                                {descanso >= 60 ? `${descanso / 60} min` : `${descanso}s`}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                        {seriesAquecimento > 0 && (
+                          <p className="mt-1 text-[12.5px] text-neutral">
+                            antes: {seriesAquecimento} {seriesAquecimento === 1 ? "série" : "séries"} de aquecimento, sem
+                            chegar perto da falha
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               );
             })}

@@ -63,15 +63,39 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "crossover-polia-alta-ajoelhado", name: "Crossover Polia Alta Ajoelhado", primaryMuscle: "peito", secondaryMuscles: [], pattern: "isolado", movementFamily: "crossover", equipment: "polia" },
 
   // ombro
-  { id: "desenvolvimento-halteres-75", name: "Desenvolvimento com Halteres (75°)", primaryMuscle: "ombro", secondaryMuscles: ["triceps"], pattern: "composto", movementFamily: "desenvolvimento", equipment: "halteres" },
-  // Segundo composto de ombro. Com só o desenvolvimento com halteres no
-  // catálogo, o grupo repetia o MESMO exercício nos dois dias da semana — a
-  // regra de "slot único prefere composto" não tinha alternativa para oferecer.
-  { id: "desenvolvimento-maquina", name: "Desenvolvimento na Máquina", primaryMuscle: "ombro", secondaryMuscles: ["triceps"], pattern: "composto", movementFamily: "desenvolvimento-maquina", equipment: "maquina" },
+  /* SEM DESENVOLVIMENTO, por decisão do Pedro.
+   *
+   * `desenvolvimento-halteres-75` e `desenvolvimento-maquina` saíram do
+   * catálogo. O raciocínio: o deltoide anterior já recebe volume suficiente de
+   * todo supino — ele é sinergista em cada série de peito —, então prescrever
+   * desenvolvimento é somar volume direto num grupo que já está servido, com
+   * custo articular de ombro e de tríceps que não se paga.
+   *
+   * A consequência aceita: "ombro" fica só com elevação lateral, que é
+   * trabalho de deltoide MÉDIO — a porção que o supino não cobre. É
+   * exatamente a divisão pretendida: anterior pelo peito, médio direto,
+   * posterior no seu próprio grupo.
+   *
+   * O teto do grupo cai junto (2 exercícios × MAX_SETS_PER_EXERCISE), e isso é
+   * intencional: a meta de ombro passa a descrever só o deltoide médio. */
   { id: "elevacao-lateral-halteres", name: "Elevação Lateral com Halteres", primaryMuscle: "ombro", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-lateral", equipment: "halteres" },
-  { id: "elevacao-lateral-unilateral-polia-90", name: "Elevação Lateral Unilateral na Polia (90°)", primaryMuscle: "ombro", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-lateral", equipment: "polia", unilateral: true },
+  /* Família própria, separada da elevação com halteres.
+   *
+   * As duas eram "elevacao-lateral", e a regra de variedade proíbe dois
+   * exercícios do mesmo grupo e mesma família no mesmo dia — o que impedia
+   * justamente o arranjo pedido (as duas elevações no Push e as duas no Upper).
+   * Separar é defensável e não é truque para driblar a regra: no halter a
+   * resistência é máxima no fim da amplitude e some embaixo; na polia a linha
+   * de tração mantém carga no início, onde o halter não carrega nada. */
+  { id: "elevacao-lateral-unilateral-polia-90", name: "Elevação Lateral Unilateral na Polia (90°)", primaryMuscle: "ombro", secondaryMuscles: [], pattern: "isolado", movementFamily: "elevacao-lateral-polia", equipment: "polia", unilateral: true },
   { id: "crucifixo-inverso-maquina", name: "Crucifixo Inverso Máquina", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "deltoide-posterior", equipment: "maquina" },
-  { id: "peck-deck-invertido-pronado", name: "Peck Deck Invertido Pegada Pronada", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "deltoide-posterior", equipment: "maquina" },
+  /* Família PRÓPRIA, e não "deltoide-posterior" como o crucifixo inverso.
+   *
+   * Com a mesma família, usar um bloqueava o outro na semana inteira — e o
+   * segundo dia de deltoide posterior caía no Face Pull. Como o Pedro prefere
+   * crucifixo invertido ao face pull, separar as famílias é o que faz as duas
+   * exposições semanais serem as duas variações de crucifixo. */
+  { id: "peck-deck-invertido-pronado", name: "Peck Deck Invertido Pegada Pronada", primaryMuscle: "deltoide_posterior", secondaryMuscles: ["costas"], pattern: "isolado", movementFamily: "peck-deck-invertido", equipment: "maquina" },
 
   // tríceps
   { id: "triceps-polia-barra-w", name: "Tríceps na Polia Barra W", primaryMuscle: "triceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-polia", equipment: "polia" },
@@ -93,14 +117,23 @@ export const EXERCISE_LIBRARY: Exercise[] = [
   { id: "remada-unilateral-polia", name: "Remada Unilateral na Polia", primaryMuscle: "costas", secondaryMuscles: ["biceps"], pattern: "composto", movementFamily: "remada-horizontal", equipment: "polia", unilateral: true },
   { id: "remada-neutra-halteres-peito-apoiado", name: "Remada Neutra com Halteres, Peito Apoiado no Banco", primaryMuscle: "costas", secondaryMuscles: ["biceps"], pattern: "composto", movementFamily: "remada-horizontal", equipment: "halteres" },
 
-  // bíceps / antebraço
+  /* bíceps — SEM ISOLADO DE ANTEBRAÇO, por decisão do Pedro.
+   *
+   * `rosca-inversa-livre-barra-w` e `extensao-punho-halteres` saíram do
+   * catálogo, e "antebraco" saiu dos templates. Mesmo raciocínio do
+   * desenvolvimento: o antebraço trabalha em toda puxada, remada e rosca —
+   * é o elo que segura a barra na sessão inteira —, então série direta
+   * acrescenta fadiga de preensão sem estímulo novo, e a fadiga de preensão
+   * é justamente a que limita as remadas do dia seguinte.
+   *
+   * O grupo continua existindo em `MuscleGroup` e no volume: com catálogo
+   * vazio ele fica com teto 0, e o `reason` já diz que o estímulo vem
+   * indireto — mesma mecânica que a lombar. */
   { id: "rosca-direta-barra-w", name: "Rosca Direta com a Barra W", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-direta", equipment: "barra" },
   { id: "rosca-scott-unilateral-halter", name: "Rosca Scott Unilateral com Halter", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-scott", equipment: "halter", unilateral: true },
   { id: "rosca-direta-polia-baixa-corda", name: "Rosca Direta na Polia Baixa com Corda", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-direta", equipment: "polia" },
   { id: "rosca-martelo-halteres", name: "Rosca Martelo com Halteres", primaryMuscle: "biceps", secondaryMuscles: ["antebraco"], pattern: "isolado", movementFamily: "rosca-neutra", equipment: "halteres" },
   { id: "rosca-scott-barra-w", name: "Rosca Scott na Barra W", primaryMuscle: "biceps", secondaryMuscles: [], pattern: "isolado", movementFamily: "rosca-apoiada", equipment: "barra" },
-  { id: "rosca-inversa-livre-barra-w", name: "Rosca Inversa Livre com Barra W", primaryMuscle: "antebraco", secondaryMuscles: ["biceps"], pattern: "isolado", movementFamily: "rosca-inversa", equipment: "barra" },
-  { id: "extensao-punho-halteres", name: "Extensão de Punho com Halteres", primaryMuscle: "antebraco", secondaryMuscles: [], pattern: "isolado", movementFamily: "extensao-punho", equipment: "halteres" },
 
   // quadríceps
   { id: "agachamento-livre", name: "Agachamento Livre", primaryMuscle: "quadriceps", secondaryMuscles: ["gluteo", "lombar"], pattern: "composto", movementFamily: "agachamento", equipment: "barra" },

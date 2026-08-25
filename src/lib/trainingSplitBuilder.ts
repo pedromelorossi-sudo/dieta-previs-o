@@ -562,6 +562,15 @@ export function computeMuscleTargets(
         .filter((d) => d.muscles.includes(sl.landmark.muscle))
         .map((d) => ({ label: d.label, sets: 1 }));
     }
+    /* Ombro reparte IGUAL entre os dias, não proporcional.
+     *
+     * O par fixo exige no mínimo 2+2 séries no dia para caber. A repartição
+     * assimétrica dava 5 no Push e 3 no Upper, e com 3 séries só cabe um
+     * exercício — o Upper ficava com metade do par. Peso igual devolve 4+4,
+     * que é o arranjo pedido. */
+    if (sl.landmark.muscle === "ombro") {
+      fatias = fatias.map((f) => ({ label: f.label, sets: 1 }));
+    }
     fatiaFinalPorMusculo.set(sl.landmark.muscle, distribuirPorDia(sl.sets, fatias));
   }
 
@@ -702,7 +711,7 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
   ],
   3: [
     { label: "Push", muscles: ["peito", "ombro", "triceps"] },
-    { label: "Pull", muscles: ["costas", "deltoide_posterior", "biceps", "antebraco", "lombar"] },
+    { label: "Pull", muscles: ["costas", "deltoide_posterior", "biceps", "lombar"] },
     { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
   ],
   4: [
@@ -720,7 +729,7 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
     // devolvendo a segunda exposição semanal a todo mundo. Nenhum grupo fica
     // com frequência 1 — que é o que sustenta metas perto do MAV/MRV.
     { label: "Push", muscles: ["peito", "ombro", "triceps"] },
-    { label: "Pull", muscles: ["costas", "deltoide_posterior", "biceps", "antebraco", "lombar"] },
+    { label: "Pull", muscles: ["costas", "deltoide_posterior", "biceps", "lombar"] },
     { label: "Legs", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
     /* Upper e Lower do arranjo de 5 dias são SUPLEMENTARES: devolvem a segunda
      * exposição semanal, não repetem o dia inteiro. O Upper carregava 7 grupos
@@ -741,10 +750,10 @@ const SPLIT_TEMPLATES: Record<number, SplitDayTemplate[]> = {
   ],
   6: [
     { label: "Push A", muscles: ["peito", "ombro", "triceps"] },
-    { label: "Pull A", muscles: ["costas", "deltoide_posterior", "biceps", "antebraco"] },
+    { label: "Pull A", muscles: ["costas", "deltoide_posterior", "biceps"] },
     { label: "Legs A", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
     { label: "Push B", muscles: ["peito", "ombro", "triceps"] },
-    { label: "Pull B", muscles: ["costas", "deltoide_posterior", "biceps", "antebraco", "lombar"] },
+    { label: "Pull B", muscles: ["costas", "deltoide_posterior", "biceps", "lombar"] },
     { label: "Legs B", muscles: ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"] },
   ],
 };
@@ -892,8 +901,19 @@ function pickExercisesForMuscle(
    * `floor` consolida: 4 séries viram um exercício de 4, 6 viram dois de 3. O
    * ponto fraco continua no `ceil`, porque para ele mais ângulos É o objetivo —
    * é a mesma assimetria que faz a prioridade valer alguma coisa. */
+  /* OMBRO É PAR FIXO: elevação lateral com halteres + elevação lateral na polia,
+   * as duas em TODO dia em que o ombro aparece (Push e Upper).
+   *
+   * Por decisão do Pedro, e ele autorizou repetir exercício na semana — que era
+   * o que impedia o arranjo: a regra de variedade semanal reservava o segundo
+   * exercício para o outro dia, e cada dia acabava com um só.
+   *
+   * Fica como exceção declarada em vez de emergir da divisão de séries porque é
+   * uma escolha de prescrição, não um resultado do cálculo: com 3 séries no dia,
+   * `ceil(3/4)` daria 1 exercício e o par não aconteceria. */
   const numExercises = Math.max(
-    1,
+    // piso: o par fixo de ombro acontece mesmo quando a divisão de séries pediria 1
+    muscle === "ombro" ? Math.min(2, rotated.length, Math.floor(setsNeeded / 2)) : 1,
     Math.min(
       rotated.length,
       maxExercises,
@@ -1096,7 +1116,7 @@ function pickExercisesForMuscle(
  * `Corpo inteiro` aceitam o que couber na metade do corpo que nomeiam. */
 function diaAceita(label: string, muscle: MuscleGroup): boolean {
   const PUSH: MuscleGroup[] = ["peito", "ombro", "triceps"];
-  const PULL: MuscleGroup[] = ["costas", "deltoide_posterior", "biceps", "antebraco", "lombar"];
+  const PULL: MuscleGroup[] = ["costas", "deltoide_posterior", "biceps", "lombar"];
   const LEGS: MuscleGroup[] = ["quadriceps", "posterior_coxa", "gluteo", "panturrilha"];
   const base = label.replace(/ [AB]$/, "");
   if (base === "Push") return PUSH.includes(muscle);
@@ -1167,15 +1187,65 @@ export interface AjusteDeFadiga {
  * perto de um agachamento, então não competir pelo mesmo orçamento é defensável
  * além de ser o que foi pedido. */
 const ABDOMINAL_SESSOES_POR_SEMANA = 2;
+/** Um exercício só, sempre o mesmo: abdominal na polia com corda. */
+const ABDOMINAL_EXERCICIO_ID = "abdominal-polia-corda";
 const ABDOMINAL_SERIES = 3;
 const ABDOMINAL_REPS = "12";
 const ABDOMINAL_DESCANSO_S = 60;
 
+/* ── AGONISTA ↔ ANTAGONISTA ─────────────────────────────────────────────────
+ *
+ * Pares de ação oposta na mesma articulação. Intercalar os dois lados deixa o
+ * grupo anterior descansando enquanto o oposto trabalha: a sessão fica mais
+ * curta com o MESMO descanso por grupo, e o antagonista fresco costuma render
+ * mais força no exercício seguinte.
+ *
+ * O par ombro↔deltoide posterior é aproximado — elevação lateral é abdução, não
+ * flexão —, mas na prática são as duas faces do deltoide e alternar entre elas
+ * dá o mesmo efeito de rodízio. */
+const ANTAGONISTA: Partial<Record<MuscleGroup, MuscleGroup>> = {
+  peito: "costas",
+  costas: "peito",
+  biceps: "triceps",
+  triceps: "biceps",
+  quadriceps: "posterior_coxa",
+  posterior_coxa: "quadriceps",
+  ombro: "deltoide_posterior",
+  deltoide_posterior: "ombro",
+  abdominal: "lombar",
+  lombar: "abdominal",
+};
+
+/** Reordena mantendo o primeiro item onde está e, a cada passo, preferindo o
+ * antagonista do anterior. Quando não há antagonista disponível, segue a ordem
+ * original — a intercalação é uma preferência, não uma regra que possa
+ * reprovar um exercício ou mudar o volume de alguém. */
+function intercalarAntagonistas(itens: TrainingItem[]): TrainingItem[] {
+  if (itens.length <= 2) return itens;
+
+  const restantes = [...itens];
+  const saida: TrainingItem[] = [restantes.shift() as TrainingItem];
+
+  while (restantes.length > 0) {
+    const anterior = exerciseById(saida[saida.length - 1].exerciseId)?.primaryMuscle;
+    const alvo = anterior ? ANTAGONISTA[anterior] : undefined;
+    const i = alvo ? restantes.findIndex((it) => exerciseById(it.exerciseId)?.primaryMuscle === alvo) : -1;
+    saida.push(restantes.splice(i >= 0 ? i : 0, 1)[0]);
+  }
+  return saida;
+}
+
 function adicionarAbdominal(sessoes: TrainingSession[]): TrainingSession[] {
   if (sessoes.length === 0) return sessoes;
 
-  const catalogo = exercisesByMuscle("abdominal");
-  if (catalogo.length === 0) return sessoes;
+  /* SEMPRE abdominal na polia com corda, por decisão do Pedro — e nunca
+     prancha. A prancha é isometria de anti-extensão: sustenta posição, não
+     carrega progressão. Num programa de hipertrofia o abdominal precisa de
+     carga que sobe, e a polia é o único item do catálogo em que dá para somar
+     peso semana a semana. Antes o bloco rodava o catálogo e caía em prancha e
+     abdominal no solo. */
+  const exercicio = exerciseById(ABDOMINAL_EXERCICIO_ID);
+  if (!exercicio) return sessoes;
 
   /* Espalha as sessões de abdominal pela semana em vez de empilhar nos
      primeiros dias: com 5 dias, cai no 1º e no 3º, não no 1º e no 2º. */
@@ -1185,12 +1255,8 @@ function adicionarAbdominal(sessoes: TrainingSession[]): TrainingSession[] {
     diasComAbdominal.add(Math.round((i * sessoes.length) / quantas));
   }
 
-  let voltaDoCatalogo = 0;
   return sessoes.map((sessao, i) => {
     if (!diasComAbdominal.has(i)) return sessao;
-    // exercício diferente em cada sessão, para as duas não serem iguais
-    const exercicio = catalogo[voltaDoCatalogo % catalogo.length];
-    voltaDoCatalogo++;
     return {
       ...sessao,
       items: [
@@ -1383,10 +1449,13 @@ export function buildSplit(
      *
      * `sort` estável: a ordem de prioridade entre grupos é preservada dentro de
      * cada classe. */
-    const ordenados = items
+    const porClasse = items
       .map((it, ordem) => ({ it, ordem, isolado: exerciseById(it.exerciseId)?.pattern === "isolado" ? 1 : 0 }))
-      .sort((a, b) => a.isolado - b.isolado || a.ordem - b.ordem)
-      .map((x) => x.it);
+      .sort((a, b) => a.isolado - b.isolado || a.ordem - b.ordem);
+
+    const ordenados = intercalarAntagonistas(porClasse.filter((x) => x.isolado === 0).map((x) => x.it)).concat(
+      intercalarAntagonistas(porClasse.filter((x) => x.isolado === 1).map((x) => x.it))
+    );
 
     return { label: day.label, items: ordenados };
   });
