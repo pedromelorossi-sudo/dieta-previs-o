@@ -295,12 +295,37 @@ export function estimateFfmi(leanMassKg: number, heightCm: number): number {
  * é isso que impede a projeção de prometer 0,9kg de músculo por mês indefinidamente.
  * Os valores são práticos (não há tabela publicada por faixa de FFMI): ~1%/mês da massa magra para
  * iniciante, caindo pra ~0,3% perto do teto. */
+/* Teto de construção de massa magra por mês — RAMPA, não escada.
+ *
+ * Era uma escada de quatro degraus (0,9 / 0,6 / 0,35 / 0,2). O problema não era
+ * a ordem de grandeza, era a descontinuidade: com FFMI 20,99 a pessoa
+ * construía 0,60 kg/mês e com 21,01 construía 0,35 — uma queda de 42% ao
+ * cruzar uma linha que existe só no código. Na projeção de 24 meses isso
+ * aparecia como o ganho despencando do mês 19 para o 20 sem nada ter mudado
+ * no corpo.
+ *
+ * A calibração: um usuário real de 1,90m e FFMI 20,0 entregou 0,71 kg de magra
+ * por mês (79→85kg em 5 meses). A escada dava teto de 0,60 — ou seja, o
+ * "limite" estava ABAIXO do que ele já havia demonstrado, o que faz dele uma
+ * trava e não um teto. A rampa devolve ~0,83 nesse ponto: acima do observado,
+ * como um teto deve ser.
+ *
+ * A forma continua vindo de Kouri et al. 1995 (FFMI natural com teto em ~25):
+ * a capacidade cai linearmente conforme a margem até o teto se fecha, e o piso
+ * de 0,1 existe porque mesmo perto do limite ainda há adaptação residual. */
+const FFMI_TETO_NATURAL = 25;
+const FFMI_INICIO_DA_DESACELERACAO = 19;
+const GANHO_MAGRO_MAX_KG_MES = 1.0;
+const GANHO_MAGRO_MIN_KG_MES = 0.1;
+
 export function monthlyLeanGainCeilingKg(leanMassKg: number, heightCm: number): number {
   const ffmi = estimateFfmi(leanMassKg, heightCm);
-  if (ffmi < 19) return 0.9;
-  if (ffmi < 21) return 0.6;
-  if (ffmi < 23) return 0.35;
-  return 0.2;
+  const margemRestante =
+    (FFMI_TETO_NATURAL - ffmi) / (FFMI_TETO_NATURAL - FFMI_INICIO_DA_DESACELERACAO);
+  return Math.max(
+    GANHO_MAGRO_MIN_KG_MES,
+    Math.min(GANHO_MAGRO_MAX_KG_MES, GANHO_MAGRO_MAX_KG_MES * margemRestante)
+  );
 }
 
 export const PATH_LABEL: Record<DietPath, string> = {
