@@ -783,10 +783,18 @@ export default function PrevisaoIaPage() {
 
           {isFirstCycle && (
             <div className="grid gap-4 lg:grid-cols-2 mt-4">
-              <Field label="Quantas kcal você vem comendo, em média? (opcional)">
+              {/* DEIXOU DE SER OPCIONAL.
+                  Este par — quanto você come e como o peso responde — é o único
+                  dado que corrige o erro da fórmula, e ele é grande: num caso
+                  real, Mifflin devolveu 3.147 kcal para quem ganhava peso
+                  comendo 2.970, ou seja, 400 kcal acima do TDEE verdadeiro.
+                  Enquanto o campo era opcional, quem pulava recebia uma
+                  prescrição construída sobre a média populacional. */}
+              <Field label="Quantas kcal você vem comendo, em média?" hint="Se não souber, deixe em branco — mas então a conta usa só a fórmula, que erra 10-15% e pode estar centenas de kcal fora para você.">
                 <input
                   type="number"
                   step="1"
+                  required
                   value={currentIntakeKcal}
                   onChange={(e) => setCurrentIntakeKcal(e.target.value)}
                   className="input"

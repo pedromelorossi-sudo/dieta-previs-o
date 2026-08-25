@@ -562,7 +562,33 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
     // O gasto estimado vai na resposta (`cardioKcalPerDay`) pra ficar visível, e a partir do 2º ciclo o
     // TDEE empírico absorve sozinho o cardio que foi REALMENTE feito — medido pela resposta do peso, não
     // presumido pela prescrição.
-    const blendedTdee = empiricalTdee != null ? comp.tdee * 0.3 + empiricalTdee * 0.7 : comp.tdee;
+    /* TETO DE SEGURANÇA: quando a fórmula e o dado real divergem muito, o dado
+     * real MANDA — não se faz média entre uma medição e um palpite.
+     *
+     * Caso que motivou isto, com dados reais: homem de 1,90m e 85kg comendo
+     * 2.970 kcal e GANHANDO peso. Pela resposta do peso, o TDEE dele está
+     * abaixo de 2.970 (ganhar significa comer acima da manutenção). A fórmula
+     * devolveu 3.147 — PAL de 1,64 contra o 1,43 que a vida dele mostra. O erro
+     * de ±10-15% do Mifflin, que o comentário acima já reconhece, apareceu
+     * inteiro.
+     *
+     * Com o blend de 30/70, ~130 kcal do erro da fórmula ainda passariam para a
+     * prescrição. Acima de 12% de divergência isso deixa de ser ruído e vira
+     * sinal de que a fórmula não descreve esta pessoa: aí ela sai da conta e a
+     * divergência é EXIBIDA, em vez de ser diluída numa média que esconde as
+     * duas informações. */
+    const DIVERGENCIA_QUE_DESQUALIFICA_A_FORMULA = 0.12;
+    let formulaDescartadaPorDivergencia = false;
+    let blendedTdee = comp.tdee;
+    if (empiricalTdee != null) {
+      const divergencia = Math.abs(comp.tdee - empiricalTdee) / empiricalTdee;
+      if (divergencia > DIVERGENCIA_QUE_DESQUALIFICA_A_FORMULA) {
+        blendedTdee = empiricalTdee;
+        formulaDescartadaPorDivergencia = true;
+      } else {
+        blendedTdee = comp.tdee * 0.3 + empiricalTdee * 0.7;
+      }
+    }
 
     const firstCycleSafety = applySafetyLimits({
       proposedKcal: blendedTdee * (1 + comp.surplusPercent),
@@ -607,10 +633,11 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
           : `Estimativa teórica (sem histórico ainda): mantendo esse padrão, projeção de peso em 4 semanas é ${(oneMonthMid - oneMonthDelta).toFixed(1)}–${(oneMonthMid + oneMonthDelta).toFixed(1)}kg. Vai ficar mais precisa a partir do 2º ciclo, com dados reais.`,
     };
 
-    const tdeeNote =
-      empiricalTdee != null
+    const tdeeNote = formulaDescartadaPorDivergencia
+      ? `TDEE de ${blendedTdee.toFixed(0)}kcal, vindo da SUA resposta real: comendo ${currentIntakeKcal}kcal com o peso ${weightTrend}. A fórmula devolveu ${comp.tdee.toFixed(0)}kcal — ${(Math.abs(comp.tdee - empiricalTdee!) / empiricalTdee! * 100).toFixed(0)}% de diferença, alto demais para fazer média. Quando os dois discordam tanto, quem descreve você é o que aconteceu com o seu peso, não a média populacional da fórmula.`
+      : empiricalTdee != null
         ? `TDEE calculado com peso 30% fórmula (${comp.tdee.toFixed(0)}kcal) / 70% prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
-        : `TDEE calculado só pela fórmula (${comp.tdee.toFixed(0)}kcal) — informe quanto você vem comendo e como o peso responde pra deixar essa conta mais realista.`;
+        : `TDEE calculado SÓ pela fórmula (${comp.tdee.toFixed(0)}kcal), que tem erro documentado de 10-15% e pode estar centenas de kcal fora para você. Informe quanto vem comendo e como o peso responde — é o único jeito de essa conta descrever você em vez da média.`;
 
     // O planejamento de fases roda JÁ no primeiro ciclo — é o principal produto da primeira análise:
     // a pessoa manda as fotos e recebe o roteiro de onde vai chegar e o que dispara cada mudança, não

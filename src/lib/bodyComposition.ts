@@ -552,10 +552,25 @@ export function classifyPathFromBf(
  * peso PROJETADO pelo peso MEDIDO de hoje e realimentava o resultado. Isso criava uma catraca — em
  * corte sustentado a proteína encolhia sozinha a cada ciclo, sem ninguém ter decidido isso. Proteína e
  * gordura são decisões de estratégia, não séries temporais a extrapolar. */
+/* Gordura por estratégia, não fixa em 0,7 g/kg.
+ *
+ * 0,7 para todo mundo produzia 59 g num homem de 85 kg — abaixo da faixa usual
+ * de 0,8-1,0 g/kg para atleta natural, e o carboidrato, que é só o resto da
+ * conta, estourava em 559 g.
+ *
+ * A gordura sobe no DÉFICIT e desce no superávit de propósito. No déficit ela é
+ * o macro que mais importa proteger: a produção de hormônios esteroides depende
+ * dela, e é justamente no corte que a testosterona cai — Mitchell et al. 2018
+ * mediu queda de 16,4 para 10,1 nmol/L numa preparação, APESAR de proteína
+ * alta. No superávit há energia sobrando de qualquer forma, e o carboidrato
+ * rende mais para o desempenho no treino.
+ *
+ * A proteína segue a lógica inversa e já seguia: mais alta no corte, onde
+ * preservar massa magra é todo o objetivo (Helms et al. 2014). */
 export function macroTargetsForStrategy(path: DietPath): { proteinPerKg: number; fatPerKg: number } {
   return {
     proteinPerKg: path === "cutting" ? 2.2 : path === "bulking" ? 1.9 : 2.0,
-    fatPerKg: 0.7,
+    fatPerKg: path === "cutting" ? 1.0 : path === "bulking" ? 0.8 : 0.9,
   };
 }
 
