@@ -8,8 +8,6 @@ import {
   COOKING_LABEL,
   CookingTime,
   DEFAULT_PREFERENCES,
-  DietGoal,
-  GOAL_LABEL,
   RESTRICTION_LABEL,
   Restriction,
   UserPreferences,
@@ -96,16 +94,18 @@ export default function QuestionarioPage() {
       </div>
 
       <div className="card p-6 space-y-6">
+        {/* A PERGUNTA "OBJETIVO PRINCIPAL" SAIU.
+            Quem decide cutting, bulking ou manutenção é o algoritmo, a partir
+            do %BF lido nas fotos e da fase do ciclo anterior — nunca foi a
+            resposta do usuário. `dietGoal` era coletado e não entrava em
+            `classifyPathFromBf`, em `planoDeFases` nem em lugar nenhum da
+            decisão.
+
+            Perguntar e ignorar é pior que não perguntar: um usuário respondeu
+            "manutenção" e recebeu um déficit de 18%, sem nada na tela ligando
+            uma coisa à outra. A estratégia decidida aparece em /previsao-ia com
+            o motivo junto, que é onde ela deve ser explicada. */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Objetivo principal">
-            <select value={prefs.dietGoal} onChange={(e) => update("dietGoal", e.target.value as DietGoal)} className="input">
-              {(Object.keys(GOAL_LABEL) as DietGoal[]).map((g) => (
-                <option key={g} value={g}>
-                  {GOAL_LABEL[g]}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Nível de atividade física">
             <select
               value={prefs.activityLevel}

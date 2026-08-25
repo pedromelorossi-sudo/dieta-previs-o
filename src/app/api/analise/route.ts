@@ -19,6 +19,7 @@ interface CycleRow {
   weight_kg: number;
   body_fat_percent: number | null;
   kcal: number;
+  path?: string | null;
   protein_g: number;
   fat_g: number;
   carb_g: number;
@@ -68,9 +69,16 @@ function buildSummary(
     );
   }
 
+  /* Estratégia real: vem do `path` gravado no último ciclo pelo algoritmo,
+     não de objetivo autodeclarado (que saiu do questionário). */
+  const estrategiaAtual = [...cycles].reverse().find((c) => c.path)?.path ?? null;
+
   if (prefs) {
     parts.push(
-      `\nPerfil: objetivo ${prefs.diet_goal}, atividade ${prefs.activity_level}, restrições: ${prefs.restrictions?.length ? prefs.restrictions.join(", ") : "nenhuma"}.`
+      /* Sem "objetivo": ele era autodeclarado e não decidia nada. A estratégia
+         real está no `path` do último ciclo, gravado pelo algoritmo. */
+      `\nPerfil: atividade ${prefs.activity_level}, restrições: ${prefs.restrictions?.length ? prefs.restrictions.join(", ") : "nenhuma"}.` +
+        (estrategiaAtual ? ` Estratégia decidida pelo algoritmo no último ciclo: ${estrategiaAtual}.` : "")
     );
   }
 
