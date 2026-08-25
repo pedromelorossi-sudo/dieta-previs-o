@@ -91,10 +91,15 @@ export default function FotosPage() {
 
   return (
     <GridPage>
+      {/* O texto anterior dizia que o %BF vinha do método da Marinha "e não por
+          análise da imagem" — o oposto da premissa do app. A estimativa central
+          é a leitura das fotos, que é aferida contra exame e corrige o próprio
+          viés ao longo dos ciclos. A circunferência é uma segunda opinião
+          barata, útil porque não depende de foto nem de chamada de IA. */}
       <PageHero
         eyebrow="Progresso"
         title="Fotos de progresso"
-        lede="Anexe uma foto por data para comparar sua evolução visualmente. O %BF é calculado pelo método da Marinha dos EUA a partir de medidas de circunferência — não por análise da imagem."
+        lede="Anexe uma foto por data para comparar sua evolução visualmente. A estimativa de %BF do app vem da análise das fotos, em Nova análise — e é conferida contra exame para se calibrar. As circunferências abaixo são opcionais: dão uma segunda leitura, pelo método da Marinha dos EUA, para comparar."
       />
 
       <form onSubmit={handleSubmit} className="space-y-[clamp(24px,4vw,36px)]">

@@ -1329,6 +1329,58 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
             )}
           </div>
 
+          {/* LEITURA POR GRUPO MUSCULAR.
+              A IA sempre produziu isto e o ciclo sempre guardou — mas a tela
+              nunca mostrou. Era o dado que decide QUAL grupo recebe mais volume
+              no gerador de treino, tomado sem que a pessoa pudesse ver nem
+              contestar a leitura que o originou. Mesma classe do %BF: número
+              que muda a prescrição tem de aparecer com o raciocínio junto. */}
+          {result.muscleGroupAssessment && result.muscleGroupAssessment.length > 0 && (
+            <div className="card p-5">
+              <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
+                <IconScale className="h-4 w-4" /> Leitura por grupo muscular
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                O que as fotos mostram sobre cada grupo em relação ao resto do seu físico. Quem aparece como
+                &quot;atrás dos outros&quot; entra como ponto fraco no treino: mais séries, mais exercícios e entrada no
+                começo da sessão.
+              </p>
+              <div className="mt-4 space-y-3">
+                {result.muscleGroupAssessment.map((g) => {
+                  const cor =
+                    g.relativeDevelopment === "atras_dos_outros"
+                      ? "text-warn"
+                      : g.relativeDevelopment === "destaque"
+                        ? "text-accent"
+                        : "text-neutral";
+                  const rotulo =
+                    g.relativeDevelopment === "atras_dos_outros"
+                      ? "atrás dos outros"
+                      : g.relativeDevelopment === "destaque"
+                        ? "destaque"
+                        : "proporcional";
+                  return (
+                    <div key={g.muscle} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <span className="text-[15px] font-medium capitalize">{g.muscle.replace(/_/g, " ")}</span>
+                        <span className={`text-[13px] ${cor}`}>
+                          {rotulo}
+                          <span className="ml-2 text-neutral">confiança {g.confidence}</span>
+                        </span>
+                      </div>
+                      {g.developmentNote && (
+                        <p className="mt-1 text-[13.5px] leading-relaxed text-muted">{g.developmentNote}</p>
+                      )}
+                      {g.symmetryNote && (
+                        <p className="mt-1 text-[13.5px] leading-relaxed text-neutral">{g.symmetryNote}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="card p-5 border-accent/30">
             <div className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em] text-foreground">
               <IconTarget className="h-4 w-4" /> Estratégia decidida

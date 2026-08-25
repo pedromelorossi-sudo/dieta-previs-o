@@ -75,7 +75,7 @@ function buildSummary(
   }
 
   if (photos.length > 0) {
-    parts.push("\n%BF estimado por fotos de progresso (método Navy):");
+    parts.push("\n%BF por circunferências (método Navy) — segunda leitura, não a estimativa por foto:");
     for (const p of photos) {
       if (p.estimated_bf_percent != null) {
         parts.push(`- ${p.date}: ${p.estimated_bf_percent.toFixed(1)}%${p.notes ? ` — ${p.notes}` : ""}`);
