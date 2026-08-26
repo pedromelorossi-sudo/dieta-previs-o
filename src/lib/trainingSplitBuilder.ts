@@ -804,9 +804,28 @@ export function computeMuscleTargets(
       if (candidatosNoPiso.length === 0) break;
       const semPrioridade = candidatosNoPiso.filter((e) => !slotPorMusculo.get(e.muscle)?.isPriority);
       const pool = semPrioridade.length > 0 ? semPrioridade : candidatosNoPiso;
-      const menorMev = pool.reduce((menor, e) =>
-        (landmarkFor(e.muscle)?.mev ?? 0) < (landmarkFor(menor.muscle)?.mev ?? 0) ? e : menor
-      );
+      /* Desempate quando o MEV é igual: MRV menor primeiro, depois nome (só
+       * para ser determinístico, sem peso fisiológico).
+       *
+       * Era só MEV, e em empate `reduce` mantém quem apareceu PRIMEIRO no
+       * array — glúteo e adutor têm o mesmo MEV (4), e glúteo vem antes no
+       * template "Legs", então ele sempre saía, nunca adutor. Sem relação com
+       * fisiologia, só posição de array.
+       *
+       * MRV é o desempate certo: mede o teto recuperável do grupo, ou seja,
+       * quanto volume ele ainda comporta na semana. Adutor tem MRV 8, glúteo
+       * tem MRV 18 — adutor satura muito antes. Entre dois grupos com o mesmo
+       * mínimo, cede o que tem MENOS margem acima dele, não o que aparece
+       * primeiro numa lista. */
+      const menorMev = pool.reduce((menor, e) => {
+        const mevE = landmarkFor(e.muscle)?.mev ?? 0;
+        const mevMenor = landmarkFor(menor.muscle)?.mev ?? 0;
+        if (mevE !== mevMenor) return mevE < mevMenor ? e : menor;
+        const mrvE = landmarkFor(e.muscle)?.mrv ?? 0;
+        const mrvMenor = landmarkFor(menor.muscle)?.mrv ?? 0;
+        if (mrvE !== mrvMenor) return mrvE < mrvMenor ? e : menor;
+        return e.muscle < menor.muscle ? e : menor;
+      });
       soma -= menorMev.fatia[dia.label];
       menorMev.fatia[dia.label] = 0;
     }
