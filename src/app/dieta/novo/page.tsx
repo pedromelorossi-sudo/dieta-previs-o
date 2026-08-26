@@ -99,7 +99,39 @@ export default function NovaDietaPage() {
       if (!res.ok) throw new Error(data.error ?? "Erro ao gerar dieta.");
       setMeals(data.meals);
       setGenWarnings(data.warnings ?? []);
-      setSaved(false);
+
+      /* SALVA O QUE ACABOU DE GERAR — a IA já rodou e já custou crédito.
+       *
+       * Antes, `handleGenerate` só atualizava `meals` no estado. A pessoa via
+       * o plano pronto na tela; se fechasse a aba sem clicar em "Salvar" ou
+       * "Baixar PDF", perdia tudo — mesma classe de bug já corrigida em
+       * previsao-ia (regra do projeto: "o app não deve pedir para a pessoa
+       * salvar aquilo que ele mesmo gerou").
+       *
+       * Não usa o `diet` do useMemo aqui: ele deriva de `meals`, que acabou de
+       * ser atualizado por `setMeals` — a atualização de estado do React não
+       * é síncrona, então `diet` ainda apontaria para os meals ANTIGOS neste
+       * ponto da função. Monta o objeto direto de `data.meals`. */
+      if (user) {
+        try {
+          await upsertDiet({
+            id: dietId,
+            name,
+            createdAt: new Date().toISOString(),
+            targetKcal: parseFloat(targetKcal) || 0,
+            targetProteinG: parseFloat(targetProtein) || 0,
+            targetFatG: parseFloat(targetFat) || 0,
+            targetCarbG: parseFloat(targetCarb) || 0,
+            meals: data.meals,
+          });
+          setSaved(true);
+        } catch (saveErr) {
+          // a geração funcionou — o erro é só ao salvar, e precisa dizer isso
+          setGenError(
+            `A dieta foi gerada, mas não consegui salvar: ${saveErr instanceof Error ? saveErr.message : "erro desconhecido"}. Use o botão Salvar abaixo.`
+          );
+        }
+      }
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Erro ao gerar dieta.");
     } finally {
