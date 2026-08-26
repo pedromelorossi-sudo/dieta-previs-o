@@ -13,7 +13,7 @@
 const B = new URL("../.test-build/src/lib/", import.meta.url).pathname;
 const { estimateBodyComposition, classifyPathFromBf, estimateFfmi } = await import(B + "bodyComposition.js");
 const { planejarFases } = await import(B + "planoDeFases.js");
-const { computeMuscleTargets, buildSplit, ajusteDeFadigaPara, diasEfetivosPara } = await import(B + "trainingSplitBuilder.js");
+const { computeMuscleTargets, buildSplit, ajusteDeFadigaPara, diasEfetivosPara, computeTrainingBudget } = await import(B + "trainingSplitBuilder.js");
 const { landmarkFor, VOLUME_LANDMARKS } = await import(B + "trainingVolume.js");
 const { exerciseById, MUSCLE_GROUP_LABEL } = await import(B + "exerciseLibrary.js");
 const { applySafetyLimits } = await import(B + "safety.js");
@@ -138,6 +138,7 @@ for (const peso of [50, 64, 85, 110])
 
 /* ── 4. TREINO: cobertura, orçamento e prescrição válida ─────────────────── */
 const gruposComMev = VOLUME_LANDMARKS.filter((l) => l.mev > 0).map((l) => l.muscle);
+const somaMevTotal = gruposComMev.reduce((n, m) => n + landmarkFor(m).mev, 0);
 for (let dias = 1; dias <= 6; dias++)
   for (const rec of [0, 2, 4])
     for (const ader of [0, 1])
@@ -146,11 +147,20 @@ for (let dias = 1; dias <= 6; dias++)
           casos++;
           const cen = `${dias} dias, rec ${rec}, adesão ${ader}, ${sexo}, prio [${prio}]`;
           let alvos, sessoes;
+          const efet = diasEfetivosPara(dias, rec);
           try {
-            const efet = diasEfetivosPara(dias, rec);
             alvos = computeMuscleTargets([], prio, ader, efet, rec, efet < dias, sexo);
             sessoes = buildSplit(efet, alvos, undefined, ajusteDeFadigaPara(rec));
           } catch (e) { reportar("treino", cen, `EXCEÇÃO: ${e.message}`); continue; }
+          /* Cobertura de MEV só é exigível quando o orçamento MATEMATICAMENTE comporta — antes este
+             guarda usava `dias >= 3` como aproximação grosseira ("com poucos dias claramente não
+             cabe"), mas 3+ dias com adesão baixa E recuperação ruim simultâneas ainda cai abaixo da
+             soma de todos os MEV (28 de orçamento contra 70 de soma, no pior caso) — 6 ocorrências
+             eram falso-positivo do invariante, não do código: o algoritmo dropar o grupo de menor
+             capacidade (menor MRV) quando o orçamento não fecha pra todos é o comportamento
+             deliberado (ver `trainingSplitBuilder.ts`, corte "MAIOR primeiro"), não um bug. */
+          const orcamentoSemanal = computeTrainingBudget(dias, ader, rec, efet < dias);
+          const coberturaExigivel = orcamentoSemanal >= somaMevTotal;
 
           const entregue = new Map();
           for (const s of sessoes) {
@@ -182,19 +192,16 @@ for (let dias = 1; dias <= 6; dias++)
             const lm = landmarkFor(m);
             if (lm && n > lm.mrv) reportar("treino", cen, `${MUSCLE_GROUP_LABEL[m]} com ${n} séries acima do MRV ${lm.mrv}`);
           }
-          // com 3+ dias, todo grupo de MEV>0 tem de aparecer
-          if (dias >= 3) {
+          // todo grupo de MEV>0 tem de aparecer, SE o orçamento comporta a soma de todos os MEV
+          if (coberturaExigivel) {
             for (const m of gruposComMev) {
               if (!entregue.has(m)) reportar("treino", cen, `${MUSCLE_GROUP_LABEL[m]} (MEV ${landmarkFor(m).mev}) não aparece na semana`);
             }
           }
-          /* Prioridade com meta zero só é bug a partir de 3 dias — mesmo guarda
-             da checagem de cobertura acima. Com 1-2 dias o orçamento genuinamente
-             não cobre os pisos de MEV de todos os grupos (11 grupos, ~18-36
-             séries de orçamento), e o `reason` já diz "não coube nesse número de
-             dias". Sem este guarda, 14 das 26 ocorrências deste tipo eram
-             falso-positivo do invariante, não do código. */
-          if (dias >= 3) {
+          /* Prioridade com meta zero só é bug quando o orçamento comporta a soma de todos os MEV —
+             mesmo guarda da checagem de cobertura acima. Quando não comporta, o `reason` já diz "não
+             coube nesse número de dias"/orçamento reduzido. */
+          if (coberturaExigivel) {
             for (const p of prio) {
               const alvo = alvos.find((a) => a.muscle === p);
               if (alvo && alvo.weeklySets <= 0) reportar("treino", cen, `prioridade ${MUSCLE_GROUP_LABEL[p]} com meta zero`);

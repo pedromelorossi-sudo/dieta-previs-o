@@ -254,6 +254,21 @@ function distribuirPorDia(total: number, fatias: { label: string; sets: number }
   return saida;
 }
 
+/** Orçamento semanal de séries, depois dos cortes de adesão e recuperação — extraído de
+ * `computeMuscleTargets` pra ter UMA fonte de verdade que também dá pra consultar de fora (ex: pra
+ * saber se o orçamento é matematicamente insuficiente pra cobrir o MEV de todos os grupos ANTES de
+ * fazer a distribuição, em vez de descobrir isso indiretamente pelo resultado). */
+export function computeTrainingBudget(
+  daysPerWeek: number,
+  adherenceScore: number,
+  recoveryScore: number,
+  diasJaConcentrados: boolean
+): number {
+  const adherenceFactor = adherenceScore >= 1 ? 0.85 : 1;
+  const recoveryFactor = diasJaConcentrados ? 0.9 : recoveryScore >= 4 ? 0.6 : recoveryScore >= 2 ? 0.8 : 1;
+  return Math.round(clampDays(daysPerWeek) * SETS_PER_SESSION_BUDGET * adherenceFactor * recoveryFactor);
+}
+
 export function computeMuscleTargets(
   assessment: MuscleAssessmentInput[] = [],
   priorityMuscles: MuscleGroup[] = [],
@@ -274,7 +289,6 @@ export function computeMuscleTargets(
 
   // Corte de orçamento por adesão e por recuperação. Antes, adesão baixa "travava o teto no MAV" — o
   // que era no-op no caminho padrão, porque sem prioridade declarada o alvo já era o MAV.
-  const adherenceFactor = adherenceScore >= 1 ? 0.85 : 1;
   /* CORTE ÚNICO, não duplo.
    *
    * Quando `recoveryScore >= 4`, a rota já concentra a semana de 5 para 3
@@ -287,10 +301,9 @@ export function computeMuscleTargets(
    *
    * A concentração de dias JÁ é o corte de volume. O alívio de fadiga vem do
    * RIR e da retirada do axial pesado, que atuam por outro caminho. */
+  const adherenceFactor = adherenceScore >= 1 ? 0.85 : 1;
   const recoveryFactor = diasJaConcentrados ? 0.9 : recoveryScore >= 4 ? 0.6 : recoveryScore >= 2 ? 0.8 : 1;
-  const budget = Math.round(
-    clampDays(daysPerWeek) * SETS_PER_SESSION_BUDGET * adherenceFactor * recoveryFactor
-  );
+  const budget = computeTrainingBudget(daysPerWeek, adherenceScore, recoveryScore, diasJaConcentrados);
 
   interface Slot {
     landmark: (typeof VOLUME_LANDMARKS)[number];
