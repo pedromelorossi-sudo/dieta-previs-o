@@ -81,7 +81,6 @@ export function EditorDeTreino({
     <section className="space-y-[clamp(24px,4vw,36px)]">
       <SectionHeading
         title="Treino"
-                      aria-label="Treino"
         desc="Alterações aqui substituem o programa desta pessoa. O que ela vê na página de treino passa a ser isto."
       />
 

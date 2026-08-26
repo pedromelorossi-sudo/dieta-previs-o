@@ -364,11 +364,12 @@ export default function PrevisaoIaPage() {
   const isFirstCycle = cycles !== null && cycles.length === 0;
 
   // As perguntas de adesão só fazem sentido se o app REALMENTE prescreveu algo pra seguir. Um ciclo
-  // vindo da calculadora rápida (/estimar) é um número de referência, não um plano — perguntar "você
-  // seguiu de perto as X kcal prescritas?" sobre ele convida a uma resposta inventada, e resposta
-  // inventada contamina o retrocálculo de TDEE (é exatamente o autorrelato que calibration.ts cita
-  // Lichtman et al. 1992 pra desqualificar). Ciclos sem origem registrada são anteriores a essa
-  // coluna: mantêm o comportamento antigo e continuam perguntando.
+  // com origin "estimativa" (a extinta calculadora rápida /estimar, que só existia como número de
+  // referência, não um plano) não deve perguntar "você seguiu de perto as X kcal prescritas?" — a
+  // pergunta convida a uma resposta inventada, e resposta inventada contamina o retrocálculo de TDEE
+  // (é exatamente o autorrelato que calibration.ts cita Lichtman et al. 1992 pra desqualificar). A
+  // página foi removida, mas ciclos antigos com essa origem continuam no banco. Ciclos sem origem
+  // registrada são anteriores a essa coluna: mantêm o comportamento antigo e continuam perguntando.
   const ultimoFoiPrescricao = last != null && last.origin !== "estimativa";
   const mostrarPerguntasDeAdesao = !isFirstCycle && last != null && ultimoFoiPrescricao;
 

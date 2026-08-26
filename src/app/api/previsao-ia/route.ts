@@ -157,6 +157,13 @@ function rowToCycle(row: CycleRow): Cycle {
   };
 }
 
+const WEIGHT_TREND_LABEL: Record<string, string> = {
+  subindo: "subindo",
+  descendo: "descendo",
+  estavel: "estável",
+  nao_sei: "sem tendência definida",
+};
+
 const BF_TOOL_NAME = "registrar_bf";
 const VISION_TOOL_NAME = "registrar_analise_visual";
 
@@ -711,9 +718,9 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
     };
 
     const tdeeNote = formulaDescartadaPorDivergencia
-      ? `TDEE de ${blendedTdee.toFixed(0)}kcal, vindo da SUA resposta real: comendo ${currentIntakeKcal}kcal com o peso ${weightTrend}. A fórmula devolveu ${comp.tdee.toFixed(0)}kcal — ${(Math.abs(comp.tdee - empiricalTdee!) / empiricalTdee! * 100).toFixed(0)}% de diferença, alto demais para fazer média. Quando os dois discordam tanto, quem descreve você é o que aconteceu com o seu peso, não a média populacional da fórmula.`
+      ? `TDEE de ${blendedTdee.toFixed(0)}kcal, vindo da SUA resposta real: comendo ${currentIntakeKcal}kcal com o peso ${WEIGHT_TREND_LABEL[weightTrend as keyof typeof WEIGHT_TREND_LABEL] ?? weightTrend}. A fórmula devolveu ${comp.tdee.toFixed(0)}kcal — ${(Math.abs(comp.tdee - empiricalTdee!) / empiricalTdee! * 100).toFixed(0)}% de diferença, alto demais para fazer média. Quando os dois discordam tanto, quem descreve você é o que aconteceu com o seu peso, não a média populacional da fórmula.`
       : empiricalTdee != null
-        ? `TDEE calculado com peso 30% fórmula (${comp.tdee.toFixed(0)}kcal) / 70% prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
+        ? `TDEE calculado com peso 30% fórmula (${comp.tdee.toFixed(0)}kcal) / 70% prática relatada (~${empiricalTdee.toFixed(0)}kcal, a partir de ${currentIntakeKcal}kcal com peso ${WEIGHT_TREND_LABEL[weightTrend as keyof typeof WEIGHT_TREND_LABEL] ?? weightTrend}) — resultado: ${blendedTdee.toFixed(0)}kcal.`
         : `TDEE calculado SÓ pela fórmula (${comp.tdee.toFixed(0)}kcal), que tem erro documentado de 10-15% e pode estar centenas de kcal fora para você. Informe quanto vem comendo e como o peso responde — é o único jeito de essa conta descrever você em vez da média.`;
 
     // O planejamento de fases roda JÁ no primeiro ciclo — é o principal produto da primeira análise:

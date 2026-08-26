@@ -173,7 +173,7 @@ export default function AdminUserDetailPage() {
                   <div>
                     <div className="text-sm font-medium">{d.name}</div>
                     <div className="text-xs text-muted">
-                      {fmt(d.targetKcal, 0)}kcal · {d.meals.length} refeições
+                      {fmt(d.targetKcal, 0)}kcal · {d.meals.length} {d.meals.length === 1 ? "refeição" : "refeições"}
                     </div>
                   </div>
                 </div>
@@ -318,7 +318,7 @@ export default function AdminUserDetailPage() {
         <section>
           <SectionHeading
             title="Treino"
-            desc="Esta pessoa ainda não tem programa salvo. Um programa é criado quando ela gera um ciclo com fotos."
+            desc="Esta pessoa ainda não tem programa salvo. Um programa é criado quando ela gera um ciclo com fotos ou quando abre a página de treino pela primeira vez."
           />
         </section>
       )}

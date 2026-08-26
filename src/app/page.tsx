@@ -306,13 +306,16 @@ export default function DashboardPage() {
             Foi construído com poucos pontos de dado. Cada ciclo novo é um teste de se as regras seguram, não uma
             confirmação de que seguram.
           </li>
-          <li>O %BF é estimado por foto, não medido. Bioimpedância ou DEXA fechariam essa lacuna.</li>
+          <li>
+            Por padrão o %BF é estimado por foto, não medido. Quem tem acesso a DEXA, bioimpedância, adipometria ou
+            ultrassom pode informar o valor medido — ele substitui a leitura da foto, não só a acompanha.
+          </li>
           <li>
             Captura a parte matemática. Adesão, aparência nas fotos e exame físico continuam sendo julgamento humano.
           </li>
           <li>
             <span className="tabular-nums text-foreground">E</span> — a energia por quilo ganho — é inferido pela
-            estabilidade do %BF. Sem DEXA seriada, nunca é certo.
+            estabilidade do %BF. Sem uma série de exames medidos, nunca é certo.
           </li>
         </ul>
       </section>

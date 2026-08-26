@@ -39,8 +39,8 @@ export default function AdminPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Painel de administrador</h1>
         <p className="text-sm text-muted mt-2">
-          Evolução de todos os usuários — visão somente leitura, ninguém além de você tem acesso aos dados dos
-          outros.
+          Evolução de todos os usuários — ninguém além de você tem acesso aos dados dos outros. Ao abrir uma pessoa
+          você também pode editar a dieta e o programa de treino dela.
         </p>
       </div>
 

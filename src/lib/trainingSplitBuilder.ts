@@ -1925,8 +1925,8 @@ export function planTrainingPeriodization(
     const deloadCortaVolume = daysPerWeek > 1;
     const focusNote = isDeload
       ? deloadCortaVolume
-        ? "Semana de deload — volume pela metade, RIR 2 pontos mais longe da falha, sem agachamento nem levantamento terra com barra, e concentrada em 3 sessões. Cortar série mantendo RIR 1 não recupera nada: é uma semana normal mais curta."
-        : "Semana de deload — o volume SEGUE o mesmo, porque com esta frequência cortá-lo pela metade deixaria quase todo grupo abaixo do mínimo produtivo. O alívio vem da intensidade: RIR 2 pontos mais longe da falha e nenhum agachamento ou levantamento terra com barra. Numa rotina de poucas sessões, é a fadiga por série que precisa recuar, não a contagem."
+        ? "Semana de deload — volume pela metade, parando 2 repetições mais longe da falha em vez de 1, sem agachamento nem levantamento terra com barra, e concentrada em 3 sessões. Cortar série mantendo a mesma proximidade da falha não recupera nada: é uma semana normal mais curta."
+        : "Semana de deload — o volume SEGUE o mesmo, porque com esta frequência cortá-lo pela metade deixaria quase todo grupo abaixo do mínimo produtivo. O alívio vem da intensidade: parar 2 repetições mais longe da falha e nenhum agachamento ou levantamento terra com barra. Numa rotina de poucas sessões, é a fadiga por série que precisa recuar, não a contagem."
       : rampIsFlat
         ? "Volume praticamente constante nesta semana: com os dias de treino disponíveis, o orçamento semanal já fica perto do mínimo produtivo e não sobra margem pra rampa de volume. A progressão deste mesociclo é de CARGA — repetir a mesma série com mais peso —, não de séries. Pra ter rampa de volume, é preciso mais dias de treino."
         : cyclePosition === 1

@@ -189,8 +189,13 @@ export default function TreinoPage() {
 
       const sessions = buildSplit(dias, alvos, loadByExercise, ajusteDeFadigaPara(0));
 
+      /* Reusa o id do programa ATUAL, se existir — "Gerar de novo" era um
+         upsert com id NOVO a cada clique, então cada geração virava uma linha
+         extra em vez de substituir a anterior. `deleteTrainingProgram` existe
+         em trainingStorage.ts sem nenhum chamador (a limpeza nunca foi
+         ligada); reusar o id evita precisar dela para o caso comum. */
       await upsertTrainingProgram({
-        id: newId(),
+        id: programa?.id ?? newId(),
         name: `Treino de ${dias} dias`,
         createdAt: new Date().toISOString(),
         sessions,

@@ -9,7 +9,7 @@ export interface BodyCompositionInput {
   bodyFatPercent: number;
   age: number;
   sex: Sex;
-  /** usado só como fallback quando `exerciseFreq` não é informado (ex: calculadora rápida em /estimar);
+  /** usado só como fallback quando `exerciseFreq` não é informado;
    * no fluxo principal o TDEE vem sempre dos componentes abaixo, e o nível de atividade exibido pro
    * usuário (`activityLevelDisplay`, no resultado) é CALCULADO a partir do TDEE final, não escolhido
    * de antemão — evita que o usuário precise se autoavaliar como "moderado" às cegas. */

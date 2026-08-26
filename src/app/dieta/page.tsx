@@ -6,8 +6,8 @@
  * `loadDiets` existia em dietStorage.ts SEM UM ÚNICO CHAMADOR — exatamente o
  * mesmo defeito que `loadTrainingPrograms` tinha na área de treino. O plano era
  * salvo corretamente e não havia rota nenhuma para voltar nele: a navegação só
- * oferecia "Montar dieta" (/dieta/novo), e /estimar, /previsao e /previsao-ia
- * também empurram para lá, sempre começando do zero.
+ * oferecia "Montar dieta" (/dieta/novo), e /previsao e /previsao-ia também
+ * empurram para lá, sempre começando do zero.
  *
  * Do lado de quem usa isso aparecia como "a dieta não fica salva" — e a
  * descrição estava certa quanto ao efeito, embora o dado estivesse íntegro no

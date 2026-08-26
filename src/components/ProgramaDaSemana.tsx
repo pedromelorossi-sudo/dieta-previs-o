@@ -120,7 +120,7 @@ export function ProgramaDaSemana({ sessions }: { sessions: TrainingSession[] }) 
                             {b.repRange === "1" ? "repetição" : "repetições"}
                           </span>
                           {b.loadKg != null && (
-                            <span className="tabular-nums font-medium text-accent">· {b.loadKg} kg</span>
+                            <span className="tabular-nums font-medium text-accent">· {b.loadKg.toLocaleString("pt-BR")} kg</span>
                           )}
                           {esforco && <span className="text-[13px] text-muted">— {esforco}</span>}
                         </div>
@@ -134,7 +134,7 @@ export function ProgramaDaSemana({ sessions }: { sessions: TrainingSession[] }) 
                       return (
                         <p className="pt-0.5 text-[13px] text-neutral">
                           <span className="inline-block w-[92px]" />
-                          descanso de {descanso >= 60 ? `${descanso / 60} min` : `${descanso}s`} entre as séries
+                          descanso de {descanso >= 60 ? `${(descanso / 60).toLocaleString("pt-BR")} min` : `${descanso}s`} entre as séries
                         </p>
                       );
                     })()}
