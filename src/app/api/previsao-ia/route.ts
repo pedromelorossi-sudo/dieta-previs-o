@@ -1061,7 +1061,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     try {
       if (trainingLogRows && trainingLogRows.length > 0) {
         const allSets = trainingLogRows.flatMap((r) => (r.sets_logged as LoggedSet[]) ?? []);
-        const volume = weeklyVolumeByMuscle(allSets, (id) => exerciseById(id)?.primaryMuscle);
+        const volume = weeklyVolumeByMuscle(allSets, (id) => exerciseById(id)?.primaryMuscle, (id) => exerciseById(id)?.secondaryMuscles ?? []);
         const readings = readVolumeStatus(volume);
         const readingByMuscle = new Map(readings.map((r) => [r.muscle, r]));
 
@@ -1215,7 +1215,8 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
       const semanas = Math.max(1, weeksSinceLastCycle);
       const volumeTotal = weeklyVolumeByMuscle(
         trainingLogs.flatMap((l) => l.setsLogged),
-        (id) => exerciseById(id)?.primaryMuscle
+        (id) => exerciseById(id)?.primaryMuscle,
+        (id) => exerciseById(id)?.secondaryMuscles ?? []
       );
       const volumeSemanal = new Map([...volumeTotal].map(([m, v]) => [m, Math.round(v / semanas)]));
       volumeAdherence = compareVolumeToTarget(muscleTargetsOut, volumeSemanal);

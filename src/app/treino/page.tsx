@@ -192,7 +192,7 @@ export default function TreinoPage() {
     if (!logs || nowMs == null) return [];
     const since = nowMs - 7 * 24 * 60 * 60 * 1000;
     const recentSets = logs.filter((l) => new Date(l.date).getTime() >= since).flatMap((l) => l.setsLogged);
-    const volume = weeklyVolumeByMuscle(recentSets, (id) => exerciseById(id)?.primaryMuscle);
+    const volume = weeklyVolumeByMuscle(recentSets, (id) => exerciseById(id)?.primaryMuscle, (id) => exerciseById(id)?.secondaryMuscles ?? []);
     return readVolumeStatus(volume);
   }, [logs, nowMs]);
 

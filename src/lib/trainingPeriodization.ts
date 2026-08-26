@@ -56,7 +56,7 @@ function logsInWeek(logs: TrainingLog[], week: number, refDate: Date): TrainingL
 function volumeReadingsForWeek(logs: TrainingLog[], week: number, refDate: Date): VolumeReading[] {
   const weekLogs = logsInWeek(logs, week, refDate);
   const allSets = weekLogs.flatMap((l) => l.setsLogged);
-  const volume = weeklyVolumeByMuscle(allSets, (id) => exerciseById(id)?.primaryMuscle);
+  const volume = weeklyVolumeByMuscle(allSets, (id) => exerciseById(id)?.primaryMuscle, (id) => exerciseById(id)?.secondaryMuscles ?? []);
   return readVolumeStatus(volume);
 }
 
