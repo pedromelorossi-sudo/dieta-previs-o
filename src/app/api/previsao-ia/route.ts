@@ -288,7 +288,7 @@ function evolutionImageBlock(prev: PreviousPhoto | null): Anthropic.ContentBlock
   ];
 }
 
-import { aferirLeituraVisual, analisarTendencia, assertFiniteBf, validarBfMedido, validarMetodoMedicao, type MetodoMedicaoBf } from "@/lib/bfMedido";
+import { aferirLeituraVisual, analisarTendencia, assertFiniteBf, confiancaFromMetodoMedicao, validarBfMedido, validarMetodoMedicao, type MetodoMedicaoBf } from "@/lib/bfMedido";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -583,6 +583,13 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
     const faseEmCurso =
       weightTrend === "subindo" ? "bulking" : weightTrend === "descendo" ? "cutting" : undefined;
 
+    /* `bfPercentFirstCycle` vale o MEDIDO quando existe exame — nesse caso a confiança tem que refletir
+       o método do exame, não a confiança que a IA atribuiu à leitura da FOTO (mesma razão do caminho
+       dos ciclos seguintes, ver bfConfidenceParaEstrategia mais abaixo no arquivo). */
+    const bfConfidencePrimeiroCiclo =
+      bfMedidoPrimeiroCiclo != null && metodoMedicaoPrimeiroCiclo != null
+        ? confiancaFromMetodoMedicao(metodoMedicaoPrimeiroCiclo)
+        : bfRaw.bfConfidence;
     const comp = estimateBodyComposition({
       weightKg: currentWeightKg,
       heightCm,
@@ -590,7 +597,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
       age,
       sex,
       previousPath: faseEmCurso,
-      bfConfidence: bfRaw.bfConfidence,
+      bfConfidence: bfConfidencePrimeiroCiclo,
       activityLevel,
       exerciseFreq,
       sessionDuration,
@@ -1467,12 +1474,17 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     /* 3º: último recurso — reclassificar o %BF anterior. Mantido para ciclos
        gravados antes da migração 0005, que não têm `path`. */
     (lastCycle?.bodyFatPercent != null ? classifyPathFromBf(lastCycle.bodyFatPercent, sex).path : undefined);
+  /* `bfPercentVisual` vale o MEDIDO quando existe exame (bfMedido ?? bfPercentVisualRaw, ver acima) —
+     nesse caso a confiança tem que refletir o MÉTODO DO EXAME, não a confiança que a IA atribuiu à
+     leitura da FOTO, que é uma leitura diferente e não é o número que está sendo classificado aqui. */
+  const bfConfidenceParaEstrategia =
+    bfMedido != null && metodoMedicao != null ? confiancaFromMetodoMedicao(metodoMedicao) : vision.bfConfidence;
   const { path: strategy, pathReason: strategyReason, surplusPercent: strategySurplusPercent } = classifyPathFromBf(
     bfPercentVisual,
     sex,
     recoveryScore,
     previousPath,
-    vision.bfConfidence,
+    bfConfidenceParaEstrategia,
     estimateFfmi(currentWeightKg * (1 - bfPercentVisual / 100), heightCm)
   );
 

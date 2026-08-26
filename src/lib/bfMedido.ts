@@ -44,6 +44,19 @@ export const ERRO_TIPICO_PP: Record<MetodoMedicaoBf, number> = {
   outro: 4,
 };
 
+/** Converte o erro típico do método medido pra o mesmo vocabulário baixa/média/alta que a IA de visão
+ * usa em `bfConfidence` — usado quando `bfPercentVisual` passa a valer o MEDIDO (ver route.ts), pra
+ * `classifyPathFromBf` não tratar um número de DEXA com a confiança (fixa) que a IA atribuiu à FOTO,
+ * que é uma leitura completamente diferente e não é o que está sendo usado nesse caso. Limiares
+ * alinhados à literatura citada acima: DEXA (~1-2 p.p.) é referência prática e vale "alta"; ultrassom e
+ * adipometria bem feita (~2,5-3 p.p.) ficam no meio; bioimpedância doméstica (~4 p.p.) vale "baixa". */
+export function confiancaFromMetodoMedicao(metodo: MetodoMedicaoBf): "baixa" | "media" | "alta" {
+  const erro = ERRO_TIPICO_PP[metodo];
+  if (erro <= 2) return "alta";
+  if (erro <= 3) return "media";
+  return "baixa";
+}
+
 export interface AfericaoVisual {
   /** o que o Claude estimou a partir das fotos */
   estimado: number;
