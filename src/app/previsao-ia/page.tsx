@@ -44,6 +44,7 @@ import { exerciseById, MUSCLE_GROUP_LABEL } from "@/lib/exerciseLibrary";
 import { TrainingSession } from "@/lib/trainingBuilder";
 import { upsertTrainingProgram } from "@/lib/trainingStorage";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { ProgramaDaSemana } from "@/components/ProgramaDaSemana";
 import {
   IconCheck,
   IconClipboard,
@@ -1780,16 +1781,26 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
               </p>
               <div className="mt-4 space-y-2">
                 {result.trainingPeriodizationPlan.map((w) => (
-                  <div
+                  <details
                     key={w.weekIndex}
-                    className={`flex items-center gap-3 rounded-[12px] border p-3 ${
+                    className={`rounded-[12px] border p-3 ${
                       w.isDeload ? "border-warn/30 bg-warn/5" : "border-border bg-surface-raised/40"
                     }`}
                   >
-                    <span className="text-xs text-muted w-20 shrink-0">{w.label}</span>
-                    {w.isDeload && <span className="badge bg-warn/15 text-warn shrink-0">deload</span>}
-                    <span className="text-xs text-muted">{w.focusNote}</span>
-                  </div>
+                    <summary className="flex cursor-pointer list-none items-center gap-3">
+                      <span className="text-xs text-muted w-20 shrink-0">{w.label}</span>
+                      {w.isDeload && <span className="badge bg-warn/15 text-warn shrink-0">deload</span>}
+                      <span className="text-xs text-muted">{w.focusNote}</span>
+                    </summary>
+                    {/* Cada semana já vem com o programa inteiro montado (exercícios, séries e
+                        repetições com o volume rampado daquela semana específica) em `w.sessions` —
+                        antes só `label`/`focusNote` chegavam à tela, o resto era calculado e
+                        descartado. Reaproveita ProgramaDaSemana (mesmo componente de /treino) em vez
+                        de duplicar a renderização de sessão/bloco. */}
+                    <div className="mt-3 border-t border-border pt-3">
+                      <ProgramaDaSemana sessions={w.sessions} />
+                    </div>
+                  </details>
                 ))}
               </div>
             </div>
