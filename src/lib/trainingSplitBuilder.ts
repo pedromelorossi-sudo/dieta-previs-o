@@ -1105,6 +1105,36 @@ function pickExercisesForMuscle(
   const giraLista = <T,>(lista: T[], n: number) =>
     lista.length === 0 ? lista : [...lista.slice(n % lista.length), ...lista.slice(0, n % lista.length)];
 
+  /* Gira CADA família de movimento por si, não a lista inteira de uma vez.
+   *
+   * Girar a lista toda deixava a variante escolhida depender de quantos
+   * exercícios de OUTRAS famílias vinham antes dela no catálogo — remada
+   * horizontal tem 4 variantes (barra, serrote, polia, halteres peito
+   * apoiado), mas como só a PRIMEIRA encontrada na varredura é escolhida (a
+   * regra de diversidade de família aceita só uma por família), e a rotação
+   * típica na prática é 0 ou 1 (o quanto o grupo se repete NA MESMA semana),
+   * girar a lista toda quase nunca deslocava o suficiente pra alcançar a 3ª
+   * ou 4ª variante — 2 das 4 nunca eram escolhidas em nenhum cenário da
+   * varredura. Girando cada família separadamente, a variante que abre cada
+   * família já muda a partir de rotation=1, então o catálogo inteiro fica
+   * alcançável com valores pequenos de rotação. */
+  const giraDentroDaFamilia = <T extends { movementFamily: string }>(lista: T[], n: number): T[] => {
+    const porFamilia = new Map<string, T[]>();
+    const ordemFamilias: string[] = [];
+    for (const ex of lista) {
+      if (!porFamilia.has(ex.movementFamily)) {
+        porFamilia.set(ex.movementFamily, []);
+        ordemFamilias.push(ex.movementFamily);
+      }
+      porFamilia.get(ex.movementFamily)!.push(ex);
+    }
+    const resultado: T[] = [];
+    for (const fam of ordemFamilias) {
+      resultado.push(...giraLista(porFamilia.get(fam)!, n));
+    }
+    return resultado;
+  };
+
   /* INTERCALADO composto → isolado → composto → isolado…
    *
    * A primeira tentativa foi "só 1 composto, o resto isolado". Isso corrigiu o
@@ -1115,8 +1145,18 @@ function pickExercisesForMuscle(
    * Intercalar preserva as duas coisas: o composto abre a sessão do grupo, o
    * isolado entra em seguida (o que antes nunca acontecia), e um 2º composto de
    * outra família ainda cabe no 3º slot quando o volume justifica. */
-  const c = giraLista(compostos, rotation);
-  const iso = giraLista(isolados, rotation);
+  /* `rotation` sozinho não basta pra alcançar família com muitas variantes: ele só conta quantas vezes
+   * o MESMO grupo aparece NA MESMA semana (0 na 1ª ocorrência, 1 na 2ª...), e a maioria dos arranjos
+   * treina cada grupo no máximo 1-2x/semana, então o valor quase nunca passa de 1. Remada horizontal
+   * tem 4 variantes; girando só por família (acima) as duas últimas ainda não eram alcançadas em
+   * NENHUM cenário testado. Somar `setsNeeded` (varia por adesão, recuperação, meta e prioridade,
+   * diferente por pessoa/cenário mesmo quando `rotation` empaca em 0 ou 1) espalha a escolha pelo
+   * catálogo inteiro. Não repetir o exercício EXATO entre dois dias do mesmo grupo na mesma semana
+   * continua sendo papel de `exerciciosDaSemana` (2ª volta, abaixo) — `semente` só decide qual
+   * variante alternativa é oferecida primeiro, não impede repetição por si só. */
+  const semente = rotation + setsNeeded;
+  const c = giraDentroDaFamilia(compostos, semente);
+  const iso = giraDentroDaFamilia(isolados, semente);
   const rotated: typeof candidates = [];
   for (let k = 0; k < Math.max(c.length, iso.length); k++) {
     if (c[k]) rotated.push(c[k]);
