@@ -243,6 +243,19 @@ export default function PrevisaoIaPage() {
   const [activeCommuteMinutesPerDay, setActiveCommuteMinutesPerDay] = useState("");
   const [choresHoursPerWeek, setChoresHoursPerWeek] = useState("");
   const [stairFlightsPerDay, setStairFlightsPerDay] = useState("");
+  /* Horas de sono — fecha o orçamento de 24h do NEAT por tempo.
+   *
+   * Sem isso, cada domínio (sentado, em pé, deslocamento, tarefas, escada)
+   * era somado direto, sem desconto de nenhum outro — então relatar MAIS
+   * horas sentado só SOMAVA mais caloria, nunca descontava nada de outro
+   * lugar. Medido: quem respondia só "sento 2h" recebia MENOS caloria (2258
+   * TDEE) do que quem não respondia nada (2503, do fallback sedentário) —
+   * preencher parte do formulário piorava a estimativa.
+   *
+   * Com horas de sono, o NEAT calcula "horas acordado menos o que já foi
+   * declarado" e atribui esse resto a uma atividade leve de fundo, em vez de
+   * ele simplesmente não existir na conta. */
+  const [sleepHoursPerDay, setSleepHoursPerDay] = useState("");
 
   // esporte fora da academia — capturado à parte do treino principal, com intensidade lida pelo talk
   // test (fato observável: "consegue conversar?") em vez do usuário se autoavaliar como leve/moderado
@@ -260,11 +273,12 @@ export default function PrevisaoIaPage() {
         !!standingWorkHoursPerDay &&
         !!activeCommuteMinutesPerDay &&
         !!choresHoursPerWeek &&
-        !!stairFlightsPerDay
+        !!stairFlightsPerDay &&
+        !!sleepHoursPerDay
       );
     }
     return false;
-  }, [stepsKnown, dailyStepsAvg, sittingHoursPerDay, standingWorkHoursPerDay, activeCommuteMinutesPerDay, choresHoursPerWeek, stairFlightsPerDay]);
+  }, [stepsKnown, dailyStepsAvg, sittingHoursPerDay, standingWorkHoursPerDay, activeCommuteMinutesPerDay, choresHoursPerWeek, stairFlightsPerDay, sleepHoursPerDay]);
 
   const otherSportComplete = useMemo(() => {
     if (hasOtherSport === "nao") return true;
@@ -450,6 +464,7 @@ export default function PrevisaoIaPage() {
             stepsKnown === "nao" && activeCommuteMinutesPerDay ? parseFloat(activeCommuteMinutesPerDay) : undefined,
           choresHoursPerWeek: stepsKnown === "nao" && choresHoursPerWeek ? parseFloat(choresHoursPerWeek) : undefined,
           stairFlightsPerDay: stepsKnown === "nao" && stairFlightsPerDay ? parseFloat(stairFlightsPerDay) : undefined,
+          sleepHoursPerDay: stepsKnown === "nao" && sleepHoursPerDay ? parseFloat(sleepHoursPerDay) : undefined,
           otherSportActivity: hasOtherSport === "sim" ? otherSportActivity || undefined : undefined,
           otherSportSessionsPerWeek:
             hasOtherSport === "sim" && otherSportSessionsPerWeek ? parseFloat(otherSportSessionsPerWeek) : undefined,
@@ -947,6 +962,21 @@ export default function PrevisaoIaPage() {
                     onChange={(e) => setStairFlightsPerDay(e.target.value)}
                     className="input"
                     placeholder="ex: 4"
+                  />
+                </Field>
+                <Field
+                  label="Quantas horas você dorme, em média, por noite"
+                  hint="É o que fecha a conta em 24h: o tempo que sobra depois do sono e do que você já respondeu acima entra no cálculo, em vez de simplesmente não existir."
+                >
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="3"
+                    max="14"
+                    value={sleepHoursPerDay}
+                    onChange={(e) => setSleepHoursPerDay(e.target.value)}
+                    className="input"
+                    placeholder="ex: 7"
                   />
                 </Field>
               </div>

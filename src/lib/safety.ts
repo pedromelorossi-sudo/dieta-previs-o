@@ -125,6 +125,31 @@ export function applySafetyLimits(input: SafetyLimitsInput): SafetyLimitsResult 
     }
   }
 
+  /* --- 3,5. o piso absoluto VENCE, mesmo depois da trava de ciclo ---
+   *
+   * A trava do passo 3 olha só `previousKcal × (1±15%)`, sem saber do piso que
+   * o passo 2 acabou de aplicar. Se o ciclo anterior já estava baixo — uma
+   * calibração ruim, ou uma dieta antiga importada à mão em /ciclos/novo —, a
+   * trava arrasta a prescrição de volta para BAIXO do piso, e o aviso do
+   * passo 2 ("elevada até o piso") passa a ser MENTIRA: o texto diz que o
+   * piso venceu, e o número final está abaixo dele.
+   *
+   * Medido: homem de 120kg, BMR 2617, ciclo anterior importado em 1100kcal —
+   * o app avisava "elevada até 2617kcal" e prescrevia 1784, 833kcal ABAIXO do
+   * próprio gasto de repouso. É exatamente o cenário que ABSOLUTE_KCAL_FLOOR
+   * existe para impedir.
+   *
+   * A trava de ciclo continua valendo — ela protege contra ruído de leitura
+   * saltando a prescrição. Mas quando ela e o piso absoluto discordam, quem
+   * vence é o piso: abaixo dele não é mais "ajuste gradual", é "abaixo do
+   * gasto de repouso", que a trava nunca deveria ter permissão de produzir. */
+  if (kcal < floor) {
+    warnings.push(
+      `A trava de variação entre ciclos levaria a ${kcal.toFixed(0)}kcal — abaixo do piso de segurança (${floor.toFixed(0)}kcal). O piso vence: o salto grande em relação ao ciclo anterior é real, mas prescrever abaixo do gasto de repouso não é uma opção segura mesmo assim.`
+    );
+    kcal = floor;
+  }
+
   // --- 4. pisos de macronutriente ---
   const proteinFloor = weightKg * PROTEIN_FLOOR_PER_KG[strategy];
   let proteinG = input.proposedProteinG;

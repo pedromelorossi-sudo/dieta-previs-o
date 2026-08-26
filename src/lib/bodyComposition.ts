@@ -27,6 +27,8 @@ export interface BodyCompositionInput {
   activeCommuteMinutesPerDay?: number;
   choresHoursPerWeek?: number;
   stairFlightsPerDay?: number;
+  /** Fecha o orçamento de 24h do NEAT por tempo — ver neatFromTimeBudget. */
+  sleepHoursPerDay?: number;
   /** esporte/atividade física regular fora da academia — capturado à parte do treino principal
    * (exerciseFreq/sessionDuration), com intensidade lida pelo talk test em vez de autoavaliação */
   otherSportActivity?: OtherSportActivity;
@@ -109,6 +111,17 @@ const MET_ACTIVE_COMMUTE = 3.3; // caminhada em ritmo de deslocamento (~5km/h)
 const MET_CHORES = 3.0; // tarefas domésticas em movimento (limpar, cozinhar, compras, carregar objetos)
 const MET_STAIRS = 8.8; // subida de escada
 const MINUTES_PER_FLIGHT = 0.15; // ~9s por lance de ~10-12 degraus em ritmo normal
+/* MET do tempo NÃO relatado — o resto das horas acordado depois de descontar
+ * sono e os domínios explicitamente respondidos. 1,5 é atividade leve de vida
+ * cotidiana (levantar, ir ao banheiro, cozinhar rápido) — nem sedentarismo
+ * puro (1,3, o mesmo do "sentado" declarado) nem vida ativa (1,8+, que
+ * superestimava em teste: ~991kcal de NEAT só nesse termo para quem preenche
+ * pouco do formulário). É constante interna, não pergunta ao usuário — a
+ * pergunta que EXISTE é quantas horas ele dorme; o MET do resto é modelagem. */
+const MET_RESTO_DO_DIA = 1.5;
+/** Horas acordado assumidas quando `sleepHoursPerDay` não é informado —
+ * fallback, não a fonte principal. Baseado em ~8h de sono médio. */
+const HORAS_ACORDADO_PADRAO = 16;
 
 function kcalPerMinuteAboveRest(met: number, weightKg: number): number {
   return ((met - 1) * 3.5 * weightKg) / 200;
@@ -120,6 +133,7 @@ interface TimeBudgetInput {
   activeCommuteMinutesPerDay?: number;
   choresHoursPerWeek?: number;
   stairFlightsPerDay?: number;
+  sleepHoursPerDay?: number;
 }
 
 function hasTimeBudget(input: TimeBudgetInput): boolean {
@@ -138,7 +152,47 @@ function neatFromTimeBudget(weightKg: number, input: TimeBudgetInput): number {
   const commute = (input.activeCommuteMinutesPerDay ?? 0) * kcalPerMinuteAboveRest(MET_ACTIVE_COMMUTE, weightKg);
   const chores = ((input.choresHoursPerWeek ?? 0) / 7) * 60 * kcalPerMinuteAboveRest(MET_CHORES, weightKg);
   const stairs = (input.stairFlightsPerDay ?? 0) * MINUTES_PER_FLIGHT * kcalPerMinuteAboveRest(MET_STAIRS, weightKg);
-  return sitting + standing + commute + chores + stairs;
+
+  /* FECHA O ORÇAMENTO EM 24H — sem isto, cada domínio era somado direto e
+   * relatar MAIS horas sentado só SOMAVA mais caloria, nunca descontava nada.
+   * Medido antes desta correção: quem respondia só "sento 2h" (resto em
+   * branco) recebia MENOS caloria (TDEE 2258) do que quem não respondia NADA
+   * (2503, do fallback sedentário) — preencher parte do formulário piorava a
+   * estimativa.
+   *
+   * Horas acordado vêm de `sleepHoursPerDay` quando informado (agora
+   * perguntado no formulário) — sem ele, cai no padrão de 16h. O tempo que
+   * sobra depois de sono + domínios já respondidos recebe MET_RESTO_DO_DIA
+   * em vez de simplesmente não existir na conta. Nunca negativo: se a soma
+   * dos domínios relatados já preenche (ou passa) as horas acordado, o resto
+   * é zero — a pessoa já contou o dia inteiro. */
+  /* Sono IMPLAUSÍVEL é tratado como AUSENTE, não absorvido cru.
+   *
+   * A validação de faixa em route.ts protege a requisição HTTP, mas esta
+   * função é chamada por qualquer código que importe bodyComposition.ts —
+   * um teste, uma calculadora futura, qualquer coisa. Sem defesa própria,
+   * `sleepHoursPerDay=-100` empurra `horasAcordado` para MAIS de 24h — e como
+   * isso alimenta o balde "resto do dia" (que cobre o dia inteiro, não um
+   * termo isolado como os outros), o efeito é desproporcional: TDEE inflado
+   * a 2,7× o normal, medido. E um valor não-numérico vira NaN e se propaga
+   * até o kcal final em silêncio, HTTP 200, dieta corrompida.
+   *
+   * Faixa fisiologicamente plausível de sono: 1 a 16h. Fora disso, ou não
+   * finito, cai no mesmo padrão de 16h acordado que "não informado" já usa —
+   * mesma filosofia do `assertFiniteBf`: dado implausível não é dado, é
+   * ausência de dado. */
+  const sonoValido =
+    input.sleepHoursPerDay != null && Number.isFinite(input.sleepHoursPerDay) && input.sleepHoursPerDay >= 1 && input.sleepHoursPerDay <= 16;
+  const horasAcordado = sonoValido ? Math.max(1, 24 - input.sleepHoursPerDay!) : HORAS_ACORDADO_PADRAO;
+  const horasJaContadas =
+    (input.sittingHoursPerDay ?? 0) +
+    (input.standingWorkHoursPerDay ?? 0) +
+    (input.activeCommuteMinutesPerDay ?? 0) / 60 +
+    (input.choresHoursPerWeek ?? 0) / 7;
+  const horasNaoContadas = Math.max(0, horasAcordado - horasJaContadas);
+  const resto = horasNaoContadas * 60 * kcalPerMinuteAboveRest(MET_RESTO_DO_DIA, weightKg);
+
+  return sitting + standing + commute + chores + stairs + resto;
 }
 
 interface NeatInput extends TimeBudgetInput {
@@ -705,6 +759,7 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
     activeCommuteMinutesPerDay,
     choresHoursPerWeek,
     stairFlightsPerDay,
+    sleepHoursPerDay,
     otherSportActivity,
     otherSportSessionsPerWeek,
     otherSportMinutesPerSession,
@@ -733,7 +788,7 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
         weightKg,
         exerciseFreq,
         sessionDuration,
-        { dailyStepsAvg, sittingHoursPerDay, standingWorkHoursPerDay, activeCommuteMinutesPerDay, choresHoursPerWeek, stairFlightsPerDay },
+        { dailyStepsAvg, sittingHoursPerDay, standingWorkHoursPerDay, activeCommuteMinutesPerDay, choresHoursPerWeek, stairFlightsPerDay, sleepHoursPerDay },
         { otherSportActivity, otherSportSessionsPerWeek, otherSportMinutesPerSession, otherSportTalkTest }
       )
     : null;

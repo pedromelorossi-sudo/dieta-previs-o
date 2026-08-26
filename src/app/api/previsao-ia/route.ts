@@ -65,6 +65,9 @@ interface RequestBody {
   activeCommuteMinutesPerDay?: number;
   choresHoursPerWeek?: number;
   stairFlightsPerDay?: number;
+  /** Horas de sono, para fechar o orçamento de 24h do NEAT por tempo — ver
+      neatFromTimeBudget em bodyComposition.ts. */
+  sleepHoursPerDay?: number;
   otherSportActivity?: OtherSportActivity;
   otherSportSessionsPerWeek?: number;
   otherSportMinutesPerSession?: number;
@@ -307,6 +310,7 @@ export async function POST(request: Request) {
     activeCommuteMinutesPerDay,
     choresHoursPerWeek,
     stairFlightsPerDay,
+    sleepHoursPerDay,
     otherSportActivity,
     otherSportSessionsPerWeek,
     otherSportMinutesPerSession,
@@ -340,6 +344,19 @@ export async function POST(request: Request) {
   }
   if (!currentWeightKg || currentWeightKg <= 0 || !heightCm || heightCm <= 0 || !age || age <= 0) {
     return NextResponse.json({ error: "Peso, altura e idade são obrigatórios." }, { status: 400 });
+  }
+  /* Faixa fisiologicamente plausível de horas de sono. Sem isto, um valor como
+     -5 ou 25 (erro de digitação, ou requisição direta à API sem passar pelo
+     formulário) chega inteiro em `neatFromTimeBudget`: 24-(-5)=29h "acordado"
+     num dia de 24h, ou 24-25=-1h, silenciosamente reduzido a 1h pelo clamp
+     interno sem avisar ninguém. O formulário já tem min=3/max=14; aqui é a
+     mesma faixa, mas exigida — o servidor não pode confiar em validação que só
+     existe no HTML. */
+  if (body.sleepHoursPerDay != null && (body.sleepHoursPerDay < 3 || body.sleepHoursPerDay > 14)) {
+    return NextResponse.json(
+      { error: `Horas de sono de ${body.sleepHoursPerDay} está fora da faixa plausível (3 a 14). Confira o valor.` },
+      { status: 400 }
+    );
   }
 
   const [{ data: cycleRows, error: cyclesError }, { data: prefsRow, error: prefsError }, previousPhoto] = await Promise.all([
@@ -566,6 +583,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
       activeCommuteMinutesPerDay,
       choresHoursPerWeek,
       stairFlightsPerDay,
+      sleepHoursPerDay,
       otherSportActivity,
       otherSportSessionsPerWeek,
       otherSportMinutesPerSession,
@@ -1366,6 +1384,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     activeCommuteMinutesPerDay,
     choresHoursPerWeek,
     stairFlightsPerDay,
+    sleepHoursPerDay,
     otherSportActivity,
     otherSportSessionsPerWeek,
     otherSportMinutesPerSession,
