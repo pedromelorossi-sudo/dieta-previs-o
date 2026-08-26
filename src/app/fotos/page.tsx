@@ -60,6 +60,15 @@ export default function FotosPage() {
     setSaving(true);
     setError(null);
     try {
+      /* A mesma coluna `estimated_bf_percent` recebe tanto a leitura da IA por foto (previsao-ia,
+         nota automática própria) quanto esta, calculada pela fórmula da Marinha a partir das
+         circunferências — sem nenhuma marca de origem, o histórico depois não distingue qual método
+         gerou qual número. `estimatedBf` só é não-nulo aqui quando cintura+pescoço foram preenchidos,
+         então nunca é a leitura da IA — pode marcar sem ambiguidade. */
+      const notaComOrigem =
+        estimatedBf != null
+          ? [notes.trim(), "%BF calculado pelo método da Marinha dos EUA (circunferências)."].filter(Boolean).join(" — ")
+          : notes;
       await addProgressPhoto({
         date,
         file,
@@ -68,7 +77,7 @@ export default function FotosPage() {
         hipCm: hip ? parseFloat(hip) : null,
         sex,
         estimatedBfPercent: estimatedBf,
-        notes,
+        notes: notaComOrigem,
         cycleId: null,
       });
       setPhotos(await loadProgressPhotos());

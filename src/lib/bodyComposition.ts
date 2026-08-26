@@ -262,7 +262,19 @@ interface OtherSportInput {
 }
 
 function eatFromOtherSport(weightKg: number, input: OtherSportInput): number {
-  if (!input.otherSportActivity || !input.otherSportSessionsPerWeek || !input.otherSportMinutesPerSession) return 0;
+  /* `!valor` trata 0 e "ausente" do mesmo jeito (certo: sem sessão, sem contribuição), mas NÃO barra
+     negativo — `!(-5)` é `false` em JS, então um valor negativo passava o guard e virava EAT
+     negativo, reduzindo o TDEE em silêncio. A rota já valida a faixa antes de chegar aqui, mas esta
+     função é exportada indiretamente via `estimateTdeeFromComponents`/`estimateBodyComposition`, sem
+     garantia de que todo chamador futuro passe pela mesma validação — defesa própria. */
+  if (
+    !input.otherSportActivity ||
+    !input.otherSportSessionsPerWeek ||
+    input.otherSportSessionsPerWeek < 0 ||
+    !input.otherSportMinutesPerSession ||
+    input.otherSportMinutesPerSession < 0
+  )
+    return 0;
   const met = OTHER_SPORT_MET[input.otherSportActivity] * TALK_TEST_MULTIPLIER[input.otherSportTalkTest ?? "frases_curtas"];
   const kcalPerMinute = (met * 3.5 * weightKg) / 200;
   return (input.otherSportSessionsPerWeek * input.otherSportMinutesPerSession * kcalPerMinute) / 7;

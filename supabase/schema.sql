@@ -119,6 +119,11 @@ alter table public.cycles add column if not exists muscle_assessment jsonb;
 -- `is_prediction` não serve pra isso: tanto o fluxo de IA quanto a calculadora marcam true.
 alter table public.cycles add column if not exists origin text;
 
+-- Estratégia prescrita neste ciclo: bulking | cutting | normocalorico. Alimenta a histerese de
+-- classifyPathFromBf no ciclo seguinte — sem ela a fase é readivinhada pelo %BF sozinho e alterna
+-- por ruído de leitura (ver migração 0005_cycles_path.sql).
+alter table public.cycles add column if not exists path text;
+
 alter table public.cycles enable row level security;
 
 drop policy if exists "cycles: all own" on public.cycles;
@@ -372,14 +377,19 @@ drop policy if exists "progress-photos: read own or admin" on storage.objects;
 create policy "progress-photos: read own or admin" on storage.objects
   for select using (
     bucket_id = 'progress-photos'
-    and ((storage.foldername(name))[1] = auth.uid()::text or (select public.is_admin()))
+    and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.is_admin()))
   );
 drop policy if exists "progress-photos: insert own" on storage.objects;
 create policy "progress-photos: insert own" on storage.objects
-  for insert with check (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+  for insert with check (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
+/* Sem esta política o Postgres nega qualquer atualização de objeto (falha fechada, nunca foi
+   brecha), mas trocar a foto de uma data virava apagar-e-subir em vez de substituir. */
+drop policy if exists "progress-photos: update own" on storage.objects;
+create policy "progress-photos: update own" on storage.objects
+  for update using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
 drop policy if exists "progress-photos: delete own" on storage.objects;
 create policy "progress-photos: delete own" on storage.objects
-  for delete using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+  for delete using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
 
 -- ============ PREDICTION AUDIT (calibração contínua) ============
 -- registra, a cada ciclo recorrente, fórmula vs. realidade (TDEE) e a consistência da leitura visual de

@@ -44,6 +44,26 @@ export async function POST(request: Request) {
   if (!body.targetKcal || body.targetKcal <= 0) {
     return NextResponse.json({ error: "Defina as metas de kcal/macros antes de gerar." }, { status: 400 });
   }
+  /* Só `targetKcal` era validado — proteína/gordura/carboidrato e número de refeições chegavam direto
+     de `request.json()` sem checagem de tipo/faixa no servidor. O cliente já faz `parseFloat(...) ||
+     0` antes de enviar (barra NaN), mas não barra negativo nem um valor absurdo — e nada impede uma
+     chamada direta à API, sem passar pelo formulário. Faixas generosas, só pra cortar erro de
+     digitação/valor fisiologicamente impossível. */
+  const faixasMacro: { campo: keyof RequestBody; label: string; min: number; max: number }[] = [
+    { campo: "targetProteinG", label: "Proteína alvo", min: 0, max: 500 },
+    { campo: "targetFatG", label: "Gordura alvo", min: 0, max: 400 },
+    { campo: "targetCarbG", label: "Carboidrato alvo", min: 0, max: 1200 },
+    { campo: "mealsCount", label: "Número de refeições", min: 1, max: 10 },
+  ];
+  for (const { campo, label, min, max } of faixasMacro) {
+    const valor = body[campo];
+    if (typeof valor !== "number" || !Number.isFinite(valor) || valor < min || valor > max) {
+      return NextResponse.json(
+        { error: `${label}: valor inválido (${valor}). Faixa esperada: ${min} a ${max}.` },
+        { status: 400 }
+      );
+    }
+  }
 
   const client = new Anthropic();
   let meals, warnings;

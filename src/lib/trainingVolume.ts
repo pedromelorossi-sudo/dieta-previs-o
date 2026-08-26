@@ -150,57 +150,6 @@ export function readVolumeStatus(weeklyVolume: Map<MuscleGroup, number>): Volume
   });
 }
 
-/**
- * Atrofia por desuso não é uniforme entre grupos musculares nem constante ao longo do tempo — a taxa é
- * maior nos primeiros dias e desacelera depois, e grupos diferentes atrofiam em velocidades diferentes.
- * Base: Hardy, Inns, Hatt, Doleman, Bass, Atherton, Lund & Phillips 2022, J Cachexia Sarcopenia Muscle,
- * DOI 10.1002/jcsm.13067 — revisão sistemática do curso temporal de atrofia por desuso em membro
- * inferior: tríceps sural (panturrilha) atrofia mais rápido (~-11,2% em 28 dias), depois quadríceps
- * (~-9,2%), isquiotibiais/posterior de coxa (~-6,5%), dorsiflexores/tibial anterior (~-3,2%), com queda
- * mais acentuada nos primeiros 14 dias do que depois. Os dados são de membro inferior (não há mapeamento
- * publicado equivalente pra tronco/membro superior) — os multiplicadores de peito/costas/ombro/braço
- * abaixo são uma extrapolação prudente (mais lenta que perna, já que o estudo mostra desuso de perna
- * atrofiando mais rápido que o esperado por ser a musculatura mais dependente de sustentar peso), não
- * um número medido.
- */
-const ATROPHY_RATE_PER_WEEK: Record<MuscleGroup, number> = {
-  panturrilha: 0.028, // ~-11%/4 semanas, extrapolado linear pra semana isolada
-  quadriceps: 0.023,
-  posterior_coxa: 0.016,
-  gluteo: 0.016,
-  adutor: 0.016, // mesma ordem do glúteo — musculatura de quadril, sustenta peso
-  lombar: 0.012,
-  costas: 0.012,
-  peito: 0.012,
-  ombro: 0.012,
-  deltoide_posterior: 0.012,
-  biceps: 0.01,
-  triceps: 0.01,
-  antebraco: 0.008,
-  abdominal: 0.008,
-};
-
-export interface InjuryContext {
-  muscle: MuscleGroup;
-  weeksOut: number;
-}
-
-/** Quando um grupo ficou de fora (lesão/dor) por N semanas, não trata "voltou com volume baixo" como
- * estagnação — desconta a expectativa de MEV/MAV proporcionalmente à atrofia estimada nesse período, e
- * recomenda reentrada gradual (retomar em ~MEV, não já em MAV/MRV) em vez de tentar recuperar o volume
- * perdido de uma vez. */
-export function adjustLandmarkForInjury(landmark: VolumeLandmark, injury: InjuryContext): VolumeLandmark & { reentryNote: string } {
-  const rate = ATROPHY_RATE_PER_WEEK[injury.muscle];
-  const estimatedLossFraction = Math.min(0.35, rate * injury.weeksOut);
-  const reentryMev = Math.round(landmark.mev * (1 - estimatedLossFraction * 0.5));
-  return {
-    ...landmark,
-    mev: Math.max(0, reentryMev),
-    reentryNote: `Fora ${injury.weeksOut} semana(s) — perda estimada de ~${(estimatedLossFraction * 100).toFixed(0)}% de massa/capacidade nesse grupo (Hardy et al. 2022). Reentrada recomendada perto do MEV ajustado (${reentryMev} séries/semana), subindo gradualmente ao longo de 2-3 semanas antes de mirar o MAV normal — não retomar direto no volume pré-lesão.`,
-  };
-}
-
-
 /** Compara a META de volume prescrita com o volume EFETIVAMENTE logado, por grupo muscular.
  *
  * Os dois números sempre existiram no app e nunca se encontravam: `computeMuscleTargets` produzia a meta,

@@ -376,6 +376,37 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  /* Mesma razão do sono acima, estendida aos campos irmãos do orçamento de tempo — o formulário só
+     tinha min="0" no HTML, sem validação de servidor nenhuma. Um valor negativo em qualquer um deles
+     chega inteiro em `neatFromTimeBudget`: `horasAcordado - horasJaContadas` infla (mesma classe do
+     bug já corrigido pro sono, TDEE inflado a 2,7×). `otherSportSessionsPerWeek` tem um problema
+     adicional: o guard em `estimateTdeeFromComponents` é falsy-check (`!input.otherSportSessionsPerWeek`),
+     que não barra número negativo (`-5` é truthy em JS) — produz EAT negativo, reduzindo o TDEE em
+     silêncio. Faixas generosas, só pra cortar valor fisiologicamente impossível ou erro de digitação
+     (ex: dígito a mais, sinal trocado), não pra restringir rotina real de ninguém.
+
+     `weeksToNextConsult` entra na mesma lista por conveniência, mas por motivo diferente: não afeta
+     TDEE/NEAT, só a faixa de projeção de peso (`projMin`/`delta` em dietEngine.ts) — um valor
+     zero/negativo/absurdo distorce essa projeção sem quebrar nada mais no cálculo. */
+  const faixasTempo: { campo: keyof RequestBody; label: string; min: number; max: number }[] = [
+    { campo: "sittingHoursPerDay", label: "Horas sentado por dia", min: 0, max: 20 },
+    { campo: "standingWorkHoursPerDay", label: "Horas em pé por dia", min: 0, max: 20 },
+    { campo: "activeCommuteMinutesPerDay", label: "Minutos de deslocamento ativo por dia", min: 0, max: 300 },
+    { campo: "choresHoursPerWeek", label: "Horas de tarefas domésticas por semana", min: 0, max: 40 },
+    { campo: "stairFlightsPerDay", label: "Lances de escada por dia", min: 0, max: 200 },
+    { campo: "otherSportSessionsPerWeek", label: "Sessões de outro esporte por semana", min: 0, max: 14 },
+    { campo: "otherSportMinutesPerSession", label: "Minutos por sessão de outro esporte", min: 0, max: 300 },
+    { campo: "weeksToNextConsult", label: "Semanas até a próxima consulta", min: 1, max: 26 },
+  ];
+  for (const { campo, label, min, max } of faixasTempo) {
+    const valor = body[campo];
+    if (typeof valor === "number" && (valor < min || valor > max)) {
+      return NextResponse.json(
+        { error: `${label}: valor de ${valor} está fora da faixa plausível (${min} a ${max}). Confira o valor.` },
+        { status: 400 }
+      );
+    }
+  }
 
   const [{ data: cycleRows, error: cyclesError }, { data: prefsRow, error: prefsError }, previousPhoto] = await Promise.all([
     supabase
@@ -869,6 +900,12 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
       bfConfidence: bfRaw.bfConfidence,
       muscleGroupAssessment: leituraMuscular,
       bfReasoning: bfRaw.bfReasoning,
+      /* Calculada e gravada em prediction_audit (bf_erro_pp) desde sempre, mas nunca devolvida na
+         resposta do primeiro ciclo — quem já chegasse com DEXA/bioimpedância na 1ª análise nunca via
+         a comparação "sua leitura por foto bateu/errou por X pontos" (só aparecia a partir do 2º
+         ciclo). tendenciaBf fica de fora aqui de propósito: precisa de 2+ exames pra distinguir viés
+         de ruído, e no primeiro ciclo não há histórico nenhum ainda. */
+      afericaoBf: afericaoPrimeiroCiclo,
       evolutionNote: bfRaw.evolutionNote || null,
       strategy: comp.path,
       strategyLabel: PATH_LABEL[comp.path],

@@ -1,12 +1,5 @@
 import { MuscleGroup, exerciseById, exercisesByMuscle } from "./exerciseLibrary";
-import {
-  VolumeReading,
-  VolumeStatus,
-  weeklyVolumeByMuscle,
-  readVolumeStatus,
-  adjustLandmarkForInjury,
-  InjuryContext,
-} from "./trainingVolume";
+import { VolumeReading, VolumeStatus, weeklyVolumeByMuscle, readVolumeStatus } from "./trainingVolume";
 import { TrainingLog } from "./trainingBuilder";
 
 export type VolumeAdjustment = "subir" | "manter" | "reduzir";
@@ -39,9 +32,6 @@ export interface TrainingPeriodizationInput {
   /** histórico já carregado (ver trainingStorage.loadTrainingLogs) — pelo menos 2-3 semanas pra decisão
    * de deload fazer sentido; menos que isso ainda funciona, só sem o sinal de "2 semanas consecutivas" */
   logs: TrainingLog[];
-  /** grupos em reentrada conhecida (lesão/dor recente) — desconta MEV/MAV proporcionalmente em vez de
-   * tratar volume baixo aí como estagnação (ver adjustLandmarkForInjury em trainingVolume.ts) */
-  injuries?: InjuryContext[];
 }
 
 function weekIndex(dateStr: string, refDate: Date): number {
@@ -86,12 +76,12 @@ function suggestExerciseSwap(muscle: MuscleGroup, recentLogs: TrainingLog[]): Ex
 }
 
 /** Decide, por grupo muscular, se o volume da próxima semana deve subir/manter/reduzir a partir do
- * volume efetivo da semana mais recente vs. MEV/MAV/MRV (ajustado por lesão quando aplicável), sugere
- * troca de exercício quando subir volume faz sentido, e sinaliza deload quando 2+ grupos passaram do MRV
- * por 2 semanas seguidas — recuperação virando o fator limitante, prática padrão de periodização (mesmo
- * raciocínio já presente nos comentários de trainingVolume.ts). */
+ * volume efetivo da semana mais recente vs. MEV/MAV/MRV, sugere troca de exercício quando subir volume
+ * faz sentido, e sinaliza deload quando 2+ grupos passaram do MRV por 2 semanas seguidas — recuperação
+ * virando o fator limitante, prática padrão de periodização (mesmo raciocínio já presente nos
+ * comentários de trainingVolume.ts). */
 export function recommendNextWeek(input: TrainingPeriodizationInput, refDate: Date = new Date()): WeeklyRecommendation {
-  const { logs, injuries = [] } = input;
+  const { logs } = input;
 
   const week0Readings = volumeReadingsForWeek(logs, 0, refDate);
   const week1Readings = volumeReadingsForWeek(logs, 1, refDate);
@@ -101,15 +91,13 @@ export function recommendNextWeek(input: TrainingPeriodizationInput, refDate: Da
   const recentLogs = logs.filter((l) => weekIndex(l.date, refDate) <= 2);
 
   const muscles: MuscleRecommendation[] = week0Readings.map((reading) => {
-    const injury = injuries.find((i) => i.muscle === reading.muscle);
-    const adjustedForInjury = injury ? adjustLandmarkForInjury(reading.landmark, injury) : null;
-    const landmark = adjustedForInjury ?? reading.landmark;
+    const landmark = reading.landmark;
 
     let adjustment: VolumeAdjustment;
     let reason: string;
     if (reading.effectiveSets < landmark.mev) {
       adjustment = "subir";
-      reason = adjustedForInjury ? adjustedForInjury.reentryNote : reading.note;
+      reason = reading.note;
     } else if (reading.effectiveSets > landmark.mrv) {
       adjustment = "reduzir";
       reason = reading.note;
