@@ -46,7 +46,7 @@ function newRow(): DraftRow {
 
 import { GridPage, PageHero, SectionHeading, Panel, FormRow } from "@/components/apple";
 import { ProgramaDaSemana } from "@/components/ProgramaDaSemana";
-import { computeMuscleTargets, buildSplit, ajusteDeFadigaPara, diasEfetivosPara } from "@/lib/trainingSplitBuilder";
+import { computeMuscleTargets, buildSplit, ajusteDeFadigaPara, diasEfetivosPara, MuscleTarget } from "@/lib/trainingSplitBuilder";
 import { upsertTrainingProgram } from "@/lib/trainingStorage";
 import { loadPreferences } from "@/lib/questionnaire";
 import { newId } from "@/components/DietMealsEditor";
@@ -73,6 +73,12 @@ export default function TreinoPage() {
      dado do programa em si (não faz sentido persistir no banco): é uma leitura do HISTÓRICO DE LOGS
      no momento da geração, que fica velha assim que a pessoa loga uma sessão nova. */
   const [motivoCargaPorExercicio, setMotivoCargaPorExercicio] = useState<Map<string, string>>(new Map());
+  /* `computeMuscleTargets` já calcula POR QUE cada grupo recebeu a meta semanal de séries que tem
+     (`MuscleTarget.reason` — prioridade declarada, leitura visual, teto do MEV/MAV, orçamento da
+     divisão…), mas o retorno virava só o número usado por `buildSplit` e o motivo nunca chegava à
+     tela. Mesmo raciocínio do `motivoCargaPorExercicio` acima: guardado à parte porque é uma
+     explicação do momento da geração, não dado persistido do programa. */
+  const [alvosPorGrupo, setAlvosPorGrupo] = useState<MuscleTarget[]>([]);
 
   /* GERAÇÃO AUTOMÁTICA.
    *
@@ -182,6 +188,7 @@ export default function TreinoPage() {
 
       const dias = diasEfetivosPara(diasPorSemana, 0);
       const alvos = computeMuscleTargets(leitura, prefs.priorityMuscles ?? [], 0, dias, 0, dias < diasPorSemana, prefs.sex);
+      setAlvosPorGrupo(alvos);
 
       /* A carga sugerida existe (`suggestLoadProgression`, a partir do
          histórico de cargas logadas) e chegava só em previsao-ia — a página
@@ -389,6 +396,33 @@ export default function TreinoPage() {
         <Panel>
           <div className="panel-row text-[14.5px] leading-[1.6] text-danger">{recommendation.deloadReason}</div>
         </Panel>
+      )}
+
+      {alvosPorGrupo.length > 0 && (
+        <section>
+          <SectionHeading
+            title="Por que essa meta, por grupo"
+            desc="O motivo por trás da meta semanal de séries de cada grupo — prioridade declarada, leitura visual, teto de MEV/MAV ou orçamento da divisão."
+          />
+          <div className="space-y-2">
+            {alvosPorGrupo.map((a) => (
+              <details key={a.muscle} className="rounded-[12px] border border-border bg-surface-raised/40 p-3">
+                <summary className="cursor-pointer list-none">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{a.muscleLabel}</span>
+                    {a.isPriority && <span className="badge bg-accent/15 text-accent">prioridade</span>}
+                    <span className="ml-auto text-xs text-muted tabular-nums whitespace-nowrap">
+                      {a.weeklySets} séries/semana
+                    </span>
+                  </span>
+                </summary>
+                <p className="mt-2 border-t border-border pt-2 text-[13.5px] leading-[1.55] text-muted">
+                  {a.reason}
+                </p>
+              </details>
+            ))}
+          </div>
+        </section>
       )}
 
       <section>
