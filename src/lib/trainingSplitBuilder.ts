@@ -522,44 +522,115 @@ export function computeMuscleTargets(
    * ele mesmo se recusa a cumprir, que é a incoerência que esta rodada inteira
    * existe para fechar. Quando o piso estoura a capacidade, ele cede: a meta
    * volta ao que cabe, e o `reason` abaixo diz que faltam dias de treino. */
-  /* O piso de MEV é verificado POR DIA, não no total da semana.
+  /* O piso de MEV é verificado POR DIA, não no total da semana — mas cada
+   * MÚSCULO só pode ser cortado UMA VEZ, pelo dia mais restritivo em que
+   * aparece, nunca uma vez por OCORRÊNCIA do mesmo tipo de dia.
    *
    * Verificar no total escondia o desequilíbrio do template: com 2 dias, o
    * Upper tem 7 grupos e o Lower 4, então a soma semanal cabia em 2×22 = 44
    * enquanto o Upper sozinho pedia 29 para uma sessão de 22. A meta prometia o
-   * que só o dia mais cheio se recusaria a entregar. */
+   * que só o dia mais cheio se recusaria a entregar.
+   *
+   * MAS a correção original processava cada `dia` do template SEQUENCIALMENTE
+   * e mutava `sl.sets` (o total SEMANAL, compartilhado) a cada iteração. Upper
+   * A e Upper B têm o mesmo elenco de músculos e o mesmo orçamento — dois
+   * `dia` diferentes — então o corte rodava DUAS VEZES sobre o mesmo total,
+   * a segunda vez agindo sobre o resultado já cortado da primeira.
+   *
+   * Confirmado rodando (varredura de invariantes): 4 dias, prioridade
+   * declarada em bíceps, recuperação 2, adesão 1 — bíceps cortado de 6 para 3
+   * no Upper A, e cortado DE NOVO no Upper B a partir do 3 já reduzido. A
+   * prioridade que o round anterior tinha dado (peso dobrado no excedente)
+   * desaparecia na composição dos dois cortes.
+   *
+   * Agora cada dia calcula seu corte a partir de um SNAPSHOT do valor antes
+   * deste bloco (não do valor já mutado por outro dia), e cada músculo fica
+   * com o MENOR resultado entre todos os dias em que aparece — o dia mais
+   * apertado decide, sem compor cortes. */
+  const snapshotPorSlot = new Map<Slot, number>();
+  for (const sl of slots) snapshotPorSlot.set(sl, sl.sets);
+
+  const PISO_MINIMO_PRESCRITIVEL = 2;
+  const candidatosPorMusculo = new Map<MuscleGroup, number[]>();
+  const registrarCandidato = (muscle: MuscleGroup, valorSemanal: number) => {
+    const lista = candidatosPorMusculo.get(muscle) ?? [];
+    lista.push(valorSemanal);
+    candidatosPorMusculo.set(muscle, lista);
+  };
+
   for (const dia of templateParaMeta) {
-    const noDia = dia.muscles.map((m) => slotPorMusculo.get(m)).filter((sl): sl is Slot => !!sl && sl.sets > 0);
+    const freqDe = (sl: Slot) => Math.max(1, freqByMuscle.get(sl.landmark.muscle) ?? 1);
+    const porDiaOriginal = (sl: Slot) => (snapshotPorSlot.get(sl) ?? 0) / freqDe(sl);
+
+    const noDia = dia.muscles
+      .map((m) => slotPorMusculo.get(m))
+      .filter((sl): sl is Slot => !!sl && (snapshotPorSlot.get(sl) ?? 0) > 0);
     if (noDia.length === 0) continue;
-    const porDia = (sl: Slot) => sl.sets / Math.max(1, freqByMuscle.get(sl.landmark.muscle) ?? 1);
-    const somaDoDia = noDia.reduce((n, sl) => n + porDia(sl), 0);
-    if (somaDoDia <= orcamentoPorSessao) continue;
 
-    /* O corte NÃO desce abaixo do MEV.
-     *
-     * A primeira versão escalava tudo proporcionalmente, e o resultado foi um
-     * peito lido como "destaque" caindo para 6 séries com MEV 8 — abaixo do
-     * mínimo efetivo. Emparelhar o físico puxando o grupo forte para a
-     * regressão não é emparelhar: é perder de um lado o que se ganha do outro.
-     * O grupo em destaque cede o que tem ACIMA do MEV; o piso é intocável. */
-    const pisoDoDia = (sl: Slot) => Math.min(sl.landmark.mev, sl.ceiling) / Math.max(1, freqByMuscle.get(sl.landmark.muscle) ?? 1);
-    const somaPisos = noDia.reduce((n, sl) => n + pisoDoDia(sl), 0);
-    const excedenteDisponivel = Math.max(0, orcamentoPorSessao - somaPisos);
-    const somaExcedentes = noDia.reduce((n, sl) => n + Math.max(0, porDia(sl) - pisoDoDia(sl)), 0);
+    const somaDoDia = noDia.reduce((n, sl) => n + porDiaOriginal(sl), 0);
 
-    if (somaPisos >= orcamentoPorSessao) {
-      // nem os mínimos cabem: aí sim corta proporcional e o `reason` explica
-      const escala = orcamentoPorSessao / somaDoDia;
-      for (const sl of noDia) sl.sets = Math.round(sl.sets * escala);
+    // este dia não aperta: cada músculo tem o valor original como candidato
+    // (se outro dia for mais restritivo, o Math.min no final decide por ele)
+    if (somaDoDia <= orcamentoPorSessao) {
+      for (const sl of noDia) registrarCandidato(sl.landmark.muscle, snapshotPorSlot.get(sl) ?? 0);
       continue;
     }
 
-    const escalaExcedente = somaExcedentes > 0 ? excedenteDisponivel / somaExcedentes : 0;
+    /* NIVELAMENTO A 2 SÉRIES/DIA PRIMEIRO, não corte proporcional cego a
+     * partir do MEV.
+     *
+     * A versão anterior partia direto para "escala tudo pra caber, com o MEV
+     * como piso intocável" — mas um corte proporcional cego a partir do MEV
+     * ainda podia derrubar um grupo de 3/dia para 1,75/dia (abaixo do piso de
+     * prescrição de 2/dia — `pickExercisesForMuscle` não desce disso), sem
+     * proteger especificamente essa fronteira. Medido: Upper com 6 grupos,
+     * pisos de MEV somando 21 contra orçamento de 12,24 — ombro, deltoide
+     * posterior, bíceps e tríceps saíam TODOS zerados, enquanto peito e
+     * costas (MEV maior) ficavam com o piso inteiro.
+     *
+     * Nivelar a 2 primeiro gasta o orçamento em COBERTURA (todo grupo
+     * aparece) antes de gastar em PROFUNDIDADE (um grupo perto do ideal). */
+    const nivelamento = new Map<Slot, number>();
+    for (const sl of noDia) nivelamento.set(sl, Math.min(porDiaOriginal(sl), PISO_MINIMO_PRESCRITIVEL));
+    const somaNivelamento = [...nivelamento.values()].reduce((n, v) => n + v, 0);
+    const escalaNivelamento =
+      somaNivelamento > orcamentoPorSessao && somaNivelamento > 0 ? orcamentoPorSessao / somaNivelamento : 1;
+
+    const resultadoDoDia = new Map<Slot, number>();
+    let usado = 0;
     for (const sl of noDia) {
-      const freq = Math.max(1, freqByMuscle.get(sl.landmark.muscle) ?? 1);
-      const novoPorDia = pisoDoDia(sl) + Math.max(0, porDia(sl) - pisoDoDia(sl)) * escalaExcedente;
-      sl.sets = Math.round(novoPorDia * freq);
+      const v = nivelamento.get(sl)! * escalaNivelamento;
+      resultadoDoDia.set(sl, v);
+      usado += v;
     }
+
+    /* O que sobra do orçamento vai, proporcional, em direção ao valor
+     * ORIGINAL de cada músculo — não ao MEV. O valor original já reflete a
+     * prioridade (peso dobrado no excedente, calculado antes deste bloco);
+     * mirar nele em vez do MEV é o que propaga a prioridade para dentro de um
+     * dia apertado, em vez de descartá-la. */
+    const sobra = orcamentoPorSessao - usado;
+    if (sobra > 0) {
+      const faltaParaOriginal = new Map<Slot, number>();
+      for (const sl of noDia) {
+        const falta = Math.max(0, porDiaOriginal(sl) - resultadoDoDia.get(sl)!);
+        if (falta > 0) faltaParaOriginal.set(sl, falta);
+      }
+      const somaFalta = [...faltaParaOriginal.values()].reduce((n, v) => n + v, 0);
+      if (somaFalta > 0) {
+        const escalaFalta = Math.min(1, sobra / somaFalta);
+        for (const [sl, falta] of faltaParaOriginal) {
+          resultadoDoDia.set(sl, resultadoDoDia.get(sl)! + falta * escalaFalta);
+        }
+      }
+    }
+
+    for (const [sl, v] of resultadoDoDia) registrarCandidato(sl.landmark.muscle, Math.round(v * freqDe(sl)));
+  }
+
+  for (const sl of slots) {
+    const candidatos = candidatosPorMusculo.get(sl.landmark.muscle);
+    if (candidatos && candidatos.length > 0) sl.sets = Math.min(...candidatos);
   }
 
   /* TETO CORRIGIDO PELO ESTÍMULO INDIRETO.
@@ -691,16 +762,53 @@ export function computeMuscleTargets(
     let soma = noDia.reduce((n, e) => n + e.fatia[dia.label], 0);
     if (soma <= orcamentoPorSessao) continue;
 
-    /* Corta do MAIOR primeiro, uma série por vez. É o corte que menos
-     * desequilibra: tirar proporcionalmente de todos pode derrubar um grupo
-     * pequeno para 1 série, que a montagem não prescreve e vira zero. */
+    /* Corta do MAIOR primeiro, uma série por vez — enquanto alguém está ACIMA
+     * do piso de prescrição. É o corte que menos desequilibra: tirar
+     * proporcionalmente de todos pode derrubar um grupo pequeno para 1 série,
+     * que a montagem não prescreve e vira zero.
+     *
+     * O bug estava no que acontecia DEPOIS de todo mundo já estar EXATAMENTE
+     * no piso (2, empatados): o código caía no segundo `find` — "alguém com
+     * fatia > 0" — que, com tudo empatado, pega o primeiro do array ORDENADO,
+     * cujo desempate é a ORDEM ORIGINAL do template. Cortava 1 de cada um dos
+     * primeiros grupos do array até o orçamento fechar — e um corte de 2→1
+     * cruza o piso sem proteção nenhuma: a montagem descarta esse grupo por
+     * inteiro, e a série "1" que sobrou nunca foi usada por ninguém.
+     *
+     * Medido: 1 dia, 11 grupos empatados em 2 (soma 22, orçamento 18) — os 4
+     * primeiros do array (peito, costas, ombro, deltoide posterior) cortados
+     * para 1 e descartados pela montagem, SEM ligação com prioridade ou MEV,
+     * só com a posição no array.
+     *
+     * Quando ninguém mais está acima do piso, a escolha certa não é espalhar
+     * o corte em pedaços que viram lixo — é tirar um grupo INTEIRO da lista
+     * (fatia 0), para os que sobram manterem o piso de verdade. Sai o de MENOR
+     * MEV: quem tem menos necessidade fisiológica de volume direto. */
     const ordenado = [...noDia].sort((a, b) => b.fatia[dia.label] - a.fatia[dia.label]);
     while (soma > orcamentoPorSessao) {
-      const alvo = ordenado.find((e) => e.fatia[dia.label] > 2) ?? ordenado.find((e) => e.fatia[dia.label] > 0);
-      if (!alvo) break;
-      alvo.fatia[dia.label] -= 1;
-      soma -= 1;
-      ordenado.sort((a, b) => b.fatia[dia.label] - a.fatia[dia.label]);
+      const acimaDoPiso = ordenado.find((e) => e.fatia[dia.label] > PISO_MINIMO_PRESCRITIVEL);
+      if (acimaDoPiso) {
+        acimaDoPiso.fatia[dia.label] -= 1;
+        soma -= 1;
+        ordenado.sort((a, b) => b.fatia[dia.label] - a.fatia[dia.label]);
+        continue;
+      }
+      /* Prioridade declarada protege do descarte: entre os candidatos, primeiro
+       * tenta achar um SEM prioridade para sacrificar; só desce para um
+       * prioritário se todos os que sobraram forem prioritários (aí não tem
+       * como preservar todos, e o de menor MEV cede). Sem isso, um grupo
+       * priorizado com MEV baixo (glúteo, adutor) podia ser o primeiro
+       * descartado nesta última rodada — a prioridade valia nas rodadas
+       * anteriores e desaparecia bem aqui, no fim. */
+      const candidatosNoPiso = noDia.filter((e) => e.fatia[dia.label] > 0);
+      if (candidatosNoPiso.length === 0) break;
+      const semPrioridade = candidatosNoPiso.filter((e) => !slotPorMusculo.get(e.muscle)?.isPriority);
+      const pool = semPrioridade.length > 0 ? semPrioridade : candidatosNoPiso;
+      const menorMev = pool.reduce((menor, e) =>
+        (landmarkFor(e.muscle)?.mev ?? 0) < (landmarkFor(menor.muscle)?.mev ?? 0) ? e : menor
+      );
+      soma -= menorMev.fatia[dia.label];
+      menorMev.fatia[dia.label] = 0;
     }
   }
 
