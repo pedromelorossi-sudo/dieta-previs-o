@@ -385,7 +385,9 @@ create policy "progress-photos: delete own" on storage.objects
 -- registra, a cada ciclo recorrente, fórmula vs. realidade (TDEE) e a consistência da leitura visual de
 -- %BF/composição do ganho — junto com sinais de adesão já coletados, pra saber se uma divergência é
 -- erro da fórmula ou só adesão ruim antes de deixar isso "aprender" e ajustar a fórmula (ver
--- src/lib/calibration.ts). Nunca é editado depois de inserido — é um log de auditoria, não estado mutável.
+-- src/lib/calibration.ts). Um `upsert` com `onConflict: "user_id,date"` reescreve a linha do dia quando a
+-- pessoa reanalisa no mesmo dia — sem isso a constraint única abaixo rejeitava a 2ª tentativa e os dados
+-- dela eram perdidos em silêncio. Fora essa reescrita pontual, a linha não é editada por nenhum outro fluxo.
 create table if not exists public.prediction_audit (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -412,6 +414,13 @@ create policy "prediction_audit: select own or admin" on public.prediction_audit
 drop policy if exists "prediction_audit: insert own" on public.prediction_audit;
 create policy "prediction_audit: insert own" on public.prediction_audit
   for insert with check ((select auth.uid()) = user_id);
+/* O `upsert` com onConflict gera um INSERT ... ON CONFLICT DO UPDATE por baixo — sem esta política o
+   RLS bloqueia o ramo de UPDATE do upsert, e reanalisar no mesmo dia voltaria a falhar (agora com erro
+   de política em vez de erro de chave duplicada). Ver migração 0006_prediction_audit_update_own.sql. */
+drop policy if exists "prediction_audit: update own" on public.prediction_audit;
+create policy "prediction_audit: update own" on public.prediction_audit
+  for update using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 drop policy if exists "prediction_audit: delete own" on public.prediction_audit;
 create policy "prediction_audit: delete own" on public.prediction_audit
   for delete using ((select auth.uid()) = user_id);

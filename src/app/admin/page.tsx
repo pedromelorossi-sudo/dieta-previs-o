@@ -67,6 +67,14 @@ export default function AdminPage() {
                 <tr
                   key={u.id}
                   onClick={() => router.push(`/admin/${u.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/admin/${u.id}`);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
                   className="border-b border-border last:border-0 hover:bg-surface-raised/60 transition-colors cursor-pointer"
                 >
                   <td className="px-4 py-3 font-medium">

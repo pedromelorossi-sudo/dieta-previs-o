@@ -279,6 +279,7 @@ export default function TreinoPage() {
         sessionLabel: sessionLabel.trim(),
         setsLogged,
         injuryNote: injuryNote.trim() || null,
+        programId: programa?.id ?? null,
       });
       setSaved(true);
       setSessionLabel("");

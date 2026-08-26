@@ -164,6 +164,12 @@ const WEIGHT_TREND_LABEL: Record<string, string> = {
   nao_sei: "sem tendência definida",
 };
 
+/** Faixa de frequência declarada → dias/semana de treino padrão, quando a pessoa não informa um
+ * número exato em `trainingDaysPerWeek`. Usado nos dois caminhos (primeiro ciclo e ciclos
+ * seguintes) — extraído pra um só lugar porque os dois já divergiram como cópias duplicadas
+ * mais de uma vez nesta sessão de correções. */
+const DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
+
 const BF_TOOL_NAME = "registrar_bf";
 const VISION_TOOL_NAME = "registrar_analise_visual";
 
@@ -253,12 +259,16 @@ async function fetchPreviousPhoto(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<PreviousPhoto | null> {
-  const { data: rows } = await supabase
+  const { data: rows, error: rowsError } = await supabase
     .from("progress_photos")
     .select("date,photo_path")
     .eq("user_id", userId)
     .order("date", { ascending: false })
     .limit(1);
+  if (rowsError) {
+    console.error("[previsao-ia] busca da foto anterior falhou:", rowsError.message);
+    return null;
+  }
   const prev = rows?.[0];
   if (!prev) return null;
 
@@ -612,12 +622,11 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
     }
     // peso 30% fórmula / 70% prática real — a fórmula é só uma média populacional (erro documentado
     // de ±10-15%), a prática relatada pelo próprio usuário é dado direto, então pesa mais
-    const FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
     const firstCycleDaysPerWeek =
       trainingDaysPerWeek != null && trainingDaysPerWeek > 0
         ? Math.max(1, Math.min(6, Math.round(trainingDaysPerWeek)))
         : exerciseFreq
-          ? FIRST_CYCLE_DAYS_PER_WEEK_BY_FREQ[exerciseFreq]
+          ? DAYS_PER_WEEK_BY_FREQ[exerciseFreq]
           : 0;
 
     // O primeiro ciclo não devolvia programa de treino NENHUM — a pessoa recebia dieta, cardio e
@@ -773,38 +782,45 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
     const parEmpiricoConfiavel =
       empiricalTdee != null && weightTrend != null && weightTrend !== "nao_sei";
 
-    const { error: primeiroAuditError } = await supabase.from("prediction_audit").insert({
-      user_id: user.id,
-      date,
-      formula_tdee: comp.tdee,
-      empirical_tdee: empiricalTdee,
-      /* SEMPRE a leitura por foto, nunca o valor medido — mesma razão do insert
-         dos ciclos seguintes: gravar o medido faria a aferição comparar o exame
-         consigo mesmo e mostrar erro zero para sempre. */
-      bf_percent_visual: bfRaw.bfPercentVisual,
-      bf_confidence: bfRaw.bfConfidence,
-      bf_medido_percent: bfMedidoPrimeiroCiclo,
-      bf_medido_metodo: metodoMedicaoPrimeiroCiclo,
-      bf_erro_pp: afericaoPrimeiroCiclo?.erroPp ?? null,
-      gain_composition: null,
-      weight_delta_kg: null,
-      diet_clean: parEmpiricoConfiavel,
-      training_clean: parEmpiricoConfiavel,
-      bf_consistent: null,
-      notes: parEmpiricoConfiavel
-        ? []
-        : ["Primeiro ciclo sem ingestão informada ou sem tendência de peso definida — o par não calibra a fórmula."],
-      bf_reasoning: bfRaw.bfReasoning ?? null,
-      evolution_note: bfRaw.evolutionNote ?? null,
-      plano_projetado: planoDeFases.meses.slice(0, 6).map((m) => ({
-        mes: m.monthIndex,
-        pesoFimKg: m.endWeightKg,
-        bfFimPercent: m.endBfPercent,
-        magraFimKg: m.leanMassKg,
-        kcal: m.recommendedKcal,
-        fase: m.phase,
-      })),
-    });
+    /* `upsert` com conflito em (user_id, date) — reanalisar no mesmo dia batia na
+       constraint única e o `insert` simples falhava, descartando os dados da
+       nova tentativa em silêncio (a auditoria continuava com o valor da 1ª
+       tentativa do dia, mesmo que a pessoa tivesse corrigido algo na 2ª). */
+    const { error: primeiroAuditError } = await supabase.from("prediction_audit").upsert(
+      {
+        user_id: user.id,
+        date,
+        formula_tdee: comp.tdee,
+        empirical_tdee: empiricalTdee,
+        /* SEMPRE a leitura por foto, nunca o valor medido — mesma razão do insert
+           dos ciclos seguintes: gravar o medido faria a aferição comparar o exame
+           consigo mesmo e mostrar erro zero para sempre. */
+        bf_percent_visual: bfRaw.bfPercentVisual,
+        bf_confidence: bfRaw.bfConfidence,
+        bf_medido_percent: bfMedidoPrimeiroCiclo,
+        bf_medido_metodo: metodoMedicaoPrimeiroCiclo,
+        bf_erro_pp: afericaoPrimeiroCiclo?.erroPp ?? null,
+        gain_composition: null,
+        weight_delta_kg: null,
+        diet_clean: parEmpiricoConfiavel,
+        training_clean: parEmpiricoConfiavel,
+        bf_consistent: null,
+        notes: parEmpiricoConfiavel
+          ? []
+          : ["Primeiro ciclo sem ingestão informada ou sem tendência de peso definida — o par não calibra a fórmula."],
+        bf_reasoning: bfRaw.bfReasoning ?? null,
+        evolution_note: bfRaw.evolutionNote ?? null,
+        plano_projetado: planoDeFases.meses.slice(0, 6).map((m) => ({
+          mes: m.monthIndex,
+          pesoFimKg: m.endWeightKg,
+          bfFimPercent: m.endBfPercent,
+          magraFimKg: m.leanMassKg,
+          kcal: m.recommendedKcal,
+          fase: m.phase,
+        })),
+      },
+      { onConflict: "user_id,date" }
+    );
     /* Falha aqui NÃO derruba a análise: a pessoa recebe o plano do mesmo jeito.
        Mas fica registrado, porque auditoria que falha em silêncio é como a que
        não existe — e foi assim que a cadeia ficou vazia sem ninguém notar. */
@@ -842,7 +858,7 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
         carb: point(blendedTargetCarbG),
         weight: point(currentWeightKg),
       },
-      rateKgWeek: 0,
+      rateKgWeek: oneMonthRateKgWeek,
       safetyWarnings: firstCycleSafety.warnings,
       cardioKcalPerDay: cardioPrescription.estimatedKcalPerDay,
       muscleTargets: firstCycleMuscleTargets ?? [],
@@ -868,7 +884,13 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
   // rótulo, sempre.
   if (lastCycle && lastCycleActualKcal && lastCycleActualKcal > 0 && lastCycleAdherence !== "nao_acompanhou") {
     lastCycle.actualKcal = lastCycleActualKcal;
-    await supabase.from("cycles").update({ actual_kcal: lastCycleActualKcal }).eq("id", lastCycle.id);
+    const { error: actualKcalError } = await supabase
+      .from("cycles")
+      .update({ actual_kcal: lastCycleActualKcal })
+      .eq("id", lastCycle.id);
+    if (actualKcalError) {
+      console.error("[previsao-ia] gravação de actual_kcal do ciclo anterior falhou:", actualKcalError.message);
+    }
   }
 
   const historyText = history
@@ -1068,11 +1090,14 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // olhava o histórico de treino.
   const trainingLogsSince = new Date();
   trainingLogsSince.setDate(trainingLogsSince.getDate() - 56);
-  const { data: trainingLogRows } = await supabase
+  const { data: trainingLogRows, error: trainingLogRowsError } = await supabase
     .from("training_logs")
     .select("id,date,session_label,sets_logged,injury_note")
     .eq("user_id", user.id)
     .gte("date", trainingLogsSince.toISOString().slice(0, 10));
+  if (trainingLogRowsError) {
+    console.error("[previsao-ia] busca dos logs de treino falhou:", trainingLogRowsError.message);
+  }
 
   const trainingLogs: TrainingLog[] = (trainingLogRows ?? []).map((r) => ({
     id: r.id as string,
@@ -1150,9 +1175,10 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
             };
           });
       }
-    } catch {
+    } catch (e) {
       // tabela de treino ainda não migrada, ou qualquer outro erro nessa etapa opcional — não deixa a
       // previsão de dieta (fluxo principal) quebrar por causa de uma leitura cruzada acessória
+      console.error("[previsao-ia] cruzamento visual×volume falhou:", e instanceof Error ? e.message : e);
     }
   }
 
@@ -1160,7 +1186,6 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // grupo (muscleGroupAssessment) quando disponível, sempre considerando prioridades declaradas nas
   // preferências (ex: "consultoria pediu foco em costas e braço"), que valem mais que a leitura da foto.
   // Não depende da foto ter dado uma leitura de grupo — sem ela, cai no MAV padrão + prioridades.
-  const DAYS_PER_WEEK_BY_FREQ: Record<string, number> = { "0": 0, "1-2": 2, "3-4": 3, "5+": 5 };
   // A escolha explícita do usuário vence a faixa: "5+" não diz se são 5 ou 6 dias, e a divisão precisa
   // do número exato pra dimensionar o orçamento de séries (ver computeMuscleTargets).
   const daysPerWeek =
@@ -1372,10 +1397,12 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // por que a calibração não avança.
   const cycleCleanForCalibration = dietClean && trainingClean;
 
-  // TDEE "de fórmula" calculado em paralelo só pra auditoria/calibração — a prescrição real desse ciclo
-  // continua vindo do TDEE empírico (result.tdeeRange), que já é a fonte mais confiável quando há
-  // histórico (ver TDEE Empírico e Histórico de Ciclos). Isso nunca substitui a prescrição, só alimenta
-  // o aprendizado de quanto a fórmula erra pra essa pessoa especificamente.
+  // TDEE "de fórmula" calculado em paralelo pra auditoria/calibração — a prescrição real desse ciclo
+  // continua vindo do TDEE empírico (result.tdeeRange) como fonte PRINCIPAL. Mas com histórico curto
+  // (menos de 4 ciclos, ver `sparseHistory` mais abaixo) esse `.tdee` de fórmula também entra na mistura
+  // que forma o TDEE prescrito (`calibratedFormulaTdee`, com peso de até 0,35) — não é só auditoria
+  // nesse caso. O que ele nunca faz é SUBSTITUIR o empírico; alimenta a mistura e o aprendizado de
+  // quanto a fórmula erra pra essa pessoa especificamente.
   const shadowFormulaComp = estimateBodyComposition({
     weightKg: currentWeightKg,
     heightCm,
@@ -1553,40 +1580,45 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     initialPath: strategy,
   });
 
-  const { error: auditInsertError } = await supabase.from("prediction_audit").insert({
-    user_id: user.id,
-    date,
-    formula_tdee: shadowFormulaComp.tdee,
-    empirical_tdee: empiricalTdeeMid,
-    /* SEMPRE a estimativa da foto, nunca o valor medido.
-     *
-     * `bfPercentVisual` passa a valer o MEDIDO quando existe exame — usar essa
-     * variável aqui gravaria o valor de referência na coluna que existe para
-     * auditar a estimativa, e a aferição passaria a comparar o exame consigo
-     * mesmo, mostrando erro zero para sempre. */
-    bf_percent_visual: bfPercentVisualRaw,
-    bf_confidence: vision.bfConfidence,
-    bf_medido_percent: bfMedido,
-    bf_medido_metodo: metodoMedicao,
-    bf_erro_pp: afericao?.erroPp ?? null,
-    gain_composition: gainComposition,
-    weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
-    diet_clean: dietClean,
-    training_clean: trainingClean,
-    bf_consistent: bfConsistency?.consistent ?? null,
-    notes: [...dietDirtyReasons, ...trainingDirtyReasons],
-    bf_reasoning: vision.bfReasoning ?? null,
-    evolution_note: vision.evolutionNote ?? null,
-    // só os 6 primeiros meses e só os campos do confronto — o plano inteiro encheria a linha de dados
-    // que nunca seriam lidos
-    plano_projetado: planoDeFases.meses.slice(0, 6).map((m) => ({
-      mes: m.monthIndex,
-      fase: m.phase,
-      peso: Number(m.endWeightKg.toFixed(1)),
-      bf: Number(m.endBfPercent.toFixed(1)),
-      kcal: Math.round(m.recommendedKcal),
-    })),
-  });
+  // upsert com conflito em (user_id, date) — mesma razão do primeiro ciclo: reanalisar no mesmo dia
+  // batia na constraint única e o `insert` simples falhava, descartando os dados da 2ª tentativa.
+  const { error: auditInsertError } = await supabase.from("prediction_audit").upsert(
+    {
+      user_id: user.id,
+      date,
+      formula_tdee: shadowFormulaComp.tdee,
+      empirical_tdee: empiricalTdeeMid,
+      /* SEMPRE a estimativa da foto, nunca o valor medido.
+       *
+       * `bfPercentVisual` passa a valer o MEDIDO quando existe exame — usar essa
+       * variável aqui gravaria o valor de referência na coluna que existe para
+       * auditar a estimativa, e a aferição passaria a comparar o exame consigo
+       * mesmo, mostrando erro zero para sempre. */
+      bf_percent_visual: bfPercentVisualRaw,
+      bf_confidence: vision.bfConfidence,
+      bf_medido_percent: bfMedido,
+      bf_medido_metodo: metodoMedicao,
+      bf_erro_pp: afericao?.erroPp ?? null,
+      gain_composition: gainComposition,
+      weight_delta_kg: lastCycle ? currentWeightKg - lastCycle.weightKg : null,
+      diet_clean: dietClean,
+      training_clean: trainingClean,
+      bf_consistent: bfConsistency?.consistent ?? null,
+      notes: [...dietDirtyReasons, ...trainingDirtyReasons],
+      bf_reasoning: vision.bfReasoning ?? null,
+      evolution_note: vision.evolutionNote ?? null,
+      // só os 6 primeiros meses e só os campos do confronto — o plano inteiro encheria a linha de dados
+      // que nunca seriam lidos
+      plano_projetado: planoDeFases.meses.slice(0, 6).map((m) => ({
+        mes: m.monthIndex,
+        fase: m.phase,
+        peso: Number(m.endWeightKg.toFixed(1)),
+        bf: Number(m.endBfPercent.toFixed(1)),
+        kcal: Math.round(m.recommendedKcal),
+      })),
+    },
+    { onConflict: "user_id,date" }
+  );
 
   if (auditInsertError && !calibrationUnavailableReason) {
     calibrationUnavailableReason = `Este ciclo não foi gravado na auditoria (${auditInsertError.message}), então não vai contar pra calibração dos próximos.`;
@@ -1595,6 +1627,13 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   return NextResponse.json({
     isFirstCycle: false,
     oneMonthProjection,
+    /* Vem do cálculo-sombra (shadowFormulaComp). O campo em si é só de exibição — não é usado pra montar
+       recommendedKcal/recommendedProteinG/etc, que vêm de result.tdeeRange. (O `.tdee` desse mesmo
+       shadowFormulaComp É misturado no TDEE prescrito quando o histórico é curto, ver calibratedFormulaTdee
+       abaixo — mas isso não afeta este campo, que só reflete o nível de atividade calculado.) Antes esse
+       campo só saía no primeiro ciclo, então o nível de atividade exibido no perfil congelava depois da
+       primeira análise e nunca mais acompanhava mudanças reais na rotina da pessoa. */
+    activityLevelDisplay: shadowFormulaComp.activityLevelDisplay,
     strategy,
     strategyLabel: PATH_LABEL[strategy],
     strategyReason,

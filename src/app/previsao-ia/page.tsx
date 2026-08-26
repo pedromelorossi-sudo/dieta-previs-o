@@ -520,22 +520,15 @@ export default function PrevisaoIaPage() {
         activityLevel: data.activityLevelDisplay ?? prefs.activityLevel,
       });
 
-      const frenteFile = files.frente!;
-      const anglesUsed = Object.keys(files).filter((a) => files[a as Angle]);
-      await addProgressPhoto({
-        date,
-        file: frenteFile,
-        waistCm: null,
-        neckCm: null,
-        hipCm: null,
-        sex,
-        estimatedBfPercent: data.bfPercentVisual,
-        notes: `%BF estimado por IA (Claude) a partir de foto(s): ${anglesUsed.join(", ")}.`,
-        cycleId: null,
-      });
-
+      /* O ciclo precisa existir ANTES da foto: `progress_photos.cycle_id` é uma FK
+         não-deferrable pra `cycles(id)`, então gravar a foto com um cycle_id que
+         ainda não tem linha correspondente violaria a constraint na hora. Por
+         isso o id é gerado aqui e o ciclo é criado primeiro — antes essa ordem
+         era invertida (foto, depois ciclo) e por isso `cycle_id` sempre saía
+         null, nunca havia um ciclo pra apontar no momento da foto. */
+      const idDoCiclo = crypto.randomUUID();
       await addCycle({
-        id: crypto.randomUUID(),
+        id: idDoCiclo,
         date,
         weightKg: parseFloat(weight),
         bodyFatPercent: data.bfPercentVisual,
@@ -550,8 +543,27 @@ export default function PrevisaoIaPage() {
            fase pelo %BF sozinho e a histerese nunca fecha — foi o que produziu
            "normocalórico" com 24 meses para 0,7kg em quem estava em superávit. */
         path: data.strategy ?? null,
+        /* A coluna existia gravável em storage.ts, mas nenhum chamador de
+           addCycle preenchia — o exame ficava só na comparação em memória
+           daquele request, sem registro no ciclo pra auditoria futura. */
+        bfMedidoPercent: bfMedidoMetodo && bfMedidoPercent ? parseFloat(bfMedidoPercent) : null,
+        bfMedidoMetodo: bfMedidoMetodo && bfMedidoPercent ? bfMedidoMetodo : null,
       });
       setCycles(sortByDate(await loadCycles()));
+
+      const frenteFile = files.frente!;
+      const anglesUsed = Object.keys(files).filter((a) => files[a as Angle]);
+      await addProgressPhoto({
+        date,
+        file: frenteFile,
+        waistCm: null,
+        neckCm: null,
+        hipCm: null,
+        sex,
+        estimatedBfPercent: data.bfPercentVisual,
+        notes: `%BF estimado por IA (Claude) a partir de foto(s): ${anglesUsed.join(", ")}.`,
+        cycleId: idDoCiclo,
+      });
 
       /* PERSISTÊNCIA DO QUE A IA ACABOU DE PRODUZIR.
        *
