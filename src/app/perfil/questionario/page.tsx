@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
-  ACTIVITY_LABEL,
-  ActivityLevel,
   COOKING_LABEL,
   CookingTime,
   DEFAULT_PREFERENCES,
@@ -105,20 +103,18 @@ export default function QuestionarioPage() {
             "manutenção" e recebeu um déficit de 18%, sem nada na tela ligando
             uma coisa à outra. A estratégia decidida aparece em /previsao-ia com
             o motivo junto, que é onde ela deve ser explicada. */}
+        {/* "NÍVEL DE ATIVIDADE FÍSICA" SAIU DO QUESTIONÁRIO — mesmo padrão de
+            "objetivo principal", removido hoje mais cedo. O campo nunca decidia
+            nada: previsao-ia:457 envia "moderado" fixo no corpo da requisição,
+            ignorando o que o usuário escolheu aqui; em bodyComposition.ts o
+            valor só é lido como FALLBACK quando `exerciseFreq` está ausente —
+            e `exerciseFreq` é obrigatório no fluxo principal, então esse
+            fallback nunca roda; e depois da análise, previsao-ia:519
+            SOBRESCREVE a escolha da pessoa pelo valor que o algoritmo calculou
+            a partir do NEAT real (`activityLevelDisplay`). A pessoa escolhia
+            "Intenso", salvava, rodava uma análise, e o campo mudava sozinho —
+            sem nunca ter influenciado a prescrição uma vez sequer. */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Nível de atividade física">
-            <select
-              value={prefs.activityLevel}
-              onChange={(e) => update("activityLevel", e.target.value as ActivityLevel)}
-              className="input"
-            >
-              {(Object.keys(ACTIVITY_LABEL) as ActivityLevel[]).map((a) => (
-                <option key={a} value={a}>
-                  {ACTIVITY_LABEL[a]}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Refeições por dia (padrão 5)">
             <input
               type="number"
@@ -171,7 +167,10 @@ export default function QuestionarioPage() {
         </div>
 
         <div>
-          <span className="block text-xs text-muted mb-2">Alimentos favoritos (opcional, só como referência)</span>
+          <span className="block text-xs text-muted mb-2">
+            Alimentos que não podem faltar (entram obrigatoriamente em toda dieta gerada, inclusive nas
+            automáticas)
+          </span>
           <FoodTagPicker selected={prefs.favoriteFoodIds} onToggle={(id) => toggleFoodTag("favoriteFoodIds", id)} tone="accent" />
         </div>
 

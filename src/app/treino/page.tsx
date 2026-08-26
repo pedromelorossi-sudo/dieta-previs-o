@@ -11,7 +11,7 @@ import { EXERCISE_LIBRARY, MuscleGroup, MUSCLE_GROUP_LABEL, exerciseById } from 
 import { LoggedSetEntry, ReserveType, TrainingLog, TrainingProgram, TrainingSession, sessionToLoggedSets } from "@/lib/trainingBuilder";
 import { addTrainingLog, loadTrainingLogs, loadTrainingPrograms } from "@/lib/trainingStorage";
 import { readVolumeStatus, weeklyVolumeByMuscle, VolumeReading } from "@/lib/trainingVolume";
-import { recommendNextWeek, WeeklyRecommendation } from "@/lib/trainingPeriodization";
+import { recommendNextWeek, WeeklyRecommendation, suggestLoadProgression } from "@/lib/trainingPeriodization";
 import { buildMuscleEvolution, MuscleEvolution } from "@/lib/muscleEvolution";
 import { loadCycles } from "@/lib/storage";
 import { fmtDate } from "@/lib/format";
@@ -158,7 +158,11 @@ export default function TreinoPage() {
     setGerando(true);
     setErroGerar(null);
     try {
-      const [prefs, cycles] = await Promise.all([loadPreferences(), loadCycles()]);
+      /* `trainingLogs` carregado FRESH aqui, não lido do estado `logs` — o
+         estado pode estar desatualizado (closure obsoleta) quando esta função
+         roda logo após `refresh()` no mesmo efeito, já que `setLogs` não
+         comita antes do próximo render. */
+      const [prefs, cycles, trainingLogs] = await Promise.all([loadPreferences(), loadCycles(), loadTrainingLogs(8)]);
       const ultimo = cycles.length ? cycles[cycles.length - 1] : null;
 
       /* A leitura visual do último ciclo é o que marca ponto fraco. Sem ciclo
@@ -172,7 +176,18 @@ export default function TreinoPage() {
 
       const dias = diasEfetivosPara(diasPorSemana, 0);
       const alvos = computeMuscleTargets(leitura, prefs.priorityMuscles ?? [], 0, dias, 0, dias < diasPorSemana, prefs.sex);
-      const sessions = buildSplit(dias, alvos, undefined, ajusteDeFadigaPara(0));
+
+      /* A carga sugerida existe (`suggestLoadProgression`, a partir do
+         histórico de cargas logadas) e chegava só em previsao-ia — a página
+         onde a pessoa REGISTRA a carga real de cada exercício gerava o
+         programa sem nenhuma sugestão, apesar de ter o histórico na mesma
+         página. Mesmas 3 linhas de route.ts:1203-1205. */
+      const loadByExercise = new Map<string, number>();
+      for (const [exerciseId, suggestion] of suggestLoadProgression(trainingLogs)) {
+        loadByExercise.set(exerciseId, suggestion.suggestedLoadKg);
+      }
+
+      const sessions = buildSplit(dias, alvos, loadByExercise, ajusteDeFadigaPara(0));
 
       await upsertTrainingProgram({
         id: newId(),
@@ -364,6 +379,22 @@ export default function TreinoPage() {
           title="Volume da semana por grupo"
           desc="Últimos 7 dias, contando só séries Work e Top set."
         />
+        {/* SEM REGISTRO AINDA — painel próprio, não os 14 grupos "abaixo do
+            mínimo".
+            Sem nenhum log, todo grupo com MEV>0 classifica como abaixo do
+            piso e a página inteira vira uma parede de avisos vermelhos
+            construída sobre ZERO dado real — e ainda recomenda "subir
+            volume" a partir do nada. A pessoa que ainda não registrou
+            nenhuma sessão não precisa desse ruído; precisa saber que é por
+            isso que a lista está vazia. */}
+        {(logs?.length ?? 0) === 0 ? (
+          <Panel>
+            <div className="panel-row text-[14.5px] leading-[1.6] text-muted">
+              Ainda sem sessão registrada nos últimos 7 dias. O volume por grupo aparece aqui assim que
+              você registrar um treino em &quot;Registrar sessão&quot;, mais abaixo.
+            </div>
+          </Panel>
+        ) : (
         <Panel>
           {volumeReadings.map((r) => {
             const rec = recommendation?.muscles.find((m) => m.muscle === r.muscle);
@@ -391,6 +422,7 @@ export default function TreinoPage() {
             );
           })}
         </Panel>
+        )}
       </section>
 
       {muscleEvolution.length > 0 && (

@@ -133,12 +133,19 @@ export function readVolumeStatus(weeklyVolume: Map<MuscleGroup, number>): Volume
   return VOLUME_LANDMARKS.map((landmark) => {
     const effectiveSets = weeklyVolume.get(landmark.muscle) ?? 0;
     const status = statusFor(effectiveSets, landmark);
+    /* Grupo de MEV 0 (antebraço, abdominal, lombar) recebe estímulo indireto
+       de outros movimentos — a mesma leitura que o `reason` do gerador de
+       treino já usa para esses grupos. "0 séries está na faixa produtiva"
+       era tecnicamente certo (0 não é menor que o mínimo de 0) e soava como
+       elogio a não fazer nada. */
     const note =
-      status === "abaixo_mev"
-        ? `${effectiveSets} séries/semana está abaixo do mínimo (${landmark.mev}) pra manter progresso nesse grupo.`
-        : status === "acima_mrv"
-          ? `${effectiveSets} séries/semana passou do teto recuperável (${landmark.mrv}) — risco de recuperação virar o fator limitante, não o estímulo.`
-          : `${effectiveSets} séries/semana está na faixa produtiva (${landmark.mev}-${landmark.mrv}).`;
+      landmark.mev === 0 && effectiveSets === 0
+        ? `Sem série direta registrada — esperado para este grupo, que recebe estímulo indireto de outros movimentos.`
+        : status === "abaixo_mev"
+          ? `${effectiveSets} séries/semana está abaixo do mínimo (${landmark.mev}) pra manter progresso nesse grupo.`
+          : status === "acima_mrv"
+            ? `${effectiveSets} séries/semana passou do teto recuperável (${landmark.mrv}) — risco de recuperação virar o fator limitante, não o estímulo.`
+            : `${effectiveSets} séries/semana está na faixa produtiva (${landmark.mev}-${landmark.mrv}).`;
     return { muscle: landmark.muscle, muscleLabel: MUSCLE_GROUP_LABEL[landmark.muscle], effectiveSets, landmark, status, note };
   });
 }

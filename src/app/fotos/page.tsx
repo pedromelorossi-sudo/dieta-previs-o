@@ -127,7 +127,7 @@ export default function FotosPage() {
 
         <FormPanel
           label="Medidas de circunferência"
-          desc="É daqui que sai o %BF — a foto não é analisada."
+          desc="Segunda leitura, pelo método da Marinha dos EUA — independente da análise das fotos que roda em Nova análise."
           footer={estimatedBf != null ? undefined : "Preencha altura, cintura e pescoço para o %BF aparecer."}
         >
           <FormRow label="Sexo biológico" hint="Define a fórmula usada.">
