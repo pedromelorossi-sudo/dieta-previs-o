@@ -159,7 +159,16 @@ for (let dias = 1; dias <= 6; dias++)
              eram falso-positivo do invariante, não do código: o algoritmo dropar o grupo de menor
              capacidade (menor MRV) quando o orçamento não fecha pra todos é o comportamento
              deliberado (ver `trainingSplitBuilder.ts`, corte "MAIOR primeiro"), não um bug. */
-          const orcamentoSemanal = computeTrainingBudget(dias, ader, rec, efet < dias);
+          /* `efet` (dias EFETIVOS, já concentrados por recuperação ruim quando aplicável), não `dias`
+             (o valor cru) — é exatamente o argumento que computeMuscleTargets usa internamente pra
+             calcular o orçamento de verdade (`daysPerWeek` na assinatura de computeTrainingBudget é o
+             que chega como `daysPerWeek` em computeMuscleTargets, que por sua vez é `efet` aqui). Usar
+             `dias` cru dava até 65% de diferença do número real (testado: 5 dias/rec4 → efet=3,
+             orçamento real 49, mas a chamada errada calculava 81 pros mesmos parâmetros) — o gate
+             `coberturaExigivel` ficava avaliado com o orçamento errado em 3 das combinações que este
+             script testa. Sem efeito visível hoje só porque a checagem de cobertura downstream não
+             exige atingir o MEV, mas era uma bomba-relógio na própria ferramenta que prova zero erro. */
+          const orcamentoSemanal = computeTrainingBudget(efet, ader, rec, efet < dias);
           const coberturaExigivel = orcamentoSemanal >= somaMevTotal;
 
           const entregue = new Map();

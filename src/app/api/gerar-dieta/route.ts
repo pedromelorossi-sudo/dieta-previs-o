@@ -44,12 +44,15 @@ export async function POST(request: Request) {
   if (!body.targetKcal || body.targetKcal <= 0) {
     return NextResponse.json({ error: "Defina as metas de kcal/macros antes de gerar." }, { status: 400 });
   }
-  /* Só `targetKcal` era validado — proteína/gordura/carboidrato e número de refeições chegavam direto
-     de `request.json()` sem checagem de tipo/faixa no servidor. O cliente já faz `parseFloat(...) ||
-     0` antes de enviar (barra NaN), mas não barra negativo nem um valor absurdo — e nada impede uma
-     chamada direta à API, sem passar pelo formulário. Faixas generosas, só pra cortar erro de
-     digitação/valor fisiologicamente impossível. */
+  /* Só o `<= 0` de targetKcal era validado — sem teto nem `Number.isFinite` explícito, diferente dos
+     campos irmãos abaixo. Um valor absurdo por digitação (ex: 250000, um zero a mais) passava direto.
+     Proteína/gordura/carboidrato/número de refeições chegavam direto de `request.json()` sem NENHUMA
+     checagem de tipo/faixa no servidor. O cliente já faz `parseFloat(...) || 0` antes de enviar (barra
+     NaN), mas não barra negativo nem um valor absurdo — e nada impede uma chamada direta à API, sem
+     passar pelo formulário. Faixas generosas, só pra cortar erro de digitação/valor fisiologicamente
+     impossível. */
   const faixasMacro: { campo: keyof RequestBody; label: string; min: number; max: number }[] = [
+    { campo: "targetKcal", label: "Calorias alvo", min: 1, max: 8000 },
     { campo: "targetProteinG", label: "Proteína alvo", min: 0, max: 500 },
     { campo: "targetFatG", label: "Gordura alvo", min: 0, max: 400 },
     { campo: "targetCarbG", label: "Carboidrato alvo", min: 0, max: 1200 },

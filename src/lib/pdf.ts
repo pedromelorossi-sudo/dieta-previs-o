@@ -300,7 +300,7 @@ export function generateTrainingPdf(sessions: TrainingSession[], nome = "Plano d
   doc.setFontSize(7.5);
   doc.setTextColor(...MUTED);
   doc.text(
-    "RIR = repetições em reserva: quantas você ainda conseguiria fazer ao encerrar a série. Aquecimento nao conta como volume.",
+    "\"Na reserva\" é quantas repetições você ainda conseguiria fazer ao encerrar a série. Aquecimento não conta como volume.",
     marginX,
     Math.min(y, 800)
   );

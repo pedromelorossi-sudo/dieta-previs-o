@@ -397,6 +397,8 @@ export async function POST(request: Request) {
     { campo: "otherSportSessionsPerWeek", label: "Sessões de outro esporte por semana", min: 0, max: 14 },
     { campo: "otherSportMinutesPerSession", label: "Minutos por sessão de outro esporte", min: 0, max: 300 },
     { campo: "weeksToNextConsult", label: "Semanas até a próxima consulta", min: 1, max: 26 },
+    { campo: "dailyStepsAvg", label: "Média de passos por dia", min: 0, max: 60000 },
+    { campo: "currentIntakeKcal", label: "Ingestão atual (kcal)", min: 0, max: 15000 },
   ];
   for (const { campo, label, min, max } of faixasTempo) {
     const valor = body[campo];
