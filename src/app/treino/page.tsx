@@ -67,6 +67,12 @@ export default function TreinoPage() {
      que o usuário descreveu como "treino com nome de grupamento e sem séries".
      O treino sempre existiu; faltava exibi-lo. */
   const [programa, setPrograma] = useState<TrainingProgram | null>(null);
+  /* `suggestLoadProgression` já calcula O PORQUÊ de cada carga sugerida ("parada há 2 sessões,
+     tentar 62,5kg" / "subiu na última, sustentar"), mas só o número (`suggestedLoadKg`) chegava até
+     a tela — o `reason` era calculado e descartado. Guardado à parte do `programa` porque não é
+     dado do programa em si (não faz sentido persistir no banco): é uma leitura do HISTÓRICO DE LOGS
+     no momento da geração, que fica velha assim que a pessoa loga uma sessão nova. */
+  const [motivoCargaPorExercicio, setMotivoCargaPorExercicio] = useState<Map<string, string>>(new Map());
 
   /* GERAÇÃO AUTOMÁTICA.
    *
@@ -183,9 +189,12 @@ export default function TreinoPage() {
          programa sem nenhuma sugestão, apesar de ter o histórico na mesma
          página. Mesmas 3 linhas de route.ts:1203-1205. */
       const loadByExercise = new Map<string, number>();
+      const motivoCarga = new Map<string, string>();
       for (const [exerciseId, suggestion] of suggestLoadProgression(trainingLogs)) {
         loadByExercise.set(exerciseId, suggestion.suggestedLoadKg);
+        motivoCarga.set(exerciseId, suggestion.reason);
       }
+      setMotivoCargaPorExercicio(motivoCarga);
 
       const sessions = buildSplit(dias, alvos, loadByExercise, ajusteDeFadigaPara(0));
 
@@ -350,7 +359,9 @@ export default function TreinoPage() {
         </button>
       </section>
 
-      {programa && <ProgramaDaSemana sessions={programa.sessions} />}
+      {programa && (
+        <ProgramaDaSemana sessions={programa.sessions} loadReasonByExercise={motivoCargaPorExercicio} />
+      )}
 
       {/* O guia explica o vocabulário que a prescrição usa. Fica logo abaixo do
           programa porque é ali que a dúvida aparece — "o que é RIR 2?". */}

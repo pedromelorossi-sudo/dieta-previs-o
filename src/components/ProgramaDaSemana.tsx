@@ -49,7 +49,17 @@ function minutosEstimados(sessao: TrainingSession): number {
   return Math.round(segundos / 60);
 }
 
-export function ProgramaDaSemana({ sessions }: { sessions: TrainingSession[] }) {
+export function ProgramaDaSemana({
+  sessions,
+  loadReasonByExercise,
+}: {
+  sessions: TrainingSession[];
+  /** Por que a carga sugerida é essa (`LoadSuggestion.reason`, de `suggestLoadProgression`) — calculado
+   * a partir do histórico de cargas logadas, mas antes só o número chegava até a tela, o motivo era
+   * descartado. Opcional: quando ausente (programa vindo do banco sem geração fresca nesta sessão),
+   * a tela mostra só a carga, sem a explicação. */
+  loadReasonByExercise?: Map<string, string>;
+}) {
   if (sessions.length === 0) return null;
 
   return (
@@ -135,6 +145,16 @@ export function ProgramaDaSemana({ sessions }: { sessions: TrainingSession[] }) 
                         <p className="pt-0.5 text-[13px] text-neutral">
                           <span className="inline-block w-[92px]" />
                           descanso de {descanso >= 60 ? `${(descanso / 60).toLocaleString("pt-BR")} min` : `${descanso}s`} entre as séries
+                        </p>
+                      );
+                    })()}
+                    {(() => {
+                      const motivo = loadReasonByExercise?.get(item.exerciseId);
+                      if (!motivo) return null;
+                      return (
+                        <p className="pt-0.5 text-[13px] text-muted">
+                          <span className="inline-block w-[92px]" />
+                          {motivo}
                         </p>
                       );
                     })()}
