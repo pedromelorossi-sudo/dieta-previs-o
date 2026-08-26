@@ -1105,20 +1105,51 @@ function pickExercisesForMuscle(
   const giraLista = <T,>(lista: T[], n: number) =>
     lista.length === 0 ? lista : [...lista.slice(n % lista.length), ...lista.slice(0, n % lista.length)];
 
-  /* Gira CADA família de movimento por si, não a lista inteira de uma vez.
+  /* Gira a ORDEM das famílias de movimento e, dentro de cada uma, gira os MEMBROS — cada uma dessas
+   * rotações com sua PRÓPRIA semente, derivada por hash, não por aritmética compartilhada.
    *
-   * Girar a lista toda deixava a variante escolhida depender de quantos
-   * exercícios de OUTRAS famílias vinham antes dela no catálogo — remada
-   * horizontal tem 4 variantes (barra, serrote, polia, halteres peito
-   * apoiado), mas como só a PRIMEIRA encontrada na varredura é escolhida (a
-   * regra de diversidade de família aceita só uma por família), e a rotação
-   * típica na prática é 0 ou 1 (o quanto o grupo se repete NA MESMA semana),
-   * girar a lista toda quase nunca deslocava o suficiente pra alcançar a 3ª
-   * ou 4ª variante — 2 das 4 nunca eram escolhidas em nenhum cenário da
-   * varredura. Girando cada família separadamente, a variante que abre cada
-   * família já muda a partir de rotation=1, então o catálogo inteiro fica
-   * alcançável com valores pequenos de rotação. */
-  const giraDentroDaFamilia = <T extends { movementFamily: string }>(lista: T[], n: number): T[] => {
+   * Três tentativas antes desta, todas com o mesmo defeito de fundo: usar a MESMA variável escalar
+   * (ou uma fração dela por `%`/`/`) pra decidir duas ou mais escolhas independentes acaba
+   * ACOPLANDO essas escolhas sempre que os módulos envolvidos compartilham fator — a família de 2
+   * membros e a de 4 (remada-horizontal e puxada-vertical, ambas em costas) sempre caíam no mesmo
+   * resto par/ímpar quando a rotação vinha de `n % tamanho` ou de `Math.floor(n / nFamílias) %
+   * tamanho`; o resultado nunca foi "sem cobertura", foi "cobertura individual OK, mas metade das
+   * COMBINAÇÕES entre família A e família B nunca acontece pra nenhum valor de `n`" — revisão
+   * adversarial reproduziu isso com o catálogo real tanto em costas (puxada×remada, só 4 dos 8
+   * pares possíveis) quanto entre compostos e isolados de peito (supino×crucifixo, só 2 dos 4
+   * pares), porque as duas listas eram giradas pela MESMA semente também.
+   *
+   * A saída é dar a CADA rotação (a ordem das famílias, e o giro dentro de CADA família
+   * individualmente) uma semente própria, misturada por hash com uma string que identifica aquele
+   * eixo específico (`salt` + nome da família).
+   *
+   * A 1ª versão desta correção só SOMAVA um hash da string a `n` (`n + hash(sal)`). Isso não
+   * resolveu nada: somar uma constante e depois tirar `% tamanho` continua sendo uma função LINEAR
+   * de `n` — duas sementes assim (`n + hashA`, `n + hashB`) diferem só por uma constante FIXA, e
+   * `(n+hashA) % 2` vs `(n+hashB) % 2` continuam 100% determinadas uma pela outra pra QUALQUER `n`
+   * (testado: 0 de 200 casos com paridades independentes — sempre opostas, nunca iguais). É a mesma
+   * doença das tentativas 1-3, só reembalada.
+   *
+   * A correção de verdade precisa misturar `n` PRA DENTRO do hash (não como deslocamento por fora
+   * dele) e passar o resultado por uma função de avalanche — que espalha cada bit de entrada por
+   * todos os bits de saída, em vez de preservar a paridade de `n` como a soma fazia. Testado: com
+   * essa mistura, duas sementes de salts diferentes concordam em ~50% dos casos (o esperado pra
+   * variáveis descorrelacionadas), não 0% nem 100%. */
+  const hashString = (s: string): number => {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return h >>> 0;
+  };
+  const hashAvalanche = (x: number): number => {
+    x = (x ^ (x >>> 16)) >>> 0;
+    x = Math.imul(x, 0x45d9f3b) >>> 0;
+    x = (x ^ (x >>> 16)) >>> 0;
+    x = Math.imul(x, 0x45d9f3b) >>> 0;
+    x = (x ^ (x >>> 16)) >>> 0;
+    return x >>> 0;
+  };
+  const misturaHash = (n: number, sal: string): number => hashAvalanche(n ^ hashString(sal));
+  const giraDentroDaFamilia = <T extends { movementFamily: string }>(lista: T[], n: number, sal: string): T[] => {
     const porFamilia = new Map<string, T[]>();
     const ordemFamilias: string[] = [];
     for (const ex of lista) {
@@ -1129,8 +1160,8 @@ function pickExercisesForMuscle(
       porFamilia.get(ex.movementFamily)!.push(ex);
     }
     const resultado: T[] = [];
-    for (const fam of ordemFamilias) {
-      resultado.push(...giraLista(porFamilia.get(fam)!, n));
+    for (const fam of giraLista(ordemFamilias, misturaHash(n, sal))) {
+      resultado.push(...giraLista(porFamilia.get(fam)!, misturaHash(n, sal + fam)));
     }
     return resultado;
   };
@@ -1155,8 +1186,10 @@ function pickExercisesForMuscle(
    * continua sendo papel de `exerciciosDaSemana` (2ª volta, abaixo) — `semente` só decide qual
    * variante alternativa é oferecida primeiro, não impede repetição por si só. */
   const semente = rotation + setsNeeded;
-  const c = giraDentroDaFamilia(compostos, semente);
-  const iso = giraDentroDaFamilia(isolados, semente);
+  /* "composto"/"isolado" como sal: sem isso as duas listas giravam pela mesma semente, e a escolha
+   * de composto e a de isolado ficavam acopladas (ver comentário de giraDentroDaFamilia). */
+  const c = giraDentroDaFamilia(compostos, semente, "composto");
+  const iso = giraDentroDaFamilia(isolados, semente, "isolado");
   const rotated: typeof candidates = [];
   for (let k = 0; k < Math.max(c.length, iso.length); k++) {
     if (c[k]) rotated.push(c[k]);
