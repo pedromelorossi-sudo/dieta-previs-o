@@ -320,6 +320,16 @@ export default function PrevisaoIaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PredictionResponse | null>(null);
+  /* Id ESTÁVEL da dieta deste resultado — gerado uma vez quando a análise
+     chega, não a cada chamada de `dietFromResult`.
+
+     Antes, `dietFromResult()` sorteava um UUID novo toda vez que era chamada.
+     `handleDownloadPdf` a chamava DUAS vezes na mesma execução — uma para o
+     PDF, outra dentro de `handleSaveDiet` — e cada chamada virava uma LINHA
+     NOVA no banco. A análise já salva a dieta sozinha (mais abaixo); baixar o
+     PDF criava a 2ª; clicar de novo no botão "Dieta salva" (que não fica
+     desabilitado) criava a 3ª — todas com o mesmo nome, indistinguíveis. */
+  const [dietId, setDietId] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [dietSaved, setDietSaved] = useState(false);
   const [programSaving, setProgramSaving] = useState(false);
@@ -478,6 +488,10 @@ export default function PrevisaoIaPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao gerar previsão.");
       setResult(data);
+      // gerado uma vez, como variável local: o bloco de auto-save logo abaixo
+      // roda na MESMA execução, antes de o estado `dietId` comitar no React
+      const idDaDieta = crypto.randomUUID();
+      setDietId(idDaDieta);
       setDietSaved(false);
 
       // salva as informações básicas no perfil, pra não pedir de novo da próxima vez
@@ -553,7 +567,7 @@ export default function PrevisaoIaPage() {
         setSaved(true);
 
         await upsertDiet({
-          id: crypto.randomUUID(),
+          id: idDaDieta,
           name: `Plano ${fmtDate(date)}`,
           createdAt: new Date().toISOString(),
           targetKcal: data.recommendedKcal,
@@ -609,9 +623,9 @@ export default function PrevisaoIaPage() {
   }
 
   function dietFromResult(): Diet | null {
-    if (!result) return null;
+    if (!result || !dietId) return null;
     return {
-      id: crypto.randomUUID(),
+      id: dietId,
       name: `Plano ${fmtDate(date)}`,
       createdAt: new Date().toISOString(),
       targetKcal: result.recommendedKcal,
