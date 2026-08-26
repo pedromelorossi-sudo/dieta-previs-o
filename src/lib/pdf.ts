@@ -218,7 +218,14 @@ export function generateTrainingPdf(sessions: TrainingSession[], nome = "Plano d
       (b, it) => b + it.blocks.filter((x) => x.reserveType === "warmup").reduce((c, x) => c + x.sets, 0),
       0
     );
-    const minutos = Math.round(trabalho * 2.5 + aquecimento);
+    /* `buildSplit` prescreve um bloco `feeder` (aproximação) pra TODO exercício, sempre — diferente do
+       `warmup`, que é condicional. Antes só entrava aquecimento na estimativa de minutos e nenhum bloco
+       feeder aparecia na tabela abaixo, embora a série estivesse de fato prescrita. */
+    const aproximacaoMin = session.items.reduce(
+      (b, it) => b + it.blocks.filter((x) => x.reserveType === "feeder").reduce((c, x) => c + x.sets, 0),
+      0
+    );
+    const minutos = Math.round(trabalho * 2.5 + aquecimento + aproximacaoMin);
 
     // quebra de página quando o dia não cabe no que sobrou da folha
     if (y > 690) {
@@ -244,16 +251,21 @@ export function generateTrainingPdf(sessions: TrainingSession[], nome = "Plano d
       const alvo = ex ? `${MUSCLE_GROUP_LABEL[ex.primaryMuscle]}${ex.unilateral ? " (por lado)" : ""}` : "";
 
       const aq = item.blocks.find((b) => b.reserveType === "warmup");
+      const aprox = item.blocks.find((b) => b.reserveType === "feeder");
+      const primeiraLinha = aq || aprox;
       if (aq) {
         linhas.push([`${j + 1}. ${nomeEx}`, alvo, "aquecimento", `${aq.sets} x ${aq.repRange}`, "leve"]);
       }
+      if (aprox) {
+        linhas.push([aq ? "" : `${j + 1}. ${nomeEx}`, aq ? "" : alvo, "aproximação", `${aprox.sets} x ${aprox.repRange}`, "leve"]);
+      }
       for (const b of item.blocks.filter((x) => x.reserveType === "work" || x.reserveType === "topset")) {
         linhas.push([
-          aq ? "" : `${j + 1}. ${nomeEx}`,
-          aq ? "" : alvo,
+          primeiraLinha ? "" : `${j + 1}. ${nomeEx}`,
+          primeiraLinha ? "" : alvo,
           b.reserveType === "topset" ? "top set" : "trabalho",
           `${b.sets} x ${b.repRange}`,
-          [b.loadKg != null ? `${fmt(b.loadKg, 1)}kg` : "", b.rirTarget != null ? `RIR ${b.rirTarget}` : ""].filter(Boolean).join(" · ") || "-",
+          [b.loadKg != null ? `${fmt(b.loadKg, 1)}kg` : "", b.rirTarget != null ? `${b.rirTarget} na reserva` : ""].filter(Boolean).join(" · ") || "-",
         ]);
       }
     }

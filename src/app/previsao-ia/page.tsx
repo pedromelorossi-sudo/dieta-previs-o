@@ -1683,8 +1683,18 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                     (a, it) => a + it.blocks.filter((b) => b.reserveType === "warmup").reduce((c, b) => c + b.sets, 0),
                     0
                   );
-                  // ~2,5min por série de trabalho (execução + descanso) e ~1min por série de aproximação
-                  const minutos = Math.round(workSets * 2.5 + warmSets);
+                  /* `buildSplit` empurra um bloco `feeder` (aproximação) pra TODO exercício, sempre —
+                     diferente do `warmup`, que é condicional. Antes só warmup/work/topset entravam
+                     nessa conta: a série de aproximação nem aparecia na estimativa de minutos nem na
+                     lista de blocos do exercício mais abaixo, embora `buildSplit` a tivesse prescrito.
+                     `feeder` continua fora da contagem de SÉRIES (não é estímulo, mesma regra do
+                     warmup), só entra no tempo estimado. */
+                  const feederSets = session.items.reduce(
+                    (a, it) => a + it.blocks.filter((b) => b.reserveType === "feeder").reduce((c, b) => c + b.sets, 0),
+                    0
+                  );
+                  // ~2,5min por série de trabalho (execução + descanso) e ~1min por série de aquecimento/aproximação
+                  const minutos = Math.round(workSets * 2.5 + warmSets + feederSets);
                   const grupos = [...new Set(session.items.map((it) => exerciseById(it.exerciseId)?.primaryMuscle).filter(Boolean))];
 
                   return (
@@ -1712,6 +1722,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                         {session.items.map((item, j) => {
                           const ex = exerciseById(item.exerciseId);
                           const aquecimento = item.blocks.find((b) => b.reserveType === "warmup");
+                          const aproximacao = item.blocks.find((b) => b.reserveType === "feeder");
                           const trabalho = item.blocks.filter((b) => b.reserveType === "work" || b.reserveType === "topset");
                           return (
                             <div key={j} className="px-4 py-3">
@@ -1737,6 +1748,17 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                                     </span>
                                     <span className="text-[11px]">
                                       {aquecimento.loadKg != null ? `~${fmt(aquecimento.loadKg, 1)}kg` : "carga leve, subindo"}
+                                    </span>
+                                  </div>
+                                )}
+                                {aproximacao && (
+                                  <div className="flex items-center gap-3 text-xs text-muted">
+                                    <span className="badge bg-border/40 text-[10px] shrink-0 w-20 text-center">aproximação</span>
+                                    <span className="tabular-nums">
+                                      {aproximacao.sets} × {aproximacao.repRange}
+                                    </span>
+                                    <span className="text-[11px]">
+                                      {aproximacao.loadKg != null ? `~${fmt(aproximacao.loadKg, 1)}kg` : "longe da falha, só pra pegar o movimento"}
                                     </span>
                                   </div>
                                 )}
@@ -1875,7 +1897,7 @@ const ResultadoPrevisao = memo(function ResultadoPrevisao({
                   </span>
                   {/* o número em si nunca era mostrado — só a frase e o selo */}
                   <span className="badge inline-block bg-border/60 tabular-nums">
-                    fator {result.tdeeCalibration.factor.toFixed(3)}
+                    fator {fmt(result.tdeeCalibration.factor, 3)}
                   </span>
                   <span className="badge inline-block bg-border/60 tabular-nums">
                     {result.tdeeCalibration.cleanCyclesUsed}/{result.tdeeCalibration.totalCyclesSeen} ciclos limpos

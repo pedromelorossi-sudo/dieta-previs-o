@@ -419,6 +419,13 @@ export function confrontarPlano(
 
   const alvo = planoAnterior.find((m) => m.mes === Math.round(mesesDecorridos)) ?? planoAnterior[planoAnterior.length - 1];
   if (!alvo) return null;
+  /* `alvo` vem de `plano_projetado`, uma coluna jsonb — o TypeScript confia na anotação de tipo, mas
+     nada valida em runtime que o que está gravado no banco realmente tem esse formato. Já aconteceu
+     de um caminho gravar chaves diferentes (`pesoFimKg`/`bfFimPercent` em vez de `peso`/`bf`) e essa
+     função virar NaN em silêncio pra todo mundo que tivesse uma linha antiga assim — corrigido na
+     escrita, mas linhas já gravadas antes da correção continuam com o formato errado até o usuário
+     passar por outro ciclo. Sem confronto é melhor que confronto mentiroso. */
+  if (!Number.isFinite(alvo.peso) || !Number.isFinite(alvo.bf)) return null;
 
   const margemPeso = Math.min(4, 1.5 * mesesDecorridos);
   const margemBf = Math.min(4, 1.5 * mesesDecorridos);

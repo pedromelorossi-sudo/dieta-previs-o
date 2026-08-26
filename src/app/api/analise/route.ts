@@ -115,7 +115,12 @@ export async function POST() {
      expressão, filtravam. Para o administrador, cuja política de RLS é
      `auth.uid() = user_id OR is_admin()`, isso fazia o resumo enviado ao modelo
      misturar peso, %BF e fotos de vários usuários numa análise só. */
-  const [{ data: cycles }, { data: prediction }, { data: prefs }, { data: photos }] = await Promise.all([
+  const [
+    { data: cycles, error: cyclesError },
+    { data: prediction, error: predictionError },
+    { data: prefs, error: prefsError },
+    { data: photos, error: photosError },
+  ] = await Promise.all([
     supabase.from("cycles").select("*").eq("user_id", user.id).order("date", { ascending: true }),
     supabase.from("predictions").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("preferences").select("*").eq("user_id", user.id).maybeSingle(),
@@ -126,6 +131,15 @@ export async function POST() {
       .order("date", { ascending: true })
       .limit(10),
   ]);
+
+  /* Nenhuma das quatro desestruturava `error` — uma falha de rede/RLS virava `undefined`/`null` em
+     silêncio, e a análise seguia com dado parcial (ou o erro genérico "sem histórico" escondendo uma
+     falha real de consulta, não a ausência de ciclos). Mesmo padrão já corrigido em previsao-ia/route.ts. */
+  const primeiroErro = cyclesError ?? predictionError ?? prefsError ?? photosError;
+  if (primeiroErro) {
+    console.error("[analise] consulta ao Supabase falhou:", primeiroErro.message);
+    return NextResponse.json({ error: `Não foi possível carregar seus dados (${primeiroErro.message}). Tente de novo.` }, { status: 500 });
+  }
 
   if (!cycles || cycles.length === 0) {
     return NextResponse.json({ error: "Sem histórico de ciclos para analisar ainda." }, { status: 400 });

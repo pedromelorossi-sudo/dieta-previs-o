@@ -17,10 +17,12 @@ import { loadCycles } from "@/lib/storage";
 import { fmtDate } from "@/lib/format";
 import { IconDumbbell, IconCheck, IconTrend, IconClipboard } from "@/components/icons";
 
+/* Mesmos rótulos de BLOCO_LABEL em ProgramaDaSemana.tsx — essa página mostrava o programa gerado em
+   português e, ao registrar a sessão, o dropdown de tipo de série trocava pra inglês sem razão. */
 const RESERVE_LABEL: Record<ReserveType, string> = {
-  warmup: "Warm up",
-  feeder: "Feeder",
-  work: "Work",
+  warmup: "Aquecimento",
+  feeder: "Aproximação",
+  work: "Trabalho",
   topset: "Top set",
 };
 
@@ -375,7 +377,7 @@ export default function TreinoPage() {
       <section>
         <SectionHeading
           title="Guia de metodologia"
-          desc="O que significa cada tipo de série, por que o RIR existe, como o volume é decidido, e as orientações de dieta — incluindo por que as refeições proteicas ficam a cada 3 horas."
+          desc="O que significa cada tipo de série, por que parar antes da falha ajuda, como o volume é decidido, e as orientações de dieta — incluindo por que as refeições proteicas ficam a cada 3 horas."
         />
         <button type="button" onClick={async () => (await import("@/lib/pdf")).generateMetodologiaPdf()} className="btn-secondary">
           <IconClipboard className="h-4 w-4" />
@@ -410,7 +412,7 @@ export default function TreinoPage() {
                 <summary className="cursor-pointer list-none">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">{a.muscleLabel}</span>
-                    {a.isPriority && <span className="badge bg-accent/15 text-accent">prioridade</span>}
+                    {a.priorityBadgeVisible && <span className="badge bg-accent/15 text-accent">prioridade</span>}
                     <span className="ml-auto text-xs text-muted tabular-nums whitespace-nowrap">
                       {a.weeklySets} séries/semana
                     </span>

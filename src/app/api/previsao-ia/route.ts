@@ -7,6 +7,7 @@ import {
   classifyPathFromBf,
   scoreRecoverySignals,
   macroTargetsForStrategy,
+  ajustarMacrosQueNaoCabem,
   PATH_LABEL,
   DietPath,
   estimateFfmi,
@@ -690,10 +691,27 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
       }
     }
 
+    /* `comp.targetProteinG`/`comp.targetFatG` já saem ajustados por `ajustarMacrosQueNaoCabem`, mas
+       DENTRO de `estimateBodyComposition`, contra o TDEE só de fórmula (`comp.tdee`) — não contra
+       `blendedTdee`, que é o kcal que de fato vira `proposedKcal` aqui embaixo (blend com o TDEE
+       empírico, ou substituição total quando os dois divergem demais). Quando os dois TDEE
+       divergem, o ajuste era calculado pra um alvo e aplicado a outro — mesma classe do bug já
+       corrigido no caminho dos ciclos seguintes (ver ajustarMacrosQueNaoCabem ali), só que mais
+       branda aqui porque `applySafetyLimits` ainda usa o `tdee` certo (`blendedTdee`) pro teto
+       relativo de déficit/superávit. Recalcula os macros CRUS (mesma fórmula de
+       macroTargetsForStrategy) e reajusta contra o kcal que será de fato usado. */
+    const { proteinPerKg: proteinPerKgPrimeiroCiclo, fatPerKg: fatPerKgPrimeiroCiclo } = macroTargetsForStrategy(comp.path);
+    const proposedKcalPrimeiroCiclo = blendedTdee * (1 + comp.surplusPercent);
+    const macrosAjustadosPrimeiroCiclo = ajustarMacrosQueNaoCabem(
+      proposedKcalPrimeiroCiclo,
+      currentWeightKg * proteinPerKgPrimeiroCiclo,
+      currentWeightKg * fatPerKgPrimeiroCiclo
+    );
+
     const firstCycleSafety = applySafetyLimits({
-      proposedKcal: blendedTdee * (1 + comp.surplusPercent),
-      proposedProteinG: comp.targetProteinG,
-      proposedFatG: comp.targetFatG,
+      proposedKcal: proposedKcalPrimeiroCiclo,
+      proposedProteinG: macrosAjustadosPrimeiroCiclo.proteinG,
+      proposedFatG: macrosAjustadosPrimeiroCiclo.fatG,
       weightKg: currentWeightKg,
       sex,
       strategy: comp.path,
@@ -817,13 +835,18 @@ ${VISUAL_MUSCLE_PROTOCOL}`,
           : ["Primeiro ciclo sem ingestão informada ou sem tendência de peso definida — o par não calibra a fórmula."],
         bf_reasoning: bfRaw.bfReasoning ?? null,
         evolution_note: bfRaw.evolutionNote ?? null,
+        /* Mesmo formato de MesProjetado (planoDeFases.ts) que o caminho dos ciclos seguintes já usa —
+           esta gravação usava `pesoFimKg`/`bfFimPercent` (e um `magraFimKg` que `MesProjetado` nem
+           declara), então `confrontarPlano` no ciclo seguinte lia `alvo.peso`/`alvo.bf` de um objeto
+           que não tinha essas chaves: `undefined`, `pesoRealKg - undefined = NaN`, e todo usuário via
+           um aviso falso de "fora do plano" na primeira vez que o confronto rodava (sempre na virada
+           do 1º pro 2º ciclo, já que é a única vez que a auditoria mais recente vem deste caminho). */
         plano_projetado: planoDeFases.meses.slice(0, 6).map((m) => ({
           mes: m.monthIndex,
-          pesoFimKg: m.endWeightKg,
-          bfFimPercent: m.endBfPercent,
-          magraFimKg: m.leanMassKg,
-          kcal: m.recommendedKcal,
           fase: m.phase,
+          peso: Number(m.endWeightKg.toFixed(1)),
+          bf: Number(m.endBfPercent.toFixed(1)),
+          kcal: Math.round(m.recommendedKcal),
         })),
       },
       { onConflict: "user_id,date" }
@@ -1517,11 +1540,20 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // hoje, então em corte sustentado o g/kg encolhia sozinho a cada ciclo, sem ninguém ter decidido isso.
   const { proteinPerKg, fatPerKg } = macroTargetsForStrategy(strategy);
   const tdeeUsedMid = (tdeeRangeUsed.min + tdeeRangeUsed.max) / 2;
+  const proposedKcal = tdeeUsedMid * (1 + strategySurplusPercent);
+  /* Mesmo ajuste que o primeiro ciclo já faz dentro de `estimateBodyComposition` (ver
+     `ajustarMacrosQueNaoCabem`), só que este caminho nunca chamava — proteína+gordura por peso TOTAL
+     (não vem de massa magra, por decisão do Pedro: "não tem como ter precisão da massa magra") podem
+     somar mais kcal do que o alvo em quem tem %BF alto, e sem este ajuste `applySafetyLimits` resolvia
+     o MESMO problema do jeito oposto: em vez de encolher proteína/gordura, ELEVAVA o kcal pra caber os
+     macros inteiros — a prescrição furava o déficit/superávit da estratégia em silêncio, e o texto
+     continuava anunciando um percentual que não era o entregue. */
+  const macrosAjustados = ajustarMacrosQueNaoCabem(proposedKcal, currentWeightKg * proteinPerKg, currentWeightKg * fatPerKg);
 
   const safety = applySafetyLimits({
-    proposedKcal: tdeeUsedMid * (1 + strategySurplusPercent),
-    proposedProteinG: currentWeightKg * proteinPerKg,
-    proposedFatG: currentWeightKg * fatPerKg,
+    proposedKcal,
+    proposedProteinG: macrosAjustados.proteinG,
+    proposedFatG: macrosAjustados.fatG,
     weightKg: currentWeightKg,
     sex,
     strategy,

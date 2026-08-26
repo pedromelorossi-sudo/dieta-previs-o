@@ -17,8 +17,19 @@ export interface MuscleTarget {
   weeklySets: number;
   reason: string;
   /** prioridade declarada (ex: consultoria real) — pesa mais que a leitura visual da foto, porque um
-   * coach humano enxerga sinais que uma foto não capta (força estagnada, medidas, etc.) */
+   * coach humano enxerga sinais que uma foto não capta (força estagnada, medidas, etc.). Valor BRUTO,
+   * não travado por MEV — é o que `buildSplit` usa pra decidir teto de exercícios (3 em vez de 2) e
+   * ordem de entrada na sessão. Travar isto por MEV (como `priorityBadgeVisible` faz) quebrava a
+   * montagem: com a meta final abaixo do MEV — comum quando o orçamento não sustenta várias
+   * prioridades ao mesmo tempo, ou poucos dias de treino — `buildSplit` deixava de tratar o grupo
+   * como prioritário e entregava MENOS séries do que a própria meta anunciava, enquanto o `reason`
+   * (calculado a partir do valor bruto) continuava dizendo "peso dobrado, entra primeiro". */
   isPriority?: boolean;
+  /** Mesma prioridade, mas só `true` quando a meta final também bateu o MEV do grupo — pra UI não
+   * anunciar "★ prioridade" num grupo cujo orçamento não sustentou a prioridade de verdade (a
+   * prioridade fica suspensa nesse caso, não em vigor). Só pra exibição; `buildSplit` NÃO usa este
+   * campo — usa `isPriority` acima. */
+  priorityBadgeVisible?: boolean;
   /** Quantas séries em CADA dia, por rótulo do dia ("Push", "Upper"…).
    *
    * Existe porque a divisão igual entre os dias do músculo era o que desperdiçava
@@ -887,7 +898,8 @@ export function computeMuscleTargets(
 
     /* Não anuncia prioridade que o orçamento não financia. Numa semana de
      * recuperação ruim, exibir "★ prioridade" num grupo abaixo do MEV
-     * desinforma: a prioridade está suspensa, não em vigor. */
+     * desinforma: a prioridade está suspensa, não em vigor. Só afeta a UI —
+     * `buildSplit` continua vendo a prioridade bruta em `isPriority`. */
     const prioridadeEmVigor = sl.isPriority && sl.sets >= sl.landmark.mev;
     const perDayByLabel = fatiaFinalPorMusculo.get(sl.landmark.muscle) ?? {};
     return {
@@ -895,7 +907,8 @@ export function computeMuscleTargets(
       muscleLabel,
       weeklySets: sl.sets,
       reason,
-      isPriority: prioridadeEmVigor || undefined,
+      isPriority: sl.isPriority || undefined,
+      priorityBadgeVisible: prioridadeEmVigor || undefined,
       perDayByLabel,
     };
   });
