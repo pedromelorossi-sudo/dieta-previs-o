@@ -1222,7 +1222,19 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
     }
     // 5 semanas = um mesociclo completo. Antes eram 10, e as semanas 6-10 saíam byte a byte idênticas
     // às 1-5, inflando a resposta em ~20KB por requisição sem nenhuma informação nova.
-    trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, daysPerWeek, 5, loadByExercise);
+    /* `diasEfetivos`, não `daysPerWeek`.
+     *
+     * `muscleTargetsOut` (linha 1199) já foi calculado com `diasEfetivos` — a
+     * concentração de dias que `diasEfetivosPara` aplica quando a recuperação
+     * está ruim. A periodização recebia o valor DECLARADO, então os alvos
+     * (rótulos de 3 dias, digamos) eram montados num template de `daysPerWeek`
+     * dias (5). `Upper`/`Lower` não existem no template de 3, caem no fallback
+     * calculado sobre a frequência de 5 — dupla contagem.
+     *
+     * Medido: 5 dias declarados com recuperação ruim, meta semanal de 46
+     * séries — a semana de pico entregava 73, 159% da meta, para quem o
+     * sistema tinha acabado de diagnosticar como mal recuperado. */
+    trainingPeriodizationPlan = planTrainingPeriodization(muscleTargetsOut, diasEfetivos, 5, loadByExercise);
   }
 
   const bfPercentVisualRaw = assertFiniteBf(vision.bfPercentVisual);
