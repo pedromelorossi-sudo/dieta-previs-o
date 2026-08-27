@@ -415,9 +415,15 @@ export function confrontarPlano(
   bfRealPercent: number,
   faseAtual: DietPath
 ): ConfrontoPlano | null {
-  if (!planoAnterior || planoAnterior.length === 0 || mesesDecorridos < 1) return null;
+  /* O guard usa o mesmo arredondamento que a busca do alvo logo abaixo — não a diferença bruta. Com
+     `mesesDecorridos < 1` cru, um usuário que confere no ritmo que o próprio app sugere (4 semanas =
+     28 dias = 28/30,44 ≈ 0,92 mês) nunca passava daqui: `Math.round(0,92)` já aponta pro mês 1 dois
+     passos abaixo, mas o guard rejeitava antes de chegar lá — desligando o confronto pra quem segue a
+     cadência recomendada pela própria ferramenta. */
+  const mesArredondado = Math.round(mesesDecorridos);
+  if (!planoAnterior || planoAnterior.length === 0 || mesArredondado < 1) return null;
 
-  const alvo = planoAnterior.find((m) => m.mes === Math.round(mesesDecorridos)) ?? planoAnterior[planoAnterior.length - 1];
+  const alvo = planoAnterior.find((m) => m.mes === mesArredondado) ?? planoAnterior[planoAnterior.length - 1];
   if (!alvo) return null;
   /* `alvo` vem de `plano_projetado`, uma coluna jsonb — o TypeScript confia na anotação de tipo, mas
      nada valida em runtime que o que está gravado no banco realmente tem esse formato. Já aconteceu
