@@ -440,6 +440,21 @@ test("um ciclo completo produz números plausíveis", () => {
   assert.ok(r!.tdeeRange.min > 1200 && r!.tdeeRange.max < 5000, `TDEE empírico fora de faixa: ${JSON.stringify(r!.tdeeRange)}`);
 });
 
+test("orçamento de tempo (NEAT): soma dos domínios no teto individual não estoura as 24h", () => {
+  // Cada campo aqui está dentro da própria faixa validada em route.ts (sentado 0-20h, em pé 0-20h,
+  // deslocamento 0-300min, tarefas 0-40h/semana) — mas a SOMA (20+20+5+5,71 = 50,71h) é mais atividade
+  // do que um dia acordado tem. Antes do fix de encolhimento proporcional em `neatFromTimeBudget`,
+  // essa combinação — toda ela dentro dos limites individuais — produzia TDEE acima de 8.000kcal.
+  const noTeto = estimateBodyComposition({
+    weightKg: 82, heightCm: 178, bodyFatPercent: 17, age: 24, sex: "masculino",
+    exerciseFreq: "3-4", sessionDuration: "60-90",
+    sittingHoursPerDay: 20, standingWorkHoursPerDay: 20, activeCommuteMinutesPerDay: 300,
+    choresHoursPerWeek: 40, stairFlightsPerDay: 200, sleepHoursPerDay: 7,
+  });
+  assert.ok(noTeto.tdee > noTeto.bmr, "TDEE abaixo do BMR mesmo no caso extremo");
+  assert.ok(noTeto.tdee < 4500, `TDEE não ficou contido pelo orçamento de 24h: ${noTeto.tdee}`);
+});
+
 
 // ---------------------------------------------------------------------------
 // T-6 — as sessões saíam sem nenhum aquecimento prescrito

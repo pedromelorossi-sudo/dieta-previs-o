@@ -1558,7 +1558,13 @@ ${VISUAL_MUSCLE_PROTOCOL}`;
   // fórmula já corrigida pelo fator pessoal é um segundo estimador com erro conhecido. Nesse caso os
   // dois são combinados, com peso proporcional à confiança da calibração. Com histórico farto, o
   // empírico manda sozinho, como antes.
-  const calibratedFormulaTdee = shadowFormulaComp.tdee * tdeeCalibration.factor;
+  // `shadowFormulaComp.tdee` já sai com piso no BMR (ver bodyComposition.ts), mas o fator de
+  // calibração pessoal multiplica por cima disso — clampado em [0.85, 1.15], então um caso de borda
+  // (NEAT/EAT baixos o bastante pra já bater o piso, combinado com fator pessoal no extremo baixo)
+  // ainda conseguiria empurrar o resultado abaixo do próprio BMR. Reaplicar o piso aqui garante que o
+  // TDEE calibrado nunca fica fisiologicamente impossível, mesmo sendo cosmético hoje — a prescrição
+  // final já tinha essa garantia via `applySafetyLimits`.
+  const calibratedFormulaTdee = Math.max(shadowFormulaComp.bmr, shadowFormulaComp.tdee * tdeeCalibration.factor);
   const CALIBRATION_BLEND_WEIGHT: Record<typeof tdeeCalibration.confidence, number> = {
     nenhuma: 0,
     baixa: 0.15,

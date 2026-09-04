@@ -147,25 +147,6 @@ function hasTimeBudget(input: TimeBudgetInput): boolean {
 }
 
 function neatFromTimeBudget(weightKg: number, input: TimeBudgetInput): number {
-  const sitting = (input.sittingHoursPerDay ?? 0) * 60 * kcalPerMinuteAboveRest(MET_SITTING, weightKg);
-  const standing = (input.standingWorkHoursPerDay ?? 0) * 60 * kcalPerMinuteAboveRest(MET_STANDING_WORK, weightKg);
-  const commute = (input.activeCommuteMinutesPerDay ?? 0) * kcalPerMinuteAboveRest(MET_ACTIVE_COMMUTE, weightKg);
-  const chores = ((input.choresHoursPerWeek ?? 0) / 7) * 60 * kcalPerMinuteAboveRest(MET_CHORES, weightKg);
-  const stairs = (input.stairFlightsPerDay ?? 0) * MINUTES_PER_FLIGHT * kcalPerMinuteAboveRest(MET_STAIRS, weightKg);
-
-  /* FECHA O ORÇAMENTO EM 24H — sem isto, cada domínio era somado direto e
-   * relatar MAIS horas sentado só SOMAVA mais caloria, nunca descontava nada.
-   * Medido antes desta correção: quem respondia só "sento 2h" (resto em
-   * branco) recebia MENOS caloria (TDEE 2258) do que quem não respondia NADA
-   * (2503, do fallback sedentário) — preencher parte do formulário piorava a
-   * estimativa.
-   *
-   * Horas acordado vêm de `sleepHoursPerDay` quando informado (agora
-   * perguntado no formulário) — sem ele, cai no padrão de 16h. O tempo que
-   * sobra depois de sono + domínios já respondidos recebe MET_RESTO_DO_DIA
-   * em vez de simplesmente não existir na conta. Nunca negativo: se a soma
-   * dos domínios relatados já preenche (ou passa) as horas acordado, o resto
-   * é zero — a pessoa já contou o dia inteiro. */
   /* Sono IMPLAUSÍVEL é tratado como AUSENTE, não absorvido cru.
    *
    * A validação de faixa em route.ts protege a requisição HTTP, mas esta
@@ -184,12 +165,51 @@ function neatFromTimeBudget(weightKg: number, input: TimeBudgetInput): number {
   const sonoValido =
     input.sleepHoursPerDay != null && Number.isFinite(input.sleepHoursPerDay) && input.sleepHoursPerDay >= 1 && input.sleepHoursPerDay <= 16;
   const horasAcordado = sonoValido ? Math.max(1, 24 - input.sleepHoursPerDay!) : HORAS_ACORDADO_PADRAO;
-  const horasJaContadas =
-    (input.sittingHoursPerDay ?? 0) +
-    (input.standingWorkHoursPerDay ?? 0) +
-    (input.activeCommuteMinutesPerDay ?? 0) / 60 +
-    (input.choresHoursPerWeek ?? 0) / 7;
-  const horasNaoContadas = Math.max(0, horasAcordado - horasJaContadas);
+
+  const horasSentado = input.sittingHoursPerDay ?? 0;
+  const horasEmPe = input.standingWorkHoursPerDay ?? 0;
+  const horasDeslocamento = (input.activeCommuteMinutesPerDay ?? 0) / 60;
+  const horasTarefas = (input.choresHoursPerWeek ?? 0) / 7;
+  const horasJaContadas = horasSentado + horasEmPe + horasDeslocamento + horasTarefas;
+
+  /* Cada domínio tem faixa individual plausível (sentado 0-20h, em pé 0-20h,
+   * deslocamento 0-300min, tarefas 0-40h/semana), mas nada impedia a SOMA de
+   * passar de 24h — alguém com rotina genuinamente mista (parte sentado,
+   * parte em pé, mais deslocamento, mais tarefas em casa) preenche cada
+   * campo com um número que parece razoável isoladamente, e a função somava
+   * cru: medido, essa combinação levava um TDEE de ~3.000kcal pra mais de
+   * 8.000kcal com todos os campos ainda dentro da própria faixa individual.
+   * Sem teto cruzado, "resto do dia" ficava corretamente zerado (nunca
+   * negativo), mas os domínios relatados em si nunca eram encolhidos pra
+   * caber nas horas acordadas de um dia real.
+   *
+   * Fix: se a soma passar das horas acordadas, encolhe os 4 domínios
+   * proporcionalmente até caberem no orçamento — preserva a proporção que a
+   * pessoa relatou entre eles (ex: quem disse "metade sentado, metade em pé"
+   * continua com essa mesma proporção, só que dentro de um dia possível), em
+   * vez de rejeitar a resposta ou aceitar o total impossível. Escadas fica de
+   * fora do teto (não entra em `horasJaContadas` mesmo antes deste fix — no
+   * teto da própria faixa são só ~30min/dia, não é o que estoura o dia). */
+  const fatorEncolhimento = horasJaContadas > horasAcordado ? horasAcordado / horasJaContadas : 1;
+
+  const sitting = horasSentado * fatorEncolhimento * 60 * kcalPerMinuteAboveRest(MET_SITTING, weightKg);
+  const standing = horasEmPe * fatorEncolhimento * 60 * kcalPerMinuteAboveRest(MET_STANDING_WORK, weightKg);
+  const commute = horasDeslocamento * fatorEncolhimento * 60 * kcalPerMinuteAboveRest(MET_ACTIVE_COMMUTE, weightKg);
+  const chores = horasTarefas * fatorEncolhimento * 60 * kcalPerMinuteAboveRest(MET_CHORES, weightKg);
+  const stairs = (input.stairFlightsPerDay ?? 0) * MINUTES_PER_FLIGHT * kcalPerMinuteAboveRest(MET_STAIRS, weightKg);
+
+  /* FECHA O ORÇAMENTO EM 24H — sem isto, relatar MAIS horas sentado só
+   * SOMAVA mais caloria, nunca descontava nada. Medido antes desta correção:
+   * quem respondia só "sento 2h" (resto em branco) recebia MENOS caloria
+   * (TDEE 2258) do que quem não respondia NADA (2503, do fallback
+   * sedentário) — preencher parte do formulário piorava a estimativa.
+   *
+   * O tempo que sobra depois de sono + domínios já respondidos (já
+   * encolhidos pro teto acima) recebe MET_RESTO_DO_DIA em vez de
+   * simplesmente não existir na conta. Nunca negativo: se a soma dos
+   * domínios relatados já preenche (ou, antes de encolher, passava) as horas
+   * acordadas, o resto é zero — a pessoa já contou o dia inteiro. */
+  const horasNaoContadas = Math.max(0, horasAcordado - horasJaContadas * fatorEncolhimento);
   const resto = horasNaoContadas * 60 * kcalPerMinuteAboveRest(MET_RESTO_DO_DIA, weightKg);
 
   return sitting + standing + commute + chores + stairs + resto;
@@ -804,7 +824,30 @@ export function estimateBodyComposition(input: BodyCompositionInput): BodyCompos
         { otherSportActivity, otherSportSessionsPerWeek, otherSportMinutesPerSession, otherSportTalkTest }
       )
     : null;
-  const tdee = components ? components.tdee : bmr * ACTIVITY_MULTIPLIER[activityLevel ?? "moderado"];
+  /* A DIREÇÃO desta correção tem lastro na literatura: auto-relato de atividade/rotina tende a
+     superestimar o gasto real medido (mesma razão pela qual o cardio prescrito não entra no TDEE, ver
+     comentário em `route.ts` citando Lichtman et al. 1992). O blend de 30% fórmula / 70% prática real
+     já existe pra corrigir isso quando há dado empírico — mas no primeiro ciclo, ou em qualquer ciclo
+     sem ingestão informada/tendência de peso definida, não há empírico pra blendar contra, e a fórmula
+     crua vira o número final sem correção nenhuma.
+
+     A MAGNITUDE (0.72) NÃO vem de dados — é uma decisão de calibração humana (Pedro, dono do produto),
+     ajustada ao vivo contra um único caso real (usuário com TDEE de fórmula de 3.363kcal, considerado
+     alto demais) simulado com peso/altura/idade reais mas rotina assumida (as respostas de NEAT desse
+     usuário não ficam persistidas, ver `prediction_audit`). Não é uma constante matematicamente
+     derivada, nem foi validada contra múltiplos usuários — é julgamento profissional sobre um caso,
+     na mesma categoria de decisão que os limiares de %BF de fase (ver aviso equivalente em
+     `classifyPathFromBf`). Mais barato corrigir pra CIMA num ciclo seguinte (a pessoa não emagrece
+     como esperado, ajusta) do que pra BAIXO (a pessoa engorda sem entender por quê) — é essa assimetria
+     de risco que justifica pecar pro lado conservador aqui, não uma correção de erro comprovado como o
+     fix de orçamento de 24h duas funções acima. Revisitar se ficar claro, com mais casos reais, que
+     0.72 está sistematicamente alto ou baixo demais. */
+  const FATOR_CONSERVADOR_FORMULA = 0.72;
+  // Nunca abaixo do BMR — mesmo em repouso total o corpo gasta o basal; um desconto agressivo sobre
+  // NEAT/EAT baixos pode empurrar o TDEE descontado pra baixo do BMR, o que não existe fisiologicamente.
+  const tdee = components
+    ? Math.max(bmr, components.tdee * FATOR_CONSERVADOR_FORMULA)
+    : bmr * ACTIVITY_MULTIPLIER[activityLevel ?? "moderado"];
   const neatKcal = components ? components.neat : 0;
   const eatKcal = components ? components.eat : 0;
   const activityLevelDisplay = activityLevelFromPAL(tdee, bmr);
